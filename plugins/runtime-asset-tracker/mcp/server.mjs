@@ -58,7 +58,7 @@ export function createRuntimeAssetServer() {
     description: "Generate an exact, expiring cleanup allowlist. This tool never deletes assets.",
     inputSchema: {
       source: z.enum(["local", "production", "staging", "github"]).optional(),
-      types: z.array(z.enum(["container", "image", "volume", "cache"])).optional(),
+      types: z.array(z.enum(["container", "image", "volume", "cache", "pull_request", "artifact", "actions_cache", "workflow_run"])).optional(),
     },
     outputSchema: { preview: z.record(z.string(), z.unknown()) },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },

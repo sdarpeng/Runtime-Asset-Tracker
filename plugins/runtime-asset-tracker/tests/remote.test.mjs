@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, remoteSnapshotScript } from "../mcp/remote.mjs";
+import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, remoteSnapshotScript } from "../mcp/remote.mjs";
 
 describe("remote read-only adapters", () => {
   it("keeps the EC2 collector free of cleanup and service mutation commands", () => {
@@ -79,6 +79,22 @@ describe("remote read-only adapters", () => {
     assert.equal(classifyGithubAsset({ kind: "actions-cache", ref: "refs/heads/master", lastAccessedAt: "2026-06-01T00:00:00Z", now }), "reclaimable");
   });
 
+  it("uses GitHub-native categories instead of Docker categories", () => {
+    const bars = buildGithubBars([
+      { type: "pull_request", classification: "active", sizeBytes: 1 },
+      { type: "pull_request", classification: "retained", sizeBytes: 1 },
+      { type: "artifact", classification: "reclaimable", sizeBytes: 120 },
+      { type: "actions_cache", classification: "retained", sizeBytes: 300 },
+      { type: "workflow_run", classification: "active", sizeBytes: 1 },
+    ]);
+    assert.deepEqual(bars.map((item) => item.type), ["pull_request", "artifact", "actions_cache", "workflow_run"]);
+    assert.equal(bars.find((item) => item.type === "pull_request").unit, "count");
+    assert.equal(bars.find((item) => item.type === "pull_request").activeBytes, 1);
+    assert.equal(bars.find((item) => item.type === "artifact").reclaimableBytes, 120);
+    assert.equal(bars.find((item) => item.type === "actions_cache").totalBytes, 300);
+    assert.equal(bars.find((item) => item.type === "workflow_run").unit, "count");
+  });
+
   it("fails closed when a remote source is not configured", () => {
     const result = collectRemoteDashboard({
       source: "production",
@@ -103,5 +119,15 @@ describe("remote read-only adapters", () => {
     assert.match(source, /preview_cleanup", \{ source, types:/);
     assert.doesNotMatch(source, /disabled=\{source !== "local"\} onClick=\{requestPreview\}/);
     assert.match(source, /disabled=\{!snapshotOnline \|\| loading\} onClick=\{requestPreview\}/);
+  });
+
+  it("renders GitHub delivery categories and selects Pull Requests by default", () => {
+    const source = readFileSync(new URL("../ui/src/App.jsx", import.meta.url), "utf8");
+    assert.match(source, /pull_request: \{ label: "Pull Requests"/);
+    assert.match(source, /artifact: \{ label: "Actions Artifacts"/);
+    assert.match(source, /actions_cache: \{ label: "Actions Cache"/);
+    assert.match(source, /workflow_run: \{ label: "Workflow Runs"/);
+    assert.match(source, /next === "github" \? "pull_request" : "image"/);
+    assert.match(source, /Open \/ Draft PR/);
   });
 });

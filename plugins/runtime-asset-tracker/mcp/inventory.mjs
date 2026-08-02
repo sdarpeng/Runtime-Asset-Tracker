@@ -379,13 +379,15 @@ export function collectDashboard({ scope = "environment", source = "local", proj
   return dashboard;
 }
 
-export function createCleanupPreview({ source = "local", types = ["container", "image", "volume", "cache"] } = {}) {
+export function createCleanupPreview({ source = "local", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"] } = {}) {
   const dashboard = collectDashboard({ source });
   if (source !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${source} 快照不可用`);
   const allowlist = dashboard.assets.filter((asset) => {
     if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
     if (source === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
-    return ["image", "volume", "cache"].includes(asset.type);
+    return source === "github"
+      ? ["artifact", "actions_cache"].includes(asset.type)
+      : ["image", "volume", "cache"].includes(asset.type);
   }).map((asset) => ({
     type: asset.type,
     id: asset.id,

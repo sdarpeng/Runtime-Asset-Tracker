@@ -91,6 +91,37 @@ export function buildBars(assets, summary = {}) {
   ];
 }
 
+function aggregateGithub(type, assets, unit) {
+  const matching = assets.filter((asset) => asset.type === type);
+  const measure = (asset) => unit === "count" ? 1 : Number(asset.sizeBytes || 0);
+  const sum = (classification) => matching
+    .filter((asset) => asset.classification === classification)
+    .reduce((total, asset) => total + measure(asset), 0);
+  const activeBytes = sum("active");
+  const protectedBytes = sum("protected");
+  const reclaimableBytes = sum("reclaimable");
+  const totalBytes = matching.reduce((total, asset) => total + measure(asset), 0);
+  return {
+    type,
+    totalBytes,
+    count: matching.length,
+    activeBytes,
+    protectedBytes,
+    retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - reclaimableBytes),
+    reclaimableBytes,
+    unit,
+  };
+}
+
+export function buildGithubBars(assets) {
+  return [
+    aggregateGithub("pull_request", assets, "count"),
+    aggregateGithub("artifact", assets, "bytes"),
+    aggregateGithub("actions_cache", assets, "bytes"),
+    aggregateGithub("workflow_run", assets, "count"),
+  ];
+}
+
 function runtimeLabel(labels, name) {
   return labels?.[`com.codex.runtime.${name}`];
 }
@@ -381,23 +412,37 @@ function collectGithubSnapshot(sourceConfig) {
   const artifacts = runJson("gh", ["api", `repos/${repository}/actions/artifacts?per_page=100`]);
   const caches = runJson("gh", ["api", `repos/${repository}/actions/caches?per_page=100`]);
   const runs = runJson("gh", ["api", `repos/${repository}/actions/runs?per_page=30`]);
+  const pulls = runJson("gh", ["api", `repos/${repository}/pulls?state=all&per_page=100`]);
   const now = Date.now();
-  const pullStates = new Map();
-  for (const item of caches.actions_caches || []) {
-    const match = String(item.ref || "").match(/^refs\/pull\/(\d+)\/merge$/);
-    if (!match || pullStates.has(match[1])) continue;
-    try {
-      const pull = runJson("gh", ["api", `repos/${repository}/pulls/${match[1]}`]);
-      pullStates.set(match[1], pull.state || "unknown");
-    } catch {
-      pullStates.set(match[1], "unknown");
-    }
-  }
+  const pullStates = new Map((pulls || []).map((pull) => [String(pull.number), pull.state || "unknown"]));
   const assets = [
+    ...(pulls || []).map((pull) => {
+      const status = pull.draft ? "draft" : pull.merged_at ? "merged" : pull.state || "unknown";
+      const active = status === "open" || status === "draft";
+      return {
+        id: String(pull.number),
+        name: `#${pull.number} · ${pull.title}`,
+        type: "pull_request",
+        project: repository,
+        environment: "github",
+        status,
+        classification: active ? "active" : "retained",
+        sizeBytes: 1,
+        unit: "count",
+        createdAt: pull.created_at,
+        updatedAt: pull.updated_at,
+        author: pull.user?.login || "unknown",
+        headRef: pull.head?.ref || "unknown",
+        baseRef: pull.base?.ref || "unknown",
+        url: pull.html_url,
+        labels: {},
+        reason: `${status === "draft" ? "Draft" : status[0]?.toUpperCase() + status.slice(1)} Pull Request`,
+      };
+    }),
     ...(artifacts.artifacts || []).map((item) => ({
       id: String(item.id),
       name: item.name,
-      type: "cache",
+      type: "artifact",
       remoteKind: "artifact",
       project: repository,
       environment: "github",
@@ -422,7 +467,7 @@ function collectGithubSnapshot(sourceConfig) {
       return {
         id: String(item.id),
         name: `${item.key} · ${item.ref || "unknown ref"}`,
-        type: "cache",
+        type: "actions_cache",
         remoteKind: "actions-cache",
         project: repository,
         environment: "github",
@@ -434,6 +479,27 @@ function collectGithubSnapshot(sourceConfig) {
         reason: closedPullRequest ? "已关闭 Pull Request 的 GitHub Actions cache"
           : classification === "reclaimable" ? "超过 30 天未访问的 GitHub Actions cache"
             : `仍在保留期内的 GitHub Actions cache · ${item.ref || "unknown ref"}`,
+      };
+    }),
+    ...(runs.workflow_runs || []).map((run) => {
+      const status = run.conclusion || run.status || "unknown";
+      const active = !run.conclusion && !["completed", "cancelled"].includes(run.status);
+      return {
+        id: String(run.id),
+        name: `${run.name || run.display_title || "Workflow"} · ${run.head_branch || "unknown branch"}`,
+        type: "workflow_run",
+        project: repository,
+        environment: "github",
+        status,
+        classification: active ? "active" : "retained",
+        sizeBytes: 1,
+        unit: "count",
+        createdAt: run.created_at,
+        updatedAt: run.updated_at,
+        headRef: run.head_branch || "unknown",
+        url: run.html_url,
+        labels: {},
+        reason: active ? "Workflow 正在运行" : `Workflow 已完成 · ${status}`,
       };
     }),
   ];
@@ -450,14 +516,7 @@ function collectGithubSnapshot(sourceConfig) {
     host: "github.com",
     dockerAvailable: false,
     disk: { totalBytes: 0, freeBytes: 0 },
-    summary: {
-      "Build Cache": {
-        totalCount: assets.length,
-        activeCount: 0,
-        sizeBytes: assets.reduce((total, item) => total + item.sizeBytes, 0),
-        reclaimableBytes: assets.filter((item) => item.classification === "reclaimable").reduce((total, item) => total + item.sizeBytes, 0),
-      },
-    },
+    bars: buildGithubBars(assets),
     assets,
     events,
     repository,
@@ -696,7 +755,7 @@ export function collectRemoteDashboard({ source, scope, project, config, sources
       host: snapshot.host,
       dockerAvailable: snapshot.dockerAvailable,
       disk: snapshot.disk,
-      bars: buildBars(filteredAssets, snapshot.summary),
+      bars: sourceConfig.kind === "github" ? buildGithubBars(filteredAssets) : buildBars(filteredAssets, snapshot.summary),
       sources: sources.map((item) => item.id === source ? { ...item, status: "connected", detail: snapshot.host } : item),
       projects,
       assets: filteredAssets.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),

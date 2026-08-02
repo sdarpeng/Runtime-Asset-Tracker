@@ -33795,6 +33795,33 @@ function buildBars(assets, summary = {}) {
     aggregate("cache", assets, summary["Build Cache"])
   ];
 }
+function aggregateGithub(type, assets, unit) {
+  const matching = assets.filter((asset) => asset.type === type);
+  const measure = (asset) => unit === "count" ? 1 : Number(asset.sizeBytes || 0);
+  const sum = (classification2) => matching.filter((asset) => asset.classification === classification2).reduce((total, asset) => total + measure(asset), 0);
+  const activeBytes = sum("active");
+  const protectedBytes = sum("protected");
+  const reclaimableBytes = sum("reclaimable");
+  const totalBytes = matching.reduce((total, asset) => total + measure(asset), 0);
+  return {
+    type,
+    totalBytes,
+    count: matching.length,
+    activeBytes,
+    protectedBytes,
+    retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - reclaimableBytes),
+    reclaimableBytes,
+    unit
+  };
+}
+function buildGithubBars(assets) {
+  return [
+    aggregateGithub("pull_request", assets, "count"),
+    aggregateGithub("artifact", assets, "bytes"),
+    aggregateGithub("actions_cache", assets, "bytes"),
+    aggregateGithub("workflow_run", assets, "count")
+  ];
+}
 function remoteSnapshotScript() {
   return String.raw`
 import base64, datetime, gzip, json, os, re, shutil, socket, subprocess
@@ -34076,23 +34103,37 @@ function collectGithubSnapshot(sourceConfig) {
   const artifacts = runJson("gh", ["api", `repos/${repository}/actions/artifacts?per_page=100`]);
   const caches = runJson("gh", ["api", `repos/${repository}/actions/caches?per_page=100`]);
   const runs = runJson("gh", ["api", `repos/${repository}/actions/runs?per_page=30`]);
+  const pulls = runJson("gh", ["api", `repos/${repository}/pulls?state=all&per_page=100`]);
   const now = Date.now();
-  const pullStates = /* @__PURE__ */ new Map();
-  for (const item of caches.actions_caches || []) {
-    const match = String(item.ref || "").match(/^refs\/pull\/(\d+)\/merge$/);
-    if (!match || pullStates.has(match[1])) continue;
-    try {
-      const pull = runJson("gh", ["api", `repos/${repository}/pulls/${match[1]}`]);
-      pullStates.set(match[1], pull.state || "unknown");
-    } catch {
-      pullStates.set(match[1], "unknown");
-    }
-  }
+  const pullStates = new Map((pulls || []).map((pull) => [String(pull.number), pull.state || "unknown"]));
   const assets = [
+    ...(pulls || []).map((pull) => {
+      const status = pull.draft ? "draft" : pull.merged_at ? "merged" : pull.state || "unknown";
+      const active = status === "open" || status === "draft";
+      return {
+        id: String(pull.number),
+        name: `#${pull.number} \xB7 ${pull.title}`,
+        type: "pull_request",
+        project: repository,
+        environment: "github",
+        status,
+        classification: active ? "active" : "retained",
+        sizeBytes: 1,
+        unit: "count",
+        createdAt: pull.created_at,
+        updatedAt: pull.updated_at,
+        author: pull.user?.login || "unknown",
+        headRef: pull.head?.ref || "unknown",
+        baseRef: pull.base?.ref || "unknown",
+        url: pull.html_url,
+        labels: {},
+        reason: `${status === "draft" ? "Draft" : status[0]?.toUpperCase() + status.slice(1)} Pull Request`
+      };
+    }),
     ...(artifacts.artifacts || []).map((item) => ({
       id: String(item.id),
       name: item.name,
-      type: "cache",
+      type: "artifact",
       remoteKind: "artifact",
       project: repository,
       environment: "github",
@@ -34117,7 +34158,7 @@ function collectGithubSnapshot(sourceConfig) {
       return {
         id: String(item.id),
         name: `${item.key} \xB7 ${item.ref || "unknown ref"}`,
-        type: "cache",
+        type: "actions_cache",
         remoteKind: "actions-cache",
         project: repository,
         environment: "github",
@@ -34127,6 +34168,27 @@ function collectGithubSnapshot(sourceConfig) {
         createdAt: item.created_at,
         labels: {},
         reason: closedPullRequest ? "\u5DF2\u5173\u95ED Pull Request \u7684 GitHub Actions cache" : classification2 === "reclaimable" ? "\u8D85\u8FC7 30 \u5929\u672A\u8BBF\u95EE\u7684 GitHub Actions cache" : `\u4ECD\u5728\u4FDD\u7559\u671F\u5185\u7684 GitHub Actions cache \xB7 ${item.ref || "unknown ref"}`
+      };
+    }),
+    ...(runs.workflow_runs || []).map((run2) => {
+      const status = run2.conclusion || run2.status || "unknown";
+      const active = !run2.conclusion && !["completed", "cancelled"].includes(run2.status);
+      return {
+        id: String(run2.id),
+        name: `${run2.name || run2.display_title || "Workflow"} \xB7 ${run2.head_branch || "unknown branch"}`,
+        type: "workflow_run",
+        project: repository,
+        environment: "github",
+        status,
+        classification: active ? "active" : "retained",
+        sizeBytes: 1,
+        unit: "count",
+        createdAt: run2.created_at,
+        updatedAt: run2.updated_at,
+        headRef: run2.head_branch || "unknown",
+        url: run2.html_url,
+        labels: {},
+        reason: active ? "Workflow \u6B63\u5728\u8FD0\u884C" : `Workflow \u5DF2\u5B8C\u6210 \xB7 ${status}`
       };
     })
   ];
@@ -34143,14 +34205,7 @@ function collectGithubSnapshot(sourceConfig) {
     host: "github.com",
     dockerAvailable: false,
     disk: { totalBytes: 0, freeBytes: 0 },
-    summary: {
-      "Build Cache": {
-        totalCount: assets.length,
-        activeCount: 0,
-        sizeBytes: assets.reduce((total, item) => total + item.sizeBytes, 0),
-        reclaimableBytes: assets.filter((item) => item.classification === "reclaimable").reduce((total, item) => total + item.sizeBytes, 0)
-      }
-    },
+    bars: buildGithubBars(assets),
     assets,
     events,
     repository
@@ -34378,7 +34433,7 @@ function collectRemoteDashboard({ source, scope, project, config: config2, sourc
       host: snapshot.host,
       dockerAvailable: snapshot.dockerAvailable,
       disk: snapshot.disk,
-      bars: buildBars(filteredAssets, snapshot.summary),
+      bars: sourceConfig.kind === "github" ? buildGithubBars(filteredAssets) : buildBars(filteredAssets, snapshot.summary),
       sources: sources.map((item) => item.id === source ? { ...item, status: "connected", detail: snapshot.host } : item),
       projects,
       assets: filteredAssets.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
@@ -34760,13 +34815,13 @@ function collectDashboard({ scope = "environment", source = "local", project = "
   dashboardCache.set(cacheKey2, { createdAt: Date.now(), value: dashboard });
   return dashboard;
 }
-function createCleanupPreview({ source = "local", types = ["container", "image", "volume", "cache"] } = {}) {
+function createCleanupPreview({ source = "local", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"] } = {}) {
   const dashboard = collectDashboard({ source });
   if (source !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${source} \u5FEB\u7167\u4E0D\u53EF\u7528`);
   const allowlist = dashboard.assets.filter((asset) => {
     if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
     if (source === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
-    return ["image", "volume", "cache"].includes(asset.type);
+    return source === "github" ? ["artifact", "actions_cache"].includes(asset.type) : ["image", "volume", "cache"].includes(asset.type);
   }).map((asset) => ({
     type: asset.type,
     id: asset.id,
@@ -34919,7 +34974,7 @@ function createRuntimeAssetServer() {
     description: "Generate an exact, expiring cleanup allowlist. This tool never deletes assets.",
     inputSchema: {
       source: external_exports.enum(["local", "production", "staging", "github"]).optional(),
-      types: external_exports.array(external_exports.enum(["container", "image", "volume", "cache"])).optional()
+      types: external_exports.array(external_exports.enum(["container", "image", "volume", "cache", "pull_request", "artifact", "actions_cache", "workflow_run"])).optional()
     },
     outputSchema: { preview: external_exports.record(external_exports.string(), external_exports.unknown()) },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },

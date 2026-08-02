@@ -34,6 +34,10 @@ const barMeta = {
   image: { label: "Docker Images", caption: "唯一层占用与容器引用", Icon: Package },
   volume: { label: "Docker Volumes", caption: "真实占用与挂载关系", Icon: Database },
   cache: { label: "Build Cache", caption: "构建缓存", Icon: Stack },
+  pull_request: { label: "Pull Requests", caption: "Open、Draft、Merged 与 Closed", Icon: GitBranch },
+  artifact: { label: "Actions Artifacts", caption: "工作流制品与过期状态", Icon: Package },
+  actions_cache: { label: "Actions Cache", caption: "分支与 Pull Request 构建缓存", Icon: Stack },
+  workflow_run: { label: "Workflow Runs", caption: "CI 执行状态与结果", Icon: ListDashes },
 };
 
 const sourceIcons = { local: DesktopTower, server: Cloud, github: GithubLogo };
@@ -53,6 +57,18 @@ function formatMetric(bar, value) {
 function formatTime(value) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+}
+
+function assetMetric(asset) {
+  if (asset.type === "pull_request") return `${asset.headRef || "unknown"} → ${asset.baseRef || "unknown"}`;
+  if (asset.type === "workflow_run") return formatTime(asset.updatedAt || asset.createdAt);
+  return formatBytes(asset.sizeBytes);
+}
+
+function metricHeading(type) {
+  if (type === "pull_request") return "分支";
+  if (type === "workflow_run") return "更新时间";
+  return "规模";
 }
 
 function createBridge() {
@@ -234,7 +250,7 @@ export function App() {
   const selectSource = (next) => {
     setSource(next);
     setProject("all");
-    setSelectedType(next === "github" ? "cache" : "image");
+    setSelectedType(next === "github" ? "pull_request" : "image");
     if (next !== "local") {
       setDashboard((current) => current ? {
         ...current,
@@ -251,15 +267,16 @@ export function App() {
   const selectProject = (next) => { setProject(next); refresh({ project: next }); };
 
   const visibleAssets = useMemo(() => (dashboard?.assets || []).filter((asset) => asset.type === selectedType && `${asset.name} ${asset.project} ${asset.status}`.toLowerCase().includes(query.toLowerCase())).slice(0, 18), [dashboard, query, selectedType]);
-  const totalFootprint = (dashboard?.bars || []).reduce((sum, item) => sum + Number(item.totalBytes || 0), 0);
+  const totalFootprint = (dashboard?.bars || []).filter((item) => item.unit !== "count").reduce((sum, item) => sum + Number(item.totalBytes || 0), 0);
   const totalReclaimable = (dashboard?.bars || []).reduce((sum, item) => sum + Number(item.reclaimableBytes || 0), 0);
   const protectedCount = (dashboard?.assets || []).filter((asset) => asset.classification === "protected").length;
+  const openPullCount = (dashboard?.assets || []).filter((asset) => asset.type === "pull_request" && ["open", "draft"].includes(asset.status)).length;
   const selectedSource = dashboard?.sources?.find((item) => item.id === source);
   const snapshotOnline = source === "local" || dashboard?.remoteSnapshotAvailable;
 
   const requestPreview = async () => {
     setLoading(true);
-    try { acceptResult(await callTool("preview_cleanup", { source, types: ["container", "image", "volume", "cache"] })); }
+    try { acceptResult(await callTool("preview_cleanup", { source, types: ["container", "image", "volume", "cache", "artifact", "actions_cache"] })); }
     catch (error) { setNotice(`预览失败：${error.message || error}`); }
     finally { setLoading(false); }
   };
@@ -286,7 +303,7 @@ export function App() {
             return <button type="button" className={`source-card ${source === item.id ? "is-active" : ""}`} onClick={() => selectSource(item.id)} key={item.id}><span className="source-icon"><Icon size={24} weight="duotone" /></span><span><strong>{item.label}</strong><small>{item.detail}</small></span><i className={`status-dot status-${item.status}`} /></button>;
           })}
         </nav>
-        <div className="sidebar-note"><ShieldCheck size={18} weight="fill" /><span><strong>安全分类已启用</strong><small>未知卷默认保护，不进入自动清理。</small></span></div>
+        <div className="sidebar-note"><ShieldCheck size={18} weight="fill" /><span><strong>安全分类已启用</strong><small>{source === "github" ? "PR 与 Workflow 只读；仅过期制品和失效缓存可清理。" : "未知卷默认保护，不进入自动清理。"}</small></span></div>
       </aside>
 
       <main className="dashboard">
@@ -296,22 +313,22 @@ export function App() {
         </header>
 
         <section className="metric-grid">
-          <article><span className="metric-icon"><HardDrives size={22} /></span><div><small>逻辑资产规模</small><strong>{formatBytes(totalFootprint)}</strong><span>{dashboard?.assets?.length || 0} 项已识别资产</span></div></article>
+          <article><span className="metric-icon"><HardDrives size={22} /></span><div><small>{source === "github" ? "GitHub 交付资产" : "逻辑资产规模"}</small><strong>{source === "github" ? `${dashboard?.assets?.length || 0} 项` : formatBytes(totalFootprint)}</strong><span>{source === "github" ? `${formatBytes(totalFootprint)} 制品与缓存` : `${dashboard?.assets?.length || 0} 项已识别资产`}</span></div></article>
           <article><span className="metric-icon safe"><Broom size={22} /></span><div><small>明确可安全清理</small><strong>{formatBytes(totalReclaimable)}</strong><span>按当前来源的安全策略计算</span></div></article>
-          <article><span className="metric-icon warning"><ShieldCheck size={22} /></span><div><small>受保护资产</small><strong>{protectedCount}</strong><span>数据库、上传与活动运行态</span></div></article>
-          <article><span className="metric-icon blue"><ListDashes size={22} /></span><div><small>事件账本</small><strong>{dashboard?.events?.length || 0}</strong><span>当前加载的最近事件</span></div></article>
+          <article><span className="metric-icon warning"><ShieldCheck size={22} /></span><div><small>{source === "github" ? "Open / Draft PR" : "受保护资产"}</small><strong>{source === "github" ? openPullCount : protectedCount}</strong><span>{source === "github" ? "当前开发中的变更" : "数据库、上传与活动运行态"}</span></div></article>
+          <article><span className="metric-icon blue"><ListDashes size={22} /></span><div><small>{source === "github" ? "Workflow Runs" : "事件账本"}</small><strong>{dashboard?.events?.length || 0}</strong><span>{source === "github" ? "最近加载的 CI 运行" : "当前加载的最近事件"}</span></div></article>
         </section>
 
         <section className="asset-overview card">
-          <div className="section-heading"><div><span className="section-kicker">CAPACITY MAP</span><h2>资产容量与清理状态</h2></div><div className="legend">{Object.entries(classifications).map(([key, value]) => <span key={key}><i style={{ background: value.color }} />{value.label}</span>)}</div></div>
+          <div className="section-heading"><div><span className="section-kicker">{source === "github" ? "DELIVERY MAP" : "CAPACITY MAP"}</span><h2>{source === "github" ? "GitHub 交付与存储状态" : "资产容量与清理状态"}</h2></div><div className="legend">{Object.entries(classifications).map(([key, value]) => <span key={key}><i style={{ background: value.color }} />{value.label}</span>)}</div></div>
           {source !== "local" && !dashboard?.remoteSnapshotAvailable ? <EmptyState source={selectedSource} error={dashboard?.remoteError} /> : <div className="bands">{dashboard?.bars?.map((bar) => <SegmentBar bar={bar} key={bar.type} selected={selectedType === bar.type} onSelect={setSelectedType} />)}</div>}
         </section>
 
         <section className="lower-grid">
           <article className="asset-table card">
             <div className="section-heading compact"><div><span className="section-kicker">ASSET DETAIL</span><h2>{barMeta[selectedType]?.label || "资产明细"}</h2></div><label className="search"><MagnifyingGlass size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产或项目" /></label></div>
-            <div className="table-head"><span>资产</span><span>项目 / 状态</span><span>分类</span><span>规模</span></div>
-            <div className="table-body">{visibleAssets.length === 0 ? <div className="table-empty">当前筛选没有资产</div> : visibleAssets.map((asset) => <div className="table-row" key={`${asset.type}-${asset.id}`}><span><Cube size={17} weight="duotone" /><b>{asset.name}</b></span><span><b>{asset.project}</b><small>{asset.status}</small></span><span><i className={`classification classification-${asset.classification}`} />{classifications[asset.classification]?.label || asset.classification}</span><strong>{asset.unit === "count" ? "1 个" : formatBytes(asset.sizeBytes)}</strong></div>)}</div>
+            <div className="table-head"><span>资产</span><span>项目 / 状态</span><span>分类</span><span>{metricHeading(selectedType)}</span></div>
+            <div className="table-body">{visibleAssets.length === 0 ? <div className="table-empty">当前筛选没有资产</div> : visibleAssets.map((asset) => { const AssetIcon = barMeta[asset.type]?.Icon || Cube; return <div className="table-row" key={`${asset.type}-${asset.id}`}><span><AssetIcon size={17} weight="duotone" /><b>{asset.name}</b></span><span><b>{asset.project}</b><small>{asset.status}{asset.author ? ` · ${asset.author}` : ""}</small></span><span><i className={`classification classification-${asset.classification}`} />{classifications[asset.classification]?.label || asset.classification}</span><strong>{assetMetric(asset)}</strong></div>; })}</div>
           </article>
           <article className="ledger card">
             <div className="section-heading compact"><div><span className="section-kicker">EVENT LEDGER</span><h2>最近事件</h2></div><span className="ledger-count">{dashboard?.events?.length || 0}</span></div>
