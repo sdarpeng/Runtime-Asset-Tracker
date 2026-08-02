@@ -34393,20 +34393,45 @@ function executeRemoteCleanup({ source, sourceConfig, allowlist }) {
   if (!sourceConfig) throw new Error(`${source} \u6765\u6E90\u5C1A\u672A\u914D\u7F6E`);
   return sourceConfig.kind === "github" ? executeGithubCleanup(sourceConfig, allowlist) : executeAwsDockerCleanup(sourceConfig, allowlist);
 }
+function registeredProjectOptions(config2, sourceConfig) {
+  const configured = Array.isArray(config2.projects) && config2.projects.length ? config2.projects : sourceConfig?.repository ? [{ id: sourceConfig.repository, repository: sourceConfig.repository }] : [];
+  const unique = /* @__PURE__ */ new Map();
+  for (const item of configured) {
+    const repository = String(item.repository || item.id || "").replace(/^.*github\.com[/:]/i, "").replace(/\.git$/i, "").replace(/\/$/, "");
+    if (!/^[^/]+\/[^/]+$/.test(repository) || unique.has(repository.toLowerCase())) continue;
+    unique.set(repository.toLowerCase(), {
+      id: repository,
+      repository,
+      label: String(item.label || repository.split("/").at(-1)),
+      aliases: [...new Set([...item.aliases || [], item.id, item.label, repository.split("/").at(-1)].filter(Boolean).map(String))]
+    });
+  }
+  return [...unique.values()];
+}
+function canonicalRemoteProject(value, projects) {
+  const key = String(value || "").toLowerCase();
+  const match = projects.find((item) => [item.id, item.repository, item.label, ...item.aliases].some((candidate) => String(candidate || "").toLowerCase() === key));
+  return match?.id || value || "unknown";
+}
 function collectRemoteDashboard({ source, scope, project, config: config2, sources }) {
   const schedule = config2.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" };
-  const sourceConfig = (config2.sources || []).find((item) => item.id === source);
+  const baseSourceConfig = (config2.sources || []).find((item) => item.id === source);
+  const projectOptions = registeredProjectOptions(config2, baseSourceConfig);
+  const selectedRepository = baseSourceConfig?.kind === "github" ? project !== "all" ? project : baseSourceConfig.repository || projectOptions[0]?.repository : void 0;
+  const sourceConfig = baseSourceConfig?.kind === "github" ? { ...baseSourceConfig, repository: selectedRepository } : baseSourceConfig;
+  const selectedProject = selectedRepository || project;
   const empty = {
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
     scope,
     selectedSource: source,
-    selectedProject: project,
+    selectedProject,
     host: sourceConfig?.label || sourceConfig?.repository || "\u7B49\u5F85\u8FDC\u7A0B\u5FEB\u7167",
     dockerAvailable: false,
     disk: { totalBytes: 0, freeBytes: 0 },
     bars: emptyBars(),
     sources,
-    projects: sourceConfig?.repository ? [sourceConfig.repository] : [],
+    projects: projectOptions.map((item) => item.id),
+    projectOptions,
     assets: [],
     events: [],
     schedule,
@@ -34425,8 +34450,9 @@ function collectRemoteDashboard({ source, scope, project, config: config2, sourc
       snapshot = sourceConfig.kind === "github" ? collectGithubSnapshot(sourceConfig) : collectAwsSnapshot(sourceConfig);
       remoteCache.set(cacheKey2, { createdAt: Date.now(), value: snapshot });
     }
-    const filteredAssets = project === "all" ? snapshot.assets : snapshot.assets.filter((asset) => asset.project === project);
-    const projects = [...new Set(snapshot.assets.map((asset) => asset.project).filter(Boolean))].sort();
+    const canonicalAssets = snapshot.assets.map((asset) => ({ ...asset, project: canonicalRemoteProject(asset.project, projectOptions) }));
+    const filteredAssets = selectedProject === "all" ? canonicalAssets : canonicalAssets.filter((asset) => asset.project === selectedProject);
+    const projects = projectOptions.length ? projectOptions.map((item) => item.id) : [...new Set(canonicalAssets.map((asset) => asset.project).filter(Boolean))].sort();
     return {
       ...empty,
       generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -34434,8 +34460,9 @@ function collectRemoteDashboard({ source, scope, project, config: config2, sourc
       dockerAvailable: snapshot.dockerAvailable,
       disk: snapshot.disk,
       bars: sourceConfig.kind === "github" ? buildGithubBars(filteredAssets) : buildBars(filteredAssets, snapshot.summary),
-      sources: sources.map((item) => item.id === source ? { ...item, status: "connected", detail: snapshot.host } : item),
+      sources: sources.map((item) => item.id === source ? { ...item, status: "connected", detail: sourceConfig.kind === "github" ? selectedRepository : snapshot.host } : item),
       projects,
+      projectOptions,
       assets: filteredAssets.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
       events: snapshot.events || [],
       remoteSnapshotAvailable: true,
@@ -34639,25 +34666,65 @@ function dockerInventory() {
   });
   return { available: true, assets: [...containers, ...images, ...volumes], summary: dockerSummary() };
 }
-function worktreeInventory() {
-  const configuredRoot = loadConfig().gitRoots?.[0];
-  const output = run("git", ["worktree", "list", "--porcelain"], { cwd: process.env.RUNTIME_ASSET_GIT_ROOT || configuredRoot || process.cwd() });
-  if (!output) return [];
-  const blocks = output.split(/\r?\n\r?\n/).filter(Boolean);
-  return blocks.map((block) => {
+function normalizeGithubRepository(value) {
+  const text = String(value || "").trim().replace(/\\/g, "/").replace(/\.git$/i, "").replace(/\/$/, "");
+  const match = text.match(/github\.com[/:]([^/]+\/[^/]+)$/i);
+  return match ? match[1] : /^[^/]+\/[^/]+$/.test(text) ? text : "";
+}
+function registeredProjects(config2 = loadConfig()) {
+  const githubSource = (config2.sources || []).find((item) => item.kind === "github" || item.id === "github");
+  const configured = Array.isArray(config2.projects) && config2.projects.length ? config2.projects : githubSource?.repository ? [{ id: githubSource.repository, repository: githubSource.repository }] : [];
+  const unique = /* @__PURE__ */ new Map();
+  for (const item of configured) {
+    const repository = normalizeGithubRepository(item.repository || item.id);
+    if (!repository || unique.has(repository.toLowerCase())) continue;
+    unique.set(repository.toLowerCase(), {
+      id: repository,
+      repository,
+      label: String(item.label || repository.split("/").at(-1)),
+      aliases: [...new Set([...item.aliases || [], item.id, item.label, repository.split("/").at(-1)].filter(Boolean).map(String))],
+      gitRoots: [...new Set((item.gitRoots || []).filter(Boolean).map(String))]
+    });
+  }
+  return [...unique.values()];
+}
+function canonicalProjectId(value, projects) {
+  const normalizedRepository = normalizeGithubRepository(value);
+  const key = String(normalizedRepository || value || "").toLowerCase();
+  const match = projects.find((item) => [item.id, item.repository, item.label, ...item.aliases].some((candidate) => String(candidate || "").toLowerCase() === key));
+  return match?.id || value || "unknown";
+}
+function worktreeInventory(config2, projects) {
+  const roots = [...new Set([
+    process.env.RUNTIME_ASSET_GIT_ROOT,
+    ...config2.gitRoots || [],
+    ...projects.flatMap((item) => item.gitRoots || [])
+  ].filter(Boolean))];
+  if (!roots.length) roots.push(process.cwd());
+  const blocksByPath = /* @__PURE__ */ new Map();
+  for (const root of roots) {
+    const output = run("git", ["worktree", "list", "--porcelain"], { cwd: root });
+    for (const block of output.split(/\r?\n\r?\n/).filter(Boolean)) {
+      const pathLine = block.split(/\r?\n/).find((line) => line.startsWith("worktree "));
+      if (pathLine) blocksByPath.set(pathLine.slice("worktree ".length).toLowerCase(), block);
+    }
+  }
+  return [...blocksByPath.values()].map((block) => {
     const fields = Object.fromEntries(block.split(/\r?\n/).map((line) => {
       const space = line.indexOf(" ");
       return space > 0 ? [line.slice(0, space), line.slice(space + 1)] : [line, true];
     }));
     const path = fields.worktree;
     const status = path ? run("git", ["status", "--short"], { cwd: path, timeout: 8e3 }) : "";
+    const remote = path ? normalizeGithubRepository(run("git", ["remote", "get-url", "origin"], { cwd: path, timeout: 8e3 })) : "";
+    const rootProject = projects.find((item) => item.gitRoots.some((root) => path?.toLowerCase().startsWith(root.toLowerCase())));
     const dirty = Boolean(status);
     return {
       id: path,
       name: path ? parse3(path).base : "unknown",
       path,
       type: "worktree",
-      project: "sparklingplaycms",
+      project: canonicalProjectId(remote || rootProject?.id, projects),
       environment: "local",
       status: dirty ? "dirty" : fields.detached ? "detached" : "clean",
       classification: dirty ? "protected" : fields.detached ? "review" : "retained",
@@ -34750,22 +34817,24 @@ function collectDashboard({ scope = "environment", source = "local", project = "
   if (cached2 && Date.now() - cached2.createdAt < 2e4) return { ...cached2.value, generatedAt: (/* @__PURE__ */ new Date()).toISOString(), cached: true };
   if (source !== "local") {
     const remoteConfig = loadConfig();
+    const projectOptions2 = registeredProjects(remoteConfig);
     const remoteDiskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform() === "win32" ? "D:\\" : "/");
     const configuredSources2 = new Map((remoteConfig.sources || []).map((item) => [item.id, item]));
     const sources2 = [
       { id: "local", label: `Local ${remoteDiskRoot}`, kind: "local", status: "connected", detail: hostname3() },
       { id: "production", label: "EC2 Production", kind: "server", status: configuredSources2.has("production") ? "configured" : "not-configured", detail: configuredSources2.get("production")?.label || "\u7B49\u5F85\u914D\u7F6E" },
       { id: "staging", label: "EC2 Staging", kind: "server", status: configuredSources2.has("staging") ? "configured" : "not-configured", detail: configuredSources2.get("staging")?.label || "\u7B49\u5F85\u914D\u7F6E" },
-      { id: "github", label: "GitHub", kind: "github", status: configuredSources2.has("github") ? "configured" : "not-configured", detail: configuredSources2.get("github")?.repository || "\u7B49\u5F85\u914D\u7F6E" }
+      { id: "github", label: "GitHub", kind: "github", status: configuredSources2.has("github") ? "configured" : "not-configured", detail: projectOptions2.length ? `${projectOptions2.length} \u4E2A\u6CE8\u518C\u4ED3\u5E93` : "\u7B49\u5F85\u914D\u7F6E" }
     ];
     return collectRemoteDashboard({ source, scope, project, config: remoteConfig, sources: sources2 });
   }
+  const config2 = loadConfig();
+  const projectOptions = registeredProjects(config2);
   const docker = dockerInventory();
-  const worktrees = worktreeInventory();
-  const allAssets = [...worktrees, ...docker.assets];
+  const worktrees = worktreeInventory(config2, projectOptions);
+  const allAssets = [...worktrees, ...docker.assets].map((asset) => ({ ...asset, project: canonicalProjectId(asset.project, projectOptions) }));
   const sourceAssets = source === "local" ? allAssets : [];
   const filtered = project === "all" ? sourceAssets : sourceAssets.filter((asset) => asset.project === project);
-  const config2 = loadConfig();
   const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform() === "win32" ? "D:\\" : "/");
   let disk = { totalBytes: 0, freeBytes: 0 };
   try {
@@ -34789,13 +34858,13 @@ function collectDashboard({ scope = "environment", source = "local", project = "
       unit: "bytes"
     }
   ];
-  const projects = [...new Set(allAssets.map((asset) => asset.project).filter((value) => value && value !== "unknown"))].sort();
+  const projects = projectOptions.length ? projectOptions.map((item) => item.id) : [...new Set(allAssets.map((asset) => asset.project).filter((value) => value && value !== "unknown"))].sort();
   const configuredSources = new Map((config2.sources || []).map((item) => [item.id, item]));
   const sources = [
     { id: "local", label: `Local ${diskRoot}`, kind: "local", status: docker.available ? "connected" : "unavailable", detail: hostname3() },
     { id: "production", label: "EC2 Production", kind: "server", status: configuredSources.has("production") ? "configured" : "not-configured", detail: configuredSources.get("production")?.label || "\u7B49\u5F85\u914D\u7F6E" },
     { id: "staging", label: "EC2 Staging", kind: "server", status: configuredSources.has("staging") ? "configured" : "not-configured", detail: configuredSources.get("staging")?.label || "\u7B49\u5F85\u914D\u7F6E" },
-    { id: "github", label: "GitHub", kind: "github", status: configuredSources.has("github") ? "configured" : "not-configured", detail: configuredSources.get("github")?.repository || "\u7B49\u5F85\u914D\u7F6E" }
+    { id: "github", label: "GitHub", kind: "github", status: configuredSources.has("github") ? "configured" : "not-configured", detail: projectOptions.length ? `${projectOptions.length} \u4E2A\u6CE8\u518C\u4ED3\u5E93` : "\u7B49\u5F85\u914D\u7F6E" }
   ];
   const dashboard = {
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -34808,6 +34877,7 @@ function collectDashboard({ scope = "environment", source = "local", project = "
     bars,
     sources,
     projects,
+    projectOptions,
     assets: filtered.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
     events: readLedger(),
     schedule: config2.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" }
@@ -34815,8 +34885,8 @@ function collectDashboard({ scope = "environment", source = "local", project = "
   dashboardCache.set(cacheKey2, { createdAt: Date.now(), value: dashboard });
   return dashboard;
 }
-function createCleanupPreview({ source = "local", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"] } = {}) {
-  const dashboard = collectDashboard({ source });
+function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"] } = {}) {
+  const dashboard = collectDashboard({ source, project });
   if (source !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${source} \u5FEB\u7167\u4E0D\u53EF\u7528`);
   const allowlist = dashboard.assets.filter((asset) => {
     if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
@@ -34848,6 +34918,7 @@ function createCleanupPreview({ source = "local", types = ["container", "image",
   const preview = {
     token,
     source,
+    project: dashboard.selectedProject || project,
     policy: source === "github" ? "\u53EA\u5220\u9664\u5DF2\u8FC7\u671F\u5236\u54C1\u3001\u5DF2\u5173\u95ED PR \u7684\u7F13\u5B58\u548C\u8D85\u8FC7 30 \u5929\u672A\u8BBF\u95EE\u7684\u7F13\u5B58" : source === "local" ? "\u53EA\u5220\u9664\u672A\u88AB\u4EFB\u4F55\u5BB9\u5668\u5F15\u7528\u7684\u60AC\u7A7A/\u663E\u5F0F disposable \u955C\u50CF\u3001\u672A\u6302\u8F7D\u4E14\u663E\u5F0F disposable \u7684\u5377\uFF0C\u4EE5\u53CA Docker \u672A\u4F7F\u7528\u7684 Build Cache" : "\u53EA\u5220\u9664\u590D\u6838\u540E\u4ECD\u672A\u88AB\u5BB9\u5668\u5F15\u7528\u7684\u60AC\u7A7A/\u663E\u5F0F disposable \u955C\u50CF\u3001\u672A\u6302\u8F7D\u4E14\u663E\u5F0F disposable \u7684\u5377\uFF0C\u4EE5\u53CA Docker \u672A\u4F7F\u7528\u7684 Build Cache\uFF1B\u5BB9\u5668\u548C release \u6C38\u4E0D\u8FDB\u5165\u6E05\u5355",
     createdAt: (/* @__PURE__ */ new Date()).toISOString(),
     expiresAt: new Date(Date.now() + 10 * 6e4).toISOString(),
@@ -34887,7 +34958,8 @@ function executeCleanup({ token, confirmed = false }) {
   if (!confirmed) throw new Error("Cleanup requires confirmation for the exact preview allowlist.");
   if (preview.source !== "local") {
     const config2 = loadConfig();
-    const sourceConfig = (config2.sources || []).find((item) => item.id === preview.source);
+    const baseSourceConfig = (config2.sources || []).find((item) => item.id === preview.source);
+    const sourceConfig = preview.source === "github" && preview.project && preview.project !== "all" ? { ...baseSourceConfig, repository: preview.project } : baseSourceConfig;
     const cleanup = executeRemoteCleanup({ source: preview.source, sourceConfig, allowlist: preview.allowlist });
     previewStore.delete(token);
     dashboardCache.clear();
@@ -34974,6 +35046,7 @@ function createRuntimeAssetServer() {
     description: "Generate an exact, expiring cleanup allowlist. This tool never deletes assets.",
     inputSchema: {
       source: external_exports.enum(["local", "production", "staging", "github"]).optional(),
+      project: external_exports.string().optional(),
       types: external_exports.array(external_exports.enum(["container", "image", "volume", "cache", "pull_request", "artifact", "actions_cache", "workflow_run"])).optional()
     },
     outputSchema: { preview: external_exports.record(external_exports.string(), external_exports.unknown()) },

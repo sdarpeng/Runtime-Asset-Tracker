@@ -36,6 +36,11 @@ button { color: inherit; }
 .project-select > span { grid-column: 1 / -1; color: var(--muted); font-size: 10px; letter-spacing: 0.08em; margin-bottom: 6px; }
 .project-select select { grid-column: 1 / -1; appearance: none; color: #dce4ea; background: #151e26; border: 1px solid var(--line); padding: 9px 30px 9px 10px; border-radius: 8px; font-size: 12px; }
 .project-select svg { position: absolute; right: 9px; bottom: 10px; pointer-events: none; }
+.repository-metric { align-items: flex-start; }
+.repository-select { position: relative; display: grid; grid-template-columns: 1fr auto; margin-top: 10px; min-width: 210px; }
+.repository-select > span { grid-column: 1 / -1; color: var(--muted); font-size: 10px; margin-bottom: 4px; }
+.repository-select select { grid-column: 1 / -1; appearance: none; width: 100%; border: 1px solid var(--line); border-radius: 7px; background: #111a22; color: #e8eef2; padding: 7px 28px 7px 9px; font-size: 11px; }
+.repository-select svg { position: absolute; right: 8px; bottom: 8px; pointer-events: none; color: var(--muted); }
 .source-list { display: flex; flex-direction: column; gap: 9px; }
 .source-card { width: 100%; display: grid; grid-template-columns: 38px 1fr 8px; gap: 10px; align-items: center; text-align: left; border: 1px solid transparent; background: transparent; padding: 10px; border-radius: 11px; cursor: pointer; }
 .source-card:hover { background: rgba(255, 255, 255, 0.035); }

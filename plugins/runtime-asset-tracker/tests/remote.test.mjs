@@ -116,7 +116,7 @@ describe("remote read-only adapters", () => {
 
   it("enables immediate cleanup for every connected source in the UI", () => {
     const source = readFileSync(new URL("../ui/src/App.jsx", import.meta.url), "utf8");
-    assert.match(source, /preview_cleanup", \{ source, types:/);
+    assert.match(source, /preview_cleanup", \{ source, project: effectiveProject, types:/);
     assert.doesNotMatch(source, /disabled=\{source !== "local"\} onClick=\{requestPreview\}/);
     assert.match(source, /disabled=\{!snapshotOnline \|\| loading\} onClick=\{requestPreview\}/);
   });
@@ -129,5 +129,8 @@ describe("remote read-only adapters", () => {
     assert.match(source, /workflow_run: \{ label: "Workflow Runs"/);
     assert.match(source, /next === "github" \? "pull_request" : "image"/);
     assert.match(source, /Open \/ Draft PR/);
+    assert.match(source, /className="repository-select"/);
+    assert.match(source, />注册项目</);
+    assert.match(source, /projectOptions\.map/);
   });
 });

@@ -2,6 +2,20 @@
   "gitRoots": [
     "D:\\MyProject"
   ],
+  "projects": [
+    {
+      "id": "owner/repository",
+      "repository": "owner/repository",
+      "label": "My Project",
+      "aliases": ["my-project"],
+      "gitRoots": ["D:\\MyProject"]
+    },
+    {
+      "id": "owner/another-repository",
+      "repository": "owner/another-repository",
+      "label": "Another Project"
+    }
+  ],
   "sources": [
     {
       "id": "production",

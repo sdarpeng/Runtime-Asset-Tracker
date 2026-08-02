@@ -273,10 +273,12 @@ export function App() {
   const openPullCount = (dashboard?.assets || []).filter((asset) => asset.type === "pull_request" && ["open", "draft"].includes(asset.status)).length;
   const selectedSource = dashboard?.sources?.find((item) => item.id === source);
   const snapshotOnline = source === "local" || dashboard?.remoteSnapshotAvailable;
+  const effectiveProject = dashboard?.selectedProject || project;
+  const projectOptions = dashboard?.projectOptions || (dashboard?.projects || []).map((id) => ({ id, label: id, repository: id }));
 
   const requestPreview = async () => {
     setLoading(true);
-    try { acceptResult(await callTool("preview_cleanup", { source, types: ["container", "image", "volume", "cache", "artifact", "actions_cache"] })); }
+    try { acceptResult(await callTool("preview_cleanup", { source, project: effectiveProject, types: ["container", "image", "volume", "cache", "artifact", "actions_cache"] })); }
     catch (error) { setNotice(`预览失败：${error.message || error}`); }
     finally { setLoading(false); }
   };
@@ -296,7 +298,7 @@ export function App() {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><HardDrives size={26} weight="duotone" /></span><span><strong>Runtime Assets</strong><small>跨项目运行资产台</small></span></div>
         <div className="scope-toggle"><button className={scope === "environment" ? "active" : ""} onClick={() => selectScope("environment")} type="button">基于环境</button><button className={scope === "project" ? "active" : ""} onClick={() => selectScope("project")} type="button">基于项目</button></div>
-        {scope === "project" && <label className="project-select"><span>当前项目</span><select value={project} onChange={(event) => selectProject(event.target.value)}><option value="all">所有项目</option>{dashboard?.projects?.map((name) => <option value={name} key={name}>{name}</option>)}</select><CaretDown size={16} /></label>}
+        {scope === "project" && <label className="project-select"><span>注册项目</span><select value={effectiveProject} onChange={(event) => selectProject(event.target.value)}><option value="all">全部注册项目</option>{projectOptions.map((item) => <option value={item.id} key={item.id}>{item.label} · {item.repository}</option>)}</select><CaretDown size={16} /></label>}
         <nav className="source-list" aria-label="数据源">
           {dashboard?.sources?.map((item) => {
             const Icon = sourceIcons[item.kind];
@@ -313,7 +315,7 @@ export function App() {
         </header>
 
         <section className="metric-grid">
-          <article><span className="metric-icon"><HardDrives size={22} /></span><div><small>{source === "github" ? "GitHub 交付资产" : "逻辑资产规模"}</small><strong>{source === "github" ? `${dashboard?.assets?.length || 0} 项` : formatBytes(totalFootprint)}</strong><span>{source === "github" ? `${formatBytes(totalFootprint)} 制品与缓存` : `${dashboard?.assets?.length || 0} 项已识别资产`}</span></div></article>
+          <article className={source === "github" ? "repository-metric" : ""}><span className="metric-icon"><HardDrives size={22} /></span><div><small>{source === "github" ? "GitHub 交付资产" : "逻辑资产规模"}</small><strong>{source === "github" ? `${dashboard?.assets?.length || 0} 项` : formatBytes(totalFootprint)}</strong><span>{source === "github" ? `${formatBytes(totalFootprint)} 制品与缓存` : `${dashboard?.assets?.length || 0} 项已识别资产`}</span>{source === "github" && <label className="repository-select"><span>仓库</span><select value={effectiveProject} onChange={(event) => selectProject(event.target.value)}>{projectOptions.map((item) => <option value={item.id} key={item.id}>{item.label} · {item.repository}</option>)}</select><CaretDown size={15} /></label>}</div></article>
           <article><span className="metric-icon safe"><Broom size={22} /></span><div><small>明确可安全清理</small><strong>{formatBytes(totalReclaimable)}</strong><span>按当前来源的安全策略计算</span></div></article>
           <article><span className="metric-icon warning"><ShieldCheck size={22} /></span><div><small>{source === "github" ? "Open / Draft PR" : "受保护资产"}</small><strong>{source === "github" ? openPullCount : protectedCount}</strong><span>{source === "github" ? "当前开发中的变更" : "数据库、上传与活动运行态"}</span></div></article>
           <article><span className="metric-icon blue"><ListDashes size={22} /></span><div><small>{source === "github" ? "Workflow Runs" : "事件账本"}</small><strong>{dashboard?.events?.length || 0}</strong><span>{source === "github" ? "最近加载的 CI 运行" : "当前加载的最近事件"}</span></div></article>

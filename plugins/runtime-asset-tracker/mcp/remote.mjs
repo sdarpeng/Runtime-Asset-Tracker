@@ -714,20 +714,54 @@ export function executeRemoteCleanup({ source, sourceConfig, allowlist }) {
     : executeAwsDockerCleanup(sourceConfig, allowlist);
 }
 
+function registeredProjectOptions(config, sourceConfig) {
+  const configured = Array.isArray(config.projects) && config.projects.length
+    ? config.projects
+    : sourceConfig?.repository ? [{ id: sourceConfig.repository, repository: sourceConfig.repository }] : [];
+  const unique = new Map();
+  for (const item of configured) {
+    const repository = String(item.repository || item.id || "").replace(/^.*github\.com[/:]/i, "").replace(/\.git$/i, "").replace(/\/$/, "");
+    if (!/^[^/]+\/[^/]+$/.test(repository) || unique.has(repository.toLowerCase())) continue;
+    unique.set(repository.toLowerCase(), {
+      id: repository,
+      repository,
+      label: String(item.label || repository.split("/").at(-1)),
+      aliases: [...new Set([...(item.aliases || []), item.id, item.label, repository.split("/").at(-1)].filter(Boolean).map(String))],
+    });
+  }
+  return [...unique.values()];
+}
+
+function canonicalRemoteProject(value, projects) {
+  const key = String(value || "").toLowerCase();
+  const match = projects.find((item) => [item.id, item.repository, item.label, ...item.aliases]
+    .some((candidate) => String(candidate || "").toLowerCase() === key));
+  return match?.id || value || "unknown";
+}
+
 export function collectRemoteDashboard({ source, scope, project, config, sources }) {
   const schedule = config.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" };
-  const sourceConfig = (config.sources || []).find((item) => item.id === source);
+  const baseSourceConfig = (config.sources || []).find((item) => item.id === source);
+  const projectOptions = registeredProjectOptions(config, baseSourceConfig);
+  const selectedRepository = baseSourceConfig?.kind === "github"
+    ? (project !== "all" ? project : baseSourceConfig.repository || projectOptions[0]?.repository)
+    : undefined;
+  const sourceConfig = baseSourceConfig?.kind === "github"
+    ? { ...baseSourceConfig, repository: selectedRepository }
+    : baseSourceConfig;
+  const selectedProject = selectedRepository || project;
   const empty = {
     generatedAt: new Date().toISOString(),
     scope,
     selectedSource: source,
-    selectedProject: project,
+    selectedProject,
     host: sourceConfig?.label || sourceConfig?.repository || "等待远程快照",
     dockerAvailable: false,
     disk: { totalBytes: 0, freeBytes: 0 },
     bars: emptyBars(),
     sources,
-    projects: sourceConfig?.repository ? [sourceConfig.repository] : [],
+    projects: projectOptions.map((item) => item.id),
+    projectOptions,
     assets: [],
     events: [],
     schedule,
@@ -747,8 +781,11 @@ export function collectRemoteDashboard({ source, scope, project, config, sources
       snapshot = sourceConfig.kind === "github" ? collectGithubSnapshot(sourceConfig) : collectAwsSnapshot(sourceConfig);
       remoteCache.set(cacheKey, { createdAt: Date.now(), value: snapshot });
     }
-    const filteredAssets = project === "all" ? snapshot.assets : snapshot.assets.filter((asset) => asset.project === project);
-    const projects = [...new Set(snapshot.assets.map((asset) => asset.project).filter(Boolean))].sort();
+    const canonicalAssets = snapshot.assets.map((asset) => ({ ...asset, project: canonicalRemoteProject(asset.project, projectOptions) }));
+    const filteredAssets = selectedProject === "all" ? canonicalAssets : canonicalAssets.filter((asset) => asset.project === selectedProject);
+    const projects = projectOptions.length
+      ? projectOptions.map((item) => item.id)
+      : [...new Set(canonicalAssets.map((asset) => asset.project).filter(Boolean))].sort();
     return {
       ...empty,
       generatedAt: new Date().toISOString(),
@@ -756,8 +793,9 @@ export function collectRemoteDashboard({ source, scope, project, config, sources
       dockerAvailable: snapshot.dockerAvailable,
       disk: snapshot.disk,
       bars: sourceConfig.kind === "github" ? buildGithubBars(filteredAssets) : buildBars(filteredAssets, snapshot.summary),
-      sources: sources.map((item) => item.id === source ? { ...item, status: "connected", detail: snapshot.host } : item),
+      sources: sources.map((item) => item.id === source ? { ...item, status: "connected", detail: sourceConfig.kind === "github" ? selectedRepository : snapshot.host } : item),
       projects,
+      projectOptions,
       assets: filteredAssets.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
       events: snapshot.events || [],
       remoteSnapshotAvailable: true,
