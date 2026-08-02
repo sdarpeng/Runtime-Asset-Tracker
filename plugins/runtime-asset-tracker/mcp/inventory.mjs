@@ -3,7 +3,7 @@ import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSyn
 import { homedir, hostname, platform } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { collectRemoteDashboard } from "./remote.mjs";
+import { collectRemoteDashboard, executeRemoteCleanup } from "./remote.mjs";
 
 const RUNTIME_PREFIX = "com.codex.runtime.";
 const previewStore = new Map();
@@ -367,19 +367,43 @@ export function collectDashboard({ scope = "environment", source = "local", proj
   return dashboard;
 }
 
-export function createCleanupPreview({ types = ["container", "image", "volume"] } = {}) {
-  const dashboard = collectDashboard();
-  const allowlist = dashboard.assets.filter((asset) => types.includes(asset.type) && asset.classification === "reclaimable" && asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true").map((asset) => ({
+export function createCleanupPreview({ source = "local", types = ["container", "image", "volume", "cache"] } = {}) {
+  const dashboard = collectDashboard({ source });
+  if (source !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${source} 快照不可用`);
+  const allowlist = dashboard.assets.filter((asset) => {
+    if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
+    if (source === "local" && asset.type !== "cache") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
+    return asset.type === "cache";
+  }).map((asset) => ({
     type: asset.type,
     id: asset.id,
     name: asset.name,
     project: asset.project,
     sizeBytes: asset.sizeBytes,
     reason: asset.reason,
+    remoteKind: asset.remoteKind,
   }));
+  if (source === "local" && types.includes("cache")) {
+    const cache = dashboard.bars.find((item) => item.type === "cache");
+    if (Number(cache?.reclaimableBytes || 0) > 0) {
+      allowlist.push({
+        type: "cache",
+        id: "docker-build-cache",
+        name: "Docker Build Cache",
+        project: "docker-builder",
+        sizeBytes: Number(cache.reclaimableBytes),
+        reason: "Docker 明确认定为未使用且可回收的 Build Cache",
+      });
+    }
+  }
   const token = randomUUID();
   const preview = {
     token,
+    source,
+    policy: source === "github"
+      ? "只删除已过期制品、已关闭 PR 的缓存和超过 30 天未访问的缓存"
+      : source === "local" ? "只删除显式 disposable 资产和 Docker 未使用的 Build Cache"
+        : "只执行 Docker builder prune；镜像、卷、容器和 release 永不进入清单",
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
     allowlist,
@@ -390,7 +414,7 @@ export function createCleanupPreview({ types = ["container", "image", "volume"] 
   return preview;
 }
 
-function appendCleanupEvent(event, details) {
+function appendCleanupEvent(event, details, environment = "local") {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
   const item = {
     schemaVersion: 1,
@@ -399,7 +423,7 @@ function appendCleanupEvent(event, details) {
     event,
     host: hostname(),
     project: "runtime-asset-tracker",
-    environment: "local",
+    environment,
     release: "dashboard",
     gitSha: "unknown",
     owner: "local-user",
@@ -417,11 +441,26 @@ export function executeCleanup({ token, confirmed = false }) {
     throw new Error("Cleanup preview expired. Generate a new preview.");
   }
   if (!confirmed) throw new Error("Cleanup requires confirmation for the exact preview allowlist.");
+  if (preview.source !== "local") {
+    const config = loadConfig();
+    const sourceConfig = (config.sources || []).find((item) => item.id === preview.source);
+    const cleanup = executeRemoteCleanup({ source: preview.source, sourceConfig, allowlist: preview.allowlist });
+    previewStore.delete(token);
+    dashboardCache.clear();
+    appendCleanupEvent("cleanup.remote.executed", {
+      previewToken: token,
+      source: preview.source,
+      removed: String(cleanup.results.filter((item) => item.status === "removed").length),
+      failed: String(cleanup.results.filter((item) => item.status === "failed").length),
+    }, preview.source);
+    return cleanup;
+  }
   const results = [];
   for (const asset of preview.allowlist) {
     const args = asset.type === "container" ? ["container", "rm", asset.id]
       : asset.type === "image" ? ["image", "rm", asset.id]
         : asset.type === "volume" ? ["volume", "rm", asset.id]
+          : asset.type === "cache" && asset.id === "docker-build-cache" ? ["builder", "prune", "--all", "--force"]
           : null;
     if (!args) continue;
     const output = run("docker", args, { timeout: 30_000 });

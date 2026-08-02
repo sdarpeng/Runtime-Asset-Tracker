@@ -21,6 +21,6 @@ describe("runtime asset dashboard inventory", () => {
     const preview = createCleanupPreview();
     assert.ok(preview.token);
     assert.ok(Array.isArray(preview.allowlist));
-    assert.ok(preview.allowlist.every((item) => ["container", "image", "volume"].includes(item.type)));
+    assert.ok(preview.allowlist.every((item) => ["container", "image", "volume", "cache"].includes(item.type)));
   });
 });

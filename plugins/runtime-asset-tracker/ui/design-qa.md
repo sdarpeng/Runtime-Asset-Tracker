@@ -26,7 +26,9 @@
 - GitHub live snapshot: passed; 4 Actions caches, 342 MB, and 30 workflow events loaded from the authenticated GitHub API.
 - Staging live snapshot: passed through AWS Systems Manager; 149 Docker images, 26 Docker volumes, 7.35 GB of build cache, and 24 recent ledger events were read without changing the host.
 - Production unavailable state: passed; the instance is running but is not online in Systems Manager, so the UI clears all remote values, shows a visible error, and never reuses local data.
-- Remote action lock: passed; cleanup and schedule buttons are disabled for Production, Staging, and GitHub.
+- Remote capacity classification: passed; Staging identifies 7.35 GB of unused Docker BuildKit cache as safely reclaimable, while GitHub identifies 86.3 MB of closed-PR cache as safely reclaimable instead of putting all remote capacity into `待确认`.
+- Remote cleanup entrypoints: passed; connected Staging and GitHub sources can open an exact cleanup preview. Production remains disabled only because its Systems Manager connection is offline, and will enable automatically when its live snapshot becomes available.
+- Remote safety boundary: passed; EC2 preview is limited to Docker BuildKit cache and GitHub preview to exact revalidated cache/artifact IDs. Images, volumes, containers, releases, and rollback state are excluded.
 - Local cleanup preview: passed; 0 eligible candidates kept the confirmation button disabled.
 - Console warnings/errors: none.
 - MCP stdio tool/resource discovery: passed.
@@ -35,8 +37,9 @@
 ## Defect history
 
 1. P1 — Switching to an EC2 source briefly retained local metrics and asset rows. Fixed by clearing client state immediately and returning only source-specific snapshots.
-2. P1 — Remote views exposed local cleanup controls. Fixed by disabling both cleanup entrypoints for every non-local source; server-side cleanup remains local-only.
+2. P1 — Remote views originally exposed local-only cleanup controls. Initially fixed by disabling remote cleanup, then replaced with source-aware exact previews and server-side revalidation for the narrowly defined safe EC2/GitHub cleanup scopes.
 3. P2 — Remote empty-state requests unnecessarily performed a full local inventory scan. Fixed with source-specific collection and per-source caching.
 4. P2 — The page retained the scaffold title `Prototype`. Fixed in `ui/index.html` and covered by an automated test.
+5. P1 — Remote capacity was presented entirely as `待确认`, even when Docker or GitHub reported safely reclaimable cache. Fixed by mapping source-native reclaimable bytes into the safe segment and validating the exact candidates.
 
 final result: passed

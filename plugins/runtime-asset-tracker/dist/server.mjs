@@ -33773,7 +33773,7 @@ function aggregate(type, assets, summary) {
   const sum = (classification2) => matching.filter((asset) => asset.classification === classification2).reduce((total, asset) => total + (type === "worktree" ? 1 : Number(asset.sizeBytes || 0)), 0);
   const activeBytes = sum("active");
   const protectedBytes = sum("protected");
-  const reclaimableBytes = sum("reclaimable");
+  const reclaimableBytes = type === "cache" ? Math.max(sum("reclaimable"), Number(summary?.reclaimableBytes || 0)) : sum("reclaimable");
   const measured = matching.reduce((total, asset) => total + (type === "worktree" ? 1 : Number(asset.sizeBytes || 0)), 0);
   const totalBytes = type === "worktree" ? matching.length : Math.max(measured, Number(summary?.sizeBytes || 0));
   return {
@@ -33931,6 +33931,15 @@ for item in volume_details:
 for row in json_lines(docker(["system", "df", "--format", "{{json .}}"])) if docker_available else []:
     summary[row.get("Type")] = {"totalCount":int(row.get("TotalCount") or 0), "activeCount":int(row.get("Active") or 0), "sizeBytes":parse_bytes(row.get("Size")), "reclaimableBytes":parse_bytes(row.get("Reclaimable"))}
 
+build_cache = summary.get("Build Cache") or {}
+if build_cache.get("reclaimableBytes", 0) > 0:
+    assets.append({
+        "id":"docker-build-cache", "name":"Docker Build Cache", "type":"cache", "project":"docker-builder",
+        "environment":"remote", "status":"unused-build-cache", "classification":"reclaimable",
+        "sizeBytes":build_cache.get("reclaimableBytes", 0), "createdAt":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "labels":{}, "reason":"Docker 明确认定为未使用且可回收的 Build Cache"
+    })
+
 release_root = "/home/ec2-user/apps/sparkling-cms-releases"
 active_link = "/home/ec2-user/apps/sparkling-cms"
 active_release = os.path.realpath(active_link) if os.path.exists(active_link) else ""
@@ -33956,8 +33965,8 @@ usage = shutil.disk_usage("/")
 revision = ""
 if active_release:
     revision = run(["git", "-C", active_release, "rev-parse", "HEAD"])[1]
-limits = {"container":40, "image":50, "volume":50, "worktree":30}
-assets = [item for kind in ["container", "image", "volume", "worktree"] for item in [entry for entry in assets if entry.get("type") == kind][:limits[kind]]]
+limits = {"container":40, "image":50, "volume":50, "worktree":30, "cache":10}
+assets = [item for kind in ["container", "image", "volume", "worktree", "cache"] for item in [entry for entry in assets if entry.get("type") == kind][:limits[kind]]]
 result = {"host":socket.gethostname(),"dockerAvailable":docker_available,"disk":{"totalBytes":usage.total,"freeBytes":usage.free},"summary":summary,"assets":assets,"events":events[:24],"activeRelease":active_release,"revision":revision}
 payload = gzip.compress(json.dumps(result, separators=(",",":"), ensure_ascii=False).encode("utf-8"))
 print("RAT1:" + base64.b64encode(payload).decode("ascii"))
@@ -34029,6 +34038,12 @@ function collectAwsSnapshot(sourceConfig) {
   }
   throw new Error("\u8FDC\u7A0B\u5FEB\u7167\u8D85\u8FC7 125 \u79D2\u4ECD\u672A\u5B8C\u6210");
 }
+function classifyGithubAsset({ kind, expired = false, lastAccessedAt, ref, pullState, now = Date.now() }) {
+  if (kind === "artifact") return expired ? "reclaimable" : "retained";
+  const stale = now - new Date(lastAccessedAt || 0).getTime() > 30 * 24 * 60 * 6e4;
+  const closedPullRequest = /^refs\/pull\/\d+\/merge$/.test(String(ref || "")) && pullState === "closed";
+  return stale || closedPullRequest ? "reclaimable" : "retained";
+}
 function collectGithubSnapshot(sourceConfig) {
   const repository = sourceConfig?.repository;
   if (!repository || !repository.includes("/")) throw new Error("\u672A\u914D\u7F6E GitHub owner/repository");
@@ -34036,34 +34051,56 @@ function collectGithubSnapshot(sourceConfig) {
   const caches = runJson("gh", ["api", `repos/${repository}/actions/caches?per_page=100`]);
   const runs = runJson("gh", ["api", `repos/${repository}/actions/runs?per_page=30`]);
   const now = Date.now();
+  const pullStates = /* @__PURE__ */ new Map();
+  for (const item of caches.actions_caches || []) {
+    const match = String(item.ref || "").match(/^refs\/pull\/(\d+)\/merge$/);
+    if (!match || pullStates.has(match[1])) continue;
+    try {
+      const pull = runJson("gh", ["api", `repos/${repository}/pulls/${match[1]}`]);
+      pullStates.set(match[1], pull.state || "unknown");
+    } catch {
+      pullStates.set(match[1], "unknown");
+    }
+  }
   const assets = [
     ...(artifacts.artifacts || []).map((item) => ({
       id: String(item.id),
       name: item.name,
       type: "cache",
+      remoteKind: "artifact",
       project: repository,
       environment: "github",
       status: item.expired ? "expired-artifact" : "artifact",
-      classification: item.expired ? "review" : "retained",
+      classification: classifyGithubAsset({ kind: "artifact", expired: item.expired }),
       sizeBytes: Number(item.size_in_bytes || 0),
       createdAt: item.created_at,
       labels: {},
-      reason: item.expired ? "\u5DF2\u8FC7\u671F\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u786E\u8BA4" : "GitHub Actions artifact"
+      reason: item.expired ? "\u5DF2\u8FC7\u671F\u7684 GitHub Actions artifact" : "\u6709\u6548\u7684 GitHub Actions artifact"
     })),
     ...(caches.actions_caches || []).map((item) => {
-      const stale = now - new Date(item.last_accessed_at || item.created_at).getTime() > 30 * 24 * 60 * 6e4;
+      const match = String(item.ref || "").match(/^refs\/pull\/(\d+)\/merge$/);
+      const pullState = match ? pullStates.get(match[1]) : void 0;
+      const classification2 = classifyGithubAsset({
+        kind: "actions-cache",
+        lastAccessedAt: item.last_accessed_at || item.created_at,
+        ref: item.ref,
+        pullState,
+        now
+      });
+      const closedPullRequest = match && pullState === "closed";
       return {
         id: String(item.id),
         name: `${item.key} \xB7 ${item.ref || "unknown ref"}`,
         type: "cache",
+        remoteKind: "actions-cache",
         project: repository,
         environment: "github",
-        status: stale ? "stale-cache" : "actions-cache",
-        classification: stale ? "review" : "retained",
+        status: classification2 === "reclaimable" ? closedPullRequest ? "closed-pr-cache" : "stale-cache" : "actions-cache",
+        classification: classification2,
         sizeBytes: Number(item.size_in_bytes || 0),
         createdAt: item.created_at,
         labels: {},
-        reason: stale ? "30 \u5929\u672A\u8BBF\u95EE\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u786E\u8BA4" : `GitHub Actions cache \xB7 ${item.ref || "unknown ref"}`
+        reason: closedPullRequest ? "\u5DF2\u5173\u95ED Pull Request \u7684 GitHub Actions cache" : classification2 === "reclaimable" ? "\u8D85\u8FC7 30 \u5929\u672A\u8BBF\u95EE\u7684 GitHub Actions cache" : `\u4ECD\u5728\u4FDD\u7559\u671F\u5185\u7684 GitHub Actions cache \xB7 ${item.ref || "unknown ref"}`
       };
     })
   ];
@@ -34085,13 +34122,139 @@ function collectGithubSnapshot(sourceConfig) {
         totalCount: assets.length,
         activeCount: 0,
         sizeBytes: assets.reduce((total, item) => total + item.sizeBytes, 0),
-        reclaimableBytes: 0
+        reclaimableBytes: assets.filter((item) => item.classification === "reclaimable").reduce((total, item) => total + item.sizeBytes, 0)
       }
     },
     assets,
     events,
     repository
   };
+}
+function awsBuildCacheCleanupScript() {
+  return String.raw`set -eu
+if docker version >/dev/null 2>&1; then
+  docker builder prune --all --force
+elif sudo -n docker version >/dev/null 2>&1; then
+  sudo -n docker builder prune --all --force
+else
+  echo "Docker daemon is unavailable" >&2
+  exit 40
+fi`;
+}
+function runSsmMutation(sourceConfig, script, comment) {
+  const instanceId = sourceConfig?.instanceId;
+  if (!instanceId) throw new Error("\u672A\u914D\u7F6E EC2 instanceId");
+  const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
+  const managed = runJson("aws", [
+    ...regionArgs,
+    "ssm",
+    "describe-instance-information",
+    "--filters",
+    `Key=InstanceIds,Values=${instanceId}`,
+    "--output",
+    "json"
+  ]);
+  const instance = managed.InstanceInformationList?.find((item) => item.InstanceId === instanceId);
+  if (!instance || instance.PingStatus !== "Online") throw new Error(`EC2 ${instanceId} \u672A\u901A\u8FC7 Systems Manager \u5728\u7EBF`);
+  const encoded = Buffer.from(script, "utf8").toString("base64");
+  const command = `echo '${encoded}' | base64 -d | bash`;
+  const sent = runJson("aws", [
+    ...regionArgs,
+    "ssm",
+    "send-command",
+    "--instance-ids",
+    instanceId,
+    "--document-name",
+    "AWS-RunShellScript",
+    "--comment",
+    comment,
+    "--parameters",
+    JSON.stringify({ commands: [command] }),
+    "--timeout-seconds",
+    "180",
+    "--output",
+    "json"
+  ], { timeout: 3e4 });
+  const commandId = sent.Command?.CommandId;
+  if (!commandId) throw new Error("Systems Manager \u672A\u8FD4\u56DE commandId");
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 185e3) {
+    sleep(1e3);
+    let invocation;
+    try {
+      invocation = runJson("aws", [
+        ...regionArgs,
+        "ssm",
+        "get-command-invocation",
+        "--command-id",
+        commandId,
+        "--instance-id",
+        instanceId,
+        "--output",
+        "json"
+      ], { timeout: 2e4 });
+    } catch (error51) {
+      if (/InvocationDoesNotExist/i.test(error51.message)) continue;
+      throw error51;
+    }
+    if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
+    if (invocation.Status !== "Success") throw new Error(invocation.StandardErrorContent || `SSM \u6E05\u7406\u72B6\u6001\uFF1A${invocation.Status}`);
+    return { commandId, output: String(invocation.StandardOutputContent || "").slice(-1e3) };
+  }
+  throw new Error("\u8FDC\u7A0B\u6E05\u7406\u8D85\u8FC7 185 \u79D2\u4ECD\u672A\u5B8C\u6210");
+}
+function executeAwsBuildCacheCleanup(sourceConfig, allowlist) {
+  const requested = allowlist.find((item) => item.type === "cache" && item.id === "docker-build-cache");
+  if (!requested) return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: [] };
+  const before = collectAwsSnapshot(sourceConfig);
+  const beforeCache = before.summary?.["Build Cache"] || {};
+  const safeBytes = Number(beforeCache.reclaimableBytes || 0);
+  if (safeBytes <= 0) {
+    return {
+      completedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      results: [{ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u590D\u6838\u5DF2\u65E0\u672A\u4F7F\u7528 Build Cache" }]
+    };
+  }
+  const invocation = runSsmMutation(sourceConfig, awsBuildCacheCleanupScript(), "Runtime Asset Tracker safe Build Cache cleanup");
+  remoteCache.clear();
+  const after = collectAwsSnapshot(sourceConfig);
+  const afterBytes = Number(after.summary?.["Build Cache"]?.sizeBytes || 0);
+  return {
+    completedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    commandId: invocation.commandId,
+    results: [{
+      ...requested,
+      sizeBytes: safeBytes,
+      status: "removed",
+      reclaimedBytes: Math.max(0, Number(beforeCache.sizeBytes || 0) - afterBytes),
+      reason: "Docker builder prune \u4EC5\u79FB\u9664\u4E86\u6267\u884C\u65F6\u4ECD\u672A\u4F7F\u7528\u7684 Build Cache"
+    }]
+  };
+}
+function executeGithubCleanup(sourceConfig, allowlist) {
+  const snapshot = collectGithubSnapshot(sourceConfig);
+  const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.remoteKind}:${item.id}`, item]));
+  const results = [];
+  for (const requested of allowlist) {
+    const safe = safeAssets.get(`${requested.remoteKind}:${requested.id}`);
+    if (!safe) {
+      results.push({ ...requested, status: "skipped", reason: "\u6267\u884C\u524D\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
+      continue;
+    }
+    const endpoint = safe.remoteKind === "artifact" ? `repos/${sourceConfig.repository}/actions/artifacts/${safe.id}` : `repos/${sourceConfig.repository}/actions/caches/${safe.id}`;
+    try {
+      runStrict("gh", ["api", "--method", "DELETE", endpoint]);
+      results.push({ ...requested, status: "removed", reclaimedBytes: safe.sizeBytes });
+    } catch (error51) {
+      results.push({ ...requested, status: "failed", reason: sanitizeError(error51.message) });
+    }
+  }
+  remoteCache.clear();
+  return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results };
+}
+function executeRemoteCleanup({ source, sourceConfig, allowlist }) {
+  if (!sourceConfig) throw new Error(`${source} \u6765\u6E90\u5C1A\u672A\u914D\u7F6E`);
+  return sourceConfig.kind === "github" ? executeGithubCleanup(sourceConfig, allowlist) : executeAwsBuildCacheCleanup(sourceConfig, allowlist);
 }
 function collectRemoteDashboard({ source, scope, project, config: config2, sources }) {
   const schedule = config2.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" };
@@ -34504,19 +34667,40 @@ function collectDashboard({ scope = "environment", source = "local", project = "
   dashboardCache.set(cacheKey2, { createdAt: Date.now(), value: dashboard });
   return dashboard;
 }
-function createCleanupPreview({ types = ["container", "image", "volume"] } = {}) {
-  const dashboard = collectDashboard();
-  const allowlist = dashboard.assets.filter((asset) => types.includes(asset.type) && asset.classification === "reclaimable" && asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true").map((asset) => ({
+function createCleanupPreview({ source = "local", types = ["container", "image", "volume", "cache"] } = {}) {
+  const dashboard = collectDashboard({ source });
+  if (source !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${source} \u5FEB\u7167\u4E0D\u53EF\u7528`);
+  const allowlist = dashboard.assets.filter((asset) => {
+    if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
+    if (source === "local" && asset.type !== "cache") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
+    return asset.type === "cache";
+  }).map((asset) => ({
     type: asset.type,
     id: asset.id,
     name: asset.name,
     project: asset.project,
     sizeBytes: asset.sizeBytes,
-    reason: asset.reason
+    reason: asset.reason,
+    remoteKind: asset.remoteKind
   }));
+  if (source === "local" && types.includes("cache")) {
+    const cache = dashboard.bars.find((item) => item.type === "cache");
+    if (Number(cache?.reclaimableBytes || 0) > 0) {
+      allowlist.push({
+        type: "cache",
+        id: "docker-build-cache",
+        name: "Docker Build Cache",
+        project: "docker-builder",
+        sizeBytes: Number(cache.reclaimableBytes),
+        reason: "Docker \u660E\u786E\u8BA4\u5B9A\u4E3A\u672A\u4F7F\u7528\u4E14\u53EF\u56DE\u6536\u7684 Build Cache"
+      });
+    }
+  }
   const token = randomUUID();
   const preview = {
     token,
+    source,
+    policy: source === "github" ? "\u53EA\u5220\u9664\u5DF2\u8FC7\u671F\u5236\u54C1\u3001\u5DF2\u5173\u95ED PR \u7684\u7F13\u5B58\u548C\u8D85\u8FC7 30 \u5929\u672A\u8BBF\u95EE\u7684\u7F13\u5B58" : source === "local" ? "\u53EA\u5220\u9664\u663E\u5F0F disposable \u8D44\u4EA7\u548C Docker \u672A\u4F7F\u7528\u7684 Build Cache" : "\u53EA\u6267\u884C Docker builder prune\uFF1B\u955C\u50CF\u3001\u5377\u3001\u5BB9\u5668\u548C release \u6C38\u4E0D\u8FDB\u5165\u6E05\u5355",
     createdAt: (/* @__PURE__ */ new Date()).toISOString(),
     expiresAt: new Date(Date.now() + 10 * 6e4).toISOString(),
     allowlist,
@@ -34526,7 +34710,7 @@ function createCleanupPreview({ types = ["container", "image", "volume"] } = {})
   previewStore.set(token, preview);
   return preview;
 }
-function appendCleanupEvent(event, details) {
+function appendCleanupEvent(event, details, environment = "local") {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
   const item = {
     schemaVersion: 1,
@@ -34535,7 +34719,7 @@ function appendCleanupEvent(event, details) {
     event,
     host: hostname3(),
     project: "runtime-asset-tracker",
-    environment: "local",
+    environment,
     release: "dashboard",
     gitSha: "unknown",
     owner: "local-user",
@@ -34553,9 +34737,23 @@ function executeCleanup({ token, confirmed = false }) {
     throw new Error("Cleanup preview expired. Generate a new preview.");
   }
   if (!confirmed) throw new Error("Cleanup requires confirmation for the exact preview allowlist.");
+  if (preview.source !== "local") {
+    const config2 = loadConfig();
+    const sourceConfig = (config2.sources || []).find((item) => item.id === preview.source);
+    const cleanup = executeRemoteCleanup({ source: preview.source, sourceConfig, allowlist: preview.allowlist });
+    previewStore.delete(token);
+    dashboardCache.clear();
+    appendCleanupEvent("cleanup.remote.executed", {
+      previewToken: token,
+      source: preview.source,
+      removed: String(cleanup.results.filter((item) => item.status === "removed").length),
+      failed: String(cleanup.results.filter((item) => item.status === "failed").length)
+    }, preview.source);
+    return cleanup;
+  }
   const results = [];
   for (const asset of preview.allowlist) {
-    const args = asset.type === "container" ? ["container", "rm", asset.id] : asset.type === "image" ? ["image", "rm", asset.id] : asset.type === "volume" ? ["volume", "rm", asset.id] : null;
+    const args = asset.type === "container" ? ["container", "rm", asset.id] : asset.type === "image" ? ["image", "rm", asset.id] : asset.type === "volume" ? ["volume", "rm", asset.id] : asset.type === "cache" && asset.id === "docker-build-cache" ? ["builder", "prune", "--all", "--force"] : null;
     if (!args) continue;
     const output = run("docker", args, { timeout: 3e4 });
     results.push({ ...asset, status: output ? "removed" : "failed" });
@@ -34610,10 +34808,11 @@ function createRuntimeAssetServer() {
     title: "Preview runtime asset cleanup",
     description: "Generate an exact, expiring cleanup allowlist. This tool never deletes assets.",
     inputSchema: {
-      types: external_exports.array(external_exports.enum(["container", "image", "volume"])).optional()
+      source: external_exports.enum(["local", "production", "staging", "github"]).optional(),
+      types: external_exports.array(external_exports.enum(["container", "image", "volume", "cache"])).optional()
     },
     outputSchema: { preview: external_exports.record(external_exports.string(), external_exports.unknown()) },
-    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } }
   }, async (input) => {
     const preview = createCleanupPreview(input);
@@ -34627,7 +34826,7 @@ function createRuntimeAssetServer() {
       confirmed: external_exports.literal(true)
     },
     outputSchema: { cleanup: external_exports.record(external_exports.string(), external_exports.unknown()) },
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } }
   }, async (input) => {
     const cleanup = executeCleanup(input);

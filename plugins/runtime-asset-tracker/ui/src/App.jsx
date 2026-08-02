@@ -158,7 +158,7 @@ function CleanupModal({ preview, loading, onClose, onConfirm }) {
         <button className="icon-button modal-close" type="button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         <div className="modal-kicker"><Broom size={22} weight="duotone" />精确清理预览</div>
         <h2 id="cleanup-title">预计释放 {formatBytes(preview.totalBytes)}</h2>
-        <p>只包含带有 <code>disposable=true</code>、当前未被引用的资产。受保护和归属未知的资产不会进入清单。</p>
+        <p>{preview.policy || "只包含服务端复核后仍满足安全条件的资产。受保护和归属未知的资产不会进入清单。"}</p>
         <div className="preview-summary"><span>{preview.allowlist.length} 项候选</span><span>{preview.protectedCount} 项受保护</span><span>10 分钟内有效</span></div>
         <div className="preview-list">
           {preview.allowlist.length === 0 ? <div className="preview-empty"><ShieldCheck size={26} />当前没有满足安全条件的清理候选</div> : preview.allowlist.map((item) => (
@@ -211,7 +211,8 @@ export function App() {
     if (content?.schedule) setDashboard((current) => current ? { ...current, schedule: content.schedule } : current);
     if (content?.cleanup) {
       const removed = content.cleanup.results.filter((item) => item.status === "removed").length;
-      setNotice(`清理完成：已移除 ${removed} 项资产`);
+      const reclaimed = content.cleanup.results.reduce((sum, item) => sum + Number(item.reclaimedBytes ?? (item.status === "removed" ? item.sizeBytes : 0) ?? 0), 0);
+      setNotice(`清理完成：已移除 ${removed} 项，预计释放 ${formatBytes(reclaimed)}`);
       setPreview(null);
     }
   }, []);
@@ -257,12 +258,8 @@ export function App() {
   const snapshotOnline = source === "local" || dashboard?.remoteSnapshotAvailable;
 
   const requestPreview = async () => {
-    if (source !== "local") {
-      setNotice("远程来源当前只读，清理操作仅对本地资产开放");
-      return;
-    }
     setLoading(true);
-    try { acceptResult(await callTool("preview_cleanup", { types: ["container", "image", "volume"] })); }
+    try { acceptResult(await callTool("preview_cleanup", { source, types: ["container", "image", "volume", "cache"] })); }
     catch (error) { setNotice(`预览失败：${error.message || error}`); }
     finally { setLoading(false); }
   };
@@ -295,12 +292,12 @@ export function App() {
       <main className="dashboard">
         <header className="topbar">
           <div><div className="eyebrow">RUNTIME ASSET TRACKER</div><h1>运行资产控制台</h1><p>{selectedSource?.label || "Local"} · {dashboard?.host || "正在连接"}</p></div>
-          <div className="top-actions"><span className={`live-pill ${loading ? "loading" : ""} ${!snapshotOnline ? "offline" : ""}`}><i />{loading ? "正在刷新" : snapshotOnline ? (source === "local" ? "实时账本在线" : "只读快照在线") : "快照不可用"}</span><button className="icon-button" onClick={() => refresh()} type="button" aria-label="刷新"><ArrowClockwise size={20} className={loading ? "spin" : ""} /></button></div>
+          <div className="top-actions"><span className={`live-pill ${loading ? "loading" : ""} ${!snapshotOnline ? "offline" : ""}`}><i />{loading ? "正在刷新" : snapshotOnline ? (source === "local" ? "实时账本在线" : "安全连接在线") : "快照不可用"}</span><button className="icon-button" onClick={() => refresh()} type="button" aria-label="刷新"><ArrowClockwise size={20} className={loading ? "spin" : ""} /></button></div>
         </header>
 
         <section className="metric-grid">
           <article><span className="metric-icon"><HardDrives size={22} /></span><div><small>逻辑资产规模</small><strong>{formatBytes(totalFootprint)}</strong><span>{dashboard?.assets?.length || 0} 项已识别资产</span></div></article>
-          <article><span className="metric-icon safe"><Broom size={22} /></span><div><small>明确可安全清理</small><strong>{formatBytes(totalReclaimable)}</strong><span>只统计 disposable=true</span></div></article>
+          <article><span className="metric-icon safe"><Broom size={22} /></span><div><small>明确可安全清理</small><strong>{formatBytes(totalReclaimable)}</strong><span>按当前来源的安全策略计算</span></div></article>
           <article><span className="metric-icon warning"><ShieldCheck size={22} /></span><div><small>受保护资产</small><strong>{protectedCount}</strong><span>数据库、上传与活动运行态</span></div></article>
           <article><span className="metric-icon blue"><ListDashes size={22} /></span><div><small>事件账本</small><strong>{dashboard?.events?.length || 0}</strong><span>当前加载的最近事件</span></div></article>
         </section>
@@ -322,7 +319,7 @@ export function App() {
           </article>
         </section>
 
-        <footer className="action-dock"><div><span className="dock-icon"><WarningCircle size={21} weight="duotone" /></span><span><strong>{source === "local" ? "清理操作始终绑定当前预览" : "远程来源保持只读"}</strong><small>{source === "local" ? "不会执行广泛 prune，也不会自动删除未知卷。" : "Production、Staging 和 GitHub 仅采集快照，不开放删除。"}</small></span></div><div className="dock-actions"><button className="button secondary" type="button" disabled={source !== "local"} onClick={() => setScheduleOpen(true)}><ClockCountdown size={19} />定时清理</button><button className="button primary" type="button" disabled={source !== "local"} onClick={requestPreview}><Broom size={19} />立即清理</button></div></footer>
+        <footer className="action-dock"><div><span className="dock-icon"><WarningCircle size={21} weight="duotone" /></span><span><strong>安全清理始终绑定当前预览</strong><small>{source === "github" ? "只删除失效缓存和过期制品。" : source === "local" ? "不会执行广泛 prune，也不会自动删除未知卷。" : "EC2 只清理 Docker Build Cache，不碰镜像、卷、容器和 release。"}</small></span></div><div className="dock-actions"><button className="button secondary" type="button" disabled={source !== "local"} onClick={() => setScheduleOpen(true)}><ClockCountdown size={19} />定时清理</button><button className="button primary" type="button" disabled={!snapshotOnline || loading} onClick={requestPreview}><Broom size={19} />立即清理</button></div></footer>
       </main>
       {notice && <button className="toast" type="button" onClick={() => setNotice("")}><CheckCircle size={18} />{notice}<X size={15} /></button>}
       <CleanupModal preview={preview} loading={loading} onClose={() => setPreview(null)} onConfirm={confirmCleanup} />

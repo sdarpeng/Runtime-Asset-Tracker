@@ -65,7 +65,9 @@ function aggregate(type, assets, summary) {
     .reduce((total, asset) => total + (type === "worktree" ? 1 : Number(asset.sizeBytes || 0)), 0);
   const activeBytes = sum("active");
   const protectedBytes = sum("protected");
-  const reclaimableBytes = sum("reclaimable");
+  const reclaimableBytes = type === "cache"
+    ? Math.max(sum("reclaimable"), Number(summary?.reclaimableBytes || 0))
+    : sum("reclaimable");
   const measured = matching.reduce((total, asset) => total + (type === "worktree" ? 1 : Number(asset.sizeBytes || 0)), 0);
   const totalBytes = type === "worktree" ? matching.length : Math.max(measured, Number(summary?.sizeBytes || 0));
   return {
@@ -80,7 +82,7 @@ function aggregate(type, assets, summary) {
   };
 }
 
-function buildBars(assets, summary = {}) {
+export function buildBars(assets, summary = {}) {
   return [
     aggregate("worktree", assets),
     aggregate("image", assets, summary.Images),
@@ -225,6 +227,15 @@ for item in volume_details:
 for row in json_lines(docker(["system", "df", "--format", "{{json .}}"])) if docker_available else []:
     summary[row.get("Type")] = {"totalCount":int(row.get("TotalCount") or 0), "activeCount":int(row.get("Active") or 0), "sizeBytes":parse_bytes(row.get("Size")), "reclaimableBytes":parse_bytes(row.get("Reclaimable"))}
 
+build_cache = summary.get("Build Cache") or {}
+if build_cache.get("reclaimableBytes", 0) > 0:
+    assets.append({
+        "id":"docker-build-cache", "name":"Docker Build Cache", "type":"cache", "project":"docker-builder",
+        "environment":"remote", "status":"unused-build-cache", "classification":"reclaimable",
+        "sizeBytes":build_cache.get("reclaimableBytes", 0), "createdAt":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "labels":{}, "reason":"Docker 明确认定为未使用且可回收的 Build Cache"
+    })
+
 release_root = "/home/ec2-user/apps/sparkling-cms-releases"
 active_link = "/home/ec2-user/apps/sparkling-cms"
 active_release = os.path.realpath(active_link) if os.path.exists(active_link) else ""
@@ -250,8 +261,8 @@ usage = shutil.disk_usage("/")
 revision = ""
 if active_release:
     revision = run(["git", "-C", active_release, "rev-parse", "HEAD"])[1]
-limits = {"container":40, "image":50, "volume":50, "worktree":30}
-assets = [item for kind in ["container", "image", "volume", "worktree"] for item in [entry for entry in assets if entry.get("type") == kind][:limits[kind]]]
+limits = {"container":40, "image":50, "volume":50, "worktree":30, "cache":10}
+assets = [item for kind in ["container", "image", "volume", "worktree", "cache"] for item in [entry for entry in assets if entry.get("type") == kind][:limits[kind]]]
 result = {"host":socket.gethostname(),"dockerAvailable":docker_available,"disk":{"totalBytes":usage.total,"freeBytes":usage.free},"summary":summary,"assets":assets,"events":events[:24],"activeRelease":active_release,"revision":revision}
 payload = gzip.compress(json.dumps(result, separators=(",",":"), ensure_ascii=False).encode("utf-8"))
 print("RAT1:" + base64.b64encode(payload).decode("ascii"))
@@ -313,6 +324,13 @@ function collectAwsSnapshot(sourceConfig) {
   throw new Error("远程快照超过 125 秒仍未完成");
 }
 
+export function classifyGithubAsset({ kind, expired = false, lastAccessedAt, ref, pullState, now = Date.now() }) {
+  if (kind === "artifact") return expired ? "reclaimable" : "retained";
+  const stale = now - new Date(lastAccessedAt || 0).getTime() > 30 * 24 * 60 * 60_000;
+  const closedPullRequest = /^refs\/pull\/\d+\/merge$/.test(String(ref || "")) && pullState === "closed";
+  return stale || closedPullRequest ? "reclaimable" : "retained";
+}
+
 function collectGithubSnapshot(sourceConfig) {
   const repository = sourceConfig?.repository;
   if (!repository || !repository.includes("/")) throw new Error("未配置 GitHub owner/repository");
@@ -320,34 +338,58 @@ function collectGithubSnapshot(sourceConfig) {
   const caches = runJson("gh", ["api", `repos/${repository}/actions/caches?per_page=100`]);
   const runs = runJson("gh", ["api", `repos/${repository}/actions/runs?per_page=30`]);
   const now = Date.now();
+  const pullStates = new Map();
+  for (const item of caches.actions_caches || []) {
+    const match = String(item.ref || "").match(/^refs\/pull\/(\d+)\/merge$/);
+    if (!match || pullStates.has(match[1])) continue;
+    try {
+      const pull = runJson("gh", ["api", `repos/${repository}/pulls/${match[1]}`]);
+      pullStates.set(match[1], pull.state || "unknown");
+    } catch {
+      pullStates.set(match[1], "unknown");
+    }
+  }
   const assets = [
     ...(artifacts.artifacts || []).map((item) => ({
       id: String(item.id),
       name: item.name,
       type: "cache",
+      remoteKind: "artifact",
       project: repository,
       environment: "github",
       status: item.expired ? "expired-artifact" : "artifact",
-      classification: item.expired ? "review" : "retained",
+      classification: classifyGithubAsset({ kind: "artifact", expired: item.expired }),
       sizeBytes: Number(item.size_in_bytes || 0),
       createdAt: item.created_at,
       labels: {},
-      reason: item.expired ? "已过期，等待人工确认" : "GitHub Actions artifact",
+      reason: item.expired ? "已过期的 GitHub Actions artifact" : "有效的 GitHub Actions artifact",
     })),
     ...(caches.actions_caches || []).map((item) => {
-      const stale = now - new Date(item.last_accessed_at || item.created_at).getTime() > 30 * 24 * 60 * 60_000;
+      const match = String(item.ref || "").match(/^refs\/pull\/(\d+)\/merge$/);
+      const pullState = match ? pullStates.get(match[1]) : undefined;
+      const classification = classifyGithubAsset({
+        kind: "actions-cache",
+        lastAccessedAt: item.last_accessed_at || item.created_at,
+        ref: item.ref,
+        pullState,
+        now,
+      });
+      const closedPullRequest = match && pullState === "closed";
       return {
         id: String(item.id),
         name: `${item.key} · ${item.ref || "unknown ref"}`,
         type: "cache",
+        remoteKind: "actions-cache",
         project: repository,
         environment: "github",
-        status: stale ? "stale-cache" : "actions-cache",
-        classification: stale ? "review" : "retained",
+        status: classification === "reclaimable" ? (closedPullRequest ? "closed-pr-cache" : "stale-cache") : "actions-cache",
+        classification,
         sizeBytes: Number(item.size_in_bytes || 0),
         createdAt: item.created_at,
         labels: {},
-        reason: stale ? "30 天未访问，等待人工确认" : `GitHub Actions cache · ${item.ref || "unknown ref"}`,
+        reason: closedPullRequest ? "已关闭 Pull Request 的 GitHub Actions cache"
+          : classification === "reclaimable" ? "超过 30 天未访问的 GitHub Actions cache"
+            : `仍在保留期内的 GitHub Actions cache · ${item.ref || "unknown ref"}`,
       };
     }),
   ];
@@ -369,13 +411,136 @@ function collectGithubSnapshot(sourceConfig) {
         totalCount: assets.length,
         activeCount: 0,
         sizeBytes: assets.reduce((total, item) => total + item.sizeBytes, 0),
-        reclaimableBytes: 0,
+        reclaimableBytes: assets.filter((item) => item.classification === "reclaimable").reduce((total, item) => total + item.sizeBytes, 0),
       },
     },
     assets,
     events,
     repository,
   };
+}
+
+export function awsBuildCacheCleanupScript() {
+  return String.raw`set -eu
+if docker version >/dev/null 2>&1; then
+  docker builder prune --all --force
+elif sudo -n docker version >/dev/null 2>&1; then
+  sudo -n docker builder prune --all --force
+else
+  echo "Docker daemon is unavailable" >&2
+  exit 40
+fi`;
+}
+
+function runSsmMutation(sourceConfig, script, comment) {
+  const instanceId = sourceConfig?.instanceId;
+  if (!instanceId) throw new Error("未配置 EC2 instanceId");
+  const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
+  const managed = runJson("aws", [
+    ...regionArgs,
+    "ssm", "describe-instance-information",
+    "--filters", `Key=InstanceIds,Values=${instanceId}`,
+    "--output", "json",
+  ]);
+  const instance = managed.InstanceInformationList?.find((item) => item.InstanceId === instanceId);
+  if (!instance || instance.PingStatus !== "Online") throw new Error(`EC2 ${instanceId} 未通过 Systems Manager 在线`);
+
+  const encoded = Buffer.from(script, "utf8").toString("base64");
+  const command = `echo '${encoded}' | base64 -d | bash`;
+  const sent = runJson("aws", [
+    ...regionArgs,
+    "ssm", "send-command",
+    "--instance-ids", instanceId,
+    "--document-name", "AWS-RunShellScript",
+    "--comment", comment,
+    "--parameters", JSON.stringify({ commands: [command] }),
+    "--timeout-seconds", "180",
+    "--output", "json",
+  ], { timeout: 30_000 });
+  const commandId = sent.Command?.CommandId;
+  if (!commandId) throw new Error("Systems Manager 未返回 commandId");
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 185_000) {
+    sleep(1_000);
+    let invocation;
+    try {
+      invocation = runJson("aws", [
+        ...regionArgs,
+        "ssm", "get-command-invocation",
+        "--command-id", commandId,
+        "--instance-id", instanceId,
+        "--output", "json",
+      ], { timeout: 20_000 });
+    } catch (error) {
+      if (/InvocationDoesNotExist/i.test(error.message)) continue;
+      throw error;
+    }
+    if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
+    if (invocation.Status !== "Success") throw new Error(invocation.StandardErrorContent || `SSM 清理状态：${invocation.Status}`);
+    return { commandId, output: String(invocation.StandardOutputContent || "").slice(-1_000) };
+  }
+  throw new Error("远程清理超过 185 秒仍未完成");
+}
+
+function executeAwsBuildCacheCleanup(sourceConfig, allowlist) {
+  const requested = allowlist.find((item) => item.type === "cache" && item.id === "docker-build-cache");
+  if (!requested) return { completedAt: new Date().toISOString(), results: [] };
+  const before = collectAwsSnapshot(sourceConfig);
+  const beforeCache = before.summary?.["Build Cache"] || {};
+  const safeBytes = Number(beforeCache.reclaimableBytes || 0);
+  if (safeBytes <= 0) {
+    return {
+      completedAt: new Date().toISOString(),
+      results: [{ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前复核已无未使用 Build Cache" }],
+    };
+  }
+  const invocation = runSsmMutation(sourceConfig, awsBuildCacheCleanupScript(), "Runtime Asset Tracker safe Build Cache cleanup");
+  remoteCache.clear();
+  const after = collectAwsSnapshot(sourceConfig);
+  const afterBytes = Number(after.summary?.["Build Cache"]?.sizeBytes || 0);
+  return {
+    completedAt: new Date().toISOString(),
+    commandId: invocation.commandId,
+    results: [{
+      ...requested,
+      sizeBytes: safeBytes,
+      status: "removed",
+      reclaimedBytes: Math.max(0, Number(beforeCache.sizeBytes || 0) - afterBytes),
+      reason: "Docker builder prune 仅移除了执行时仍未使用的 Build Cache",
+    }],
+  };
+}
+
+function executeGithubCleanup(sourceConfig, allowlist) {
+  const snapshot = collectGithubSnapshot(sourceConfig);
+  const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.remoteKind}:${item.id}`, item]));
+  const results = [];
+  for (const requested of allowlist) {
+    const safe = safeAssets.get(`${requested.remoteKind}:${requested.id}`);
+    if (!safe) {
+      results.push({ ...requested, status: "skipped", reason: "执行前复核不再满足安全清理条件" });
+      continue;
+    }
+    const endpoint = safe.remoteKind === "artifact"
+      ? `repos/${sourceConfig.repository}/actions/artifacts/${safe.id}`
+      : `repos/${sourceConfig.repository}/actions/caches/${safe.id}`;
+    try {
+      runStrict("gh", ["api", "--method", "DELETE", endpoint]);
+      results.push({ ...requested, status: "removed", reclaimedBytes: safe.sizeBytes });
+    } catch (error) {
+      results.push({ ...requested, status: "failed", reason: sanitizeError(error.message) });
+    }
+  }
+  remoteCache.clear();
+  return { completedAt: new Date().toISOString(), results };
+}
+
+export function executeRemoteCleanup({ source, sourceConfig, allowlist }) {
+  if (!sourceConfig) throw new Error(`${source} 来源尚未配置`);
+  return sourceConfig.kind === "github"
+    ? executeGithubCleanup(sourceConfig, allowlist)
+    : executeAwsBuildCacheCleanup(sourceConfig, allowlist);
 }
 
 export function collectRemoteDashboard({ source, scope, project, config, sources }) {

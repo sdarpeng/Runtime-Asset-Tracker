@@ -22,7 +22,7 @@ Track lifecycle facts; do not create a new release-approval system. Ledger write
 
 Use the bundled `open_runtime_dashboard` MCP tool when the user wants a graphical inventory, environment/project comparison, capacity map, asset drill-down, or event timeline. The dashboard uses live local Docker, Git worktree, and ledger data. GitHub snapshots use the authenticated `gh` CLI; EC2 snapshots use authenticated AWS Systems Manager Run Command and execute read-only inventory commands. Configured remote sources must show an explicit unavailable or authentication-error state until their adapter returns real data; never substitute local values.
 
-Remote sources are intentionally view-only in the dashboard. Cleanup previews, schedules, and execution remain local-only unless a future user request explicitly designs and authorizes a separate remote cleanup workflow.
+Remote cleanup is deliberately narrow and always starts with an exact preview. For EC2, the only remotely executable cleanup is unused Docker BuildKit cache through `docker builder prune --all --force`; images, volumes, containers, networks, release directories, and rollback state are excluded. For GitHub, cleanup is limited to exact cache or artifact IDs that are independently reclassified as safe immediately before deletion: expired artifacts, caches belonging to closed pull requests, or caches not accessed for more than 30 days. A disconnected source remains unavailable instead of falling back to local data.
 
 For local standalone preview, run `node dist/server.mjs --http` from the plugin root and open `http://127.0.0.1:47831`.
 
@@ -30,7 +30,7 @@ Before cleanup:
 
 1. Call `preview_cleanup` to create the exact expiring allowlist.
 2. Show protected and excluded assets alongside the candidate total.
-3. Call `execute_cleanup` only after the user confirms that exact preview.
+3. Call `execute_cleanup` only after the user confirms that exact preview. The server must re-read and revalidate remote candidates before mutation.
 
 The schedule editor persists report-only inventory schedules. It must not silently enable unattended deletion.
 
@@ -69,6 +69,8 @@ node scripts/run-compose.mjs --project my-project --environment local -- up --bu
 - Do not remove existing OCI revision/source labels; extend them.
 - Preserve project-specific release and rollback behavior.
 - A tracker installation may start a new observer process, but must not restart Docker or application containers.
+- Never broaden EC2 cleanup into `docker system prune`, image deletion, volume deletion, container deletion, or release-directory removal.
+- Never delete a GitHub cache or artifact solely because it is large; it must satisfy the explicit safe classification and exact-ID revalidation rules.
 
 ## Bundled Resources
 

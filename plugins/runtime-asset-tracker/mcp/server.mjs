@@ -57,10 +57,11 @@ export function createRuntimeAssetServer() {
     title: "Preview runtime asset cleanup",
     description: "Generate an exact, expiring cleanup allowlist. This tool never deletes assets.",
     inputSchema: {
-      types: z.array(z.enum(["container", "image", "volume"])).optional(),
+      source: z.enum(["local", "production", "staging", "github"]).optional(),
+      types: z.array(z.enum(["container", "image", "volume", "cache"])).optional(),
     },
     outputSchema: { preview: z.record(z.string(), z.unknown()) },
-    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } },
   }, async (input) => {
     const preview = createCleanupPreview(input);
@@ -75,7 +76,7 @@ export function createRuntimeAssetServer() {
       confirmed: z.literal(true),
     },
     outputSchema: { cleanup: z.record(z.string(), z.unknown()) },
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } },
   }, async (input) => {
     const cleanup = executeCleanup(input);
