@@ -266,6 +266,7 @@ export function App() {
     refresh({ source: next, project });
   };
   const selectProject = (next) => {
+    const nextProject = (dashboard?.projectOptions || []).find((item) => item.id === next);
     setProject(next);
     setSource("local");
     setSelectedType("image");
@@ -273,7 +274,10 @@ export function App() {
       ...current,
       selectedProject: next,
       selectedSource: "local",
-      sources: current.sources.filter((item) => item.id === "local" || item.id === "github"),
+      sources: current.sources.filter((item) => item.id === "local" || item.id === "github").map((item) => ({
+        ...item,
+        detail: item.id === "github" ? (nextProject?.repository || next) : (nextProject?.label || next),
+      })),
       bars: [],
       assets: [],
       events: [],

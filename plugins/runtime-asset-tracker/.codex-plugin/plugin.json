@@ -1,6 +1,6 @@
 {
   "name": "runtime-asset-tracker",
-  "version": "0.1.0+codex.20260802214200",
+  "version": "0.1.0+codex.20260802214759",
   "description": "Track Docker images, containers, volumes, Compose operations, and deployments with portable labels and an append-only JSONL ledger.",
   "author": {
     "name": "SparklingPlay Engineering"
