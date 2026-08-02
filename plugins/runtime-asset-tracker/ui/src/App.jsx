@@ -13,6 +13,8 @@ import {
   GithubLogo,
   GitBranch,
   HardDrives,
+  IdentificationCard,
+  Key,
   ListDashes,
   MagnifyingGlass,
   Package,
@@ -52,6 +54,10 @@ function formatBytes(value) {
 
 function formatMetric(bar, value) {
   return bar.unit === "count" ? `${Math.round(value)} 个` : formatBytes(value);
+}
+
+function formatPercent(value) {
+  return Number.isFinite(value) ? `${value.toFixed(1)}%` : "—";
 }
 
 function formatTime(value) {
@@ -258,6 +264,7 @@ export function App() {
         selectedSource: next,
         selectedProject: project,
         host: "等待远程快照",
+        disk: { totalBytes: 0, freeBytes: 0 },
         bars: [],
         assets: [],
         events: [],
@@ -274,6 +281,7 @@ export function App() {
       ...current,
       selectedProject: next,
       selectedSource: "local",
+      disk: { totalBytes: 0, freeBytes: 0 },
       sources: current.sources.filter((item) => item.id === "local" || item.id === "github").map((item) => ({
         ...item,
         detail: item.id === "github" ? (nextProject?.repository || next) : (nextProject?.label || next),
@@ -295,6 +303,12 @@ export function App() {
   const effectiveProject = dashboard?.selectedProject || project;
   const projectOptions = dashboard?.projectOptions || (dashboard?.projects || []).map((id) => ({ id, label: id, repository: id }));
   const selectedProjectOption = projectOptions.find((item) => item.id === effectiveProject);
+  const connection = selectedSource?.connection;
+  const diskTotal = Number(dashboard?.disk?.totalBytes || 0);
+  const diskFree = Number(dashboard?.disk?.freeBytes || 0);
+  const diskUsed = Math.max(0, diskTotal - diskFree);
+  const diskUsage = diskTotal > 0 ? (diskUsed / diskTotal) * 100 : Number.NaN;
+  const diskLevel = diskUsage >= 90 ? "critical" : diskUsage >= 80 ? "warning" : "healthy";
 
   const requestPreview = async () => {
     setLoading(true);
@@ -332,6 +346,32 @@ export function App() {
           <div><div className="eyebrow">RUNTIME ASSET TRACKER</div><h1>运行资产控制台</h1><p>{selectedProjectOption?.label || effectiveProject} · {selectedSource?.label || "Local"} · {dashboard?.host || "正在连接"}</p></div>
           <div className="top-actions"><span className={`live-pill ${loading ? "loading" : ""} ${!snapshotOnline ? "offline" : ""}`}><i />{loading ? "正在刷新" : snapshotOnline ? (source === "local" ? "实时账本在线" : "安全连接在线") : "快照不可用"}</span><button className="icon-button" onClick={() => refresh()} type="button" aria-label="刷新"><ArrowClockwise size={20} className={loading ? "spin" : ""} /></button></div>
         </header>
+
+        {selectedSource?.kind === "server" && <section className="server-summary">
+          <article className="connection-card card">
+            <div className="connection-title"><span className="metric-icon blue"><IdentificationCard size={22} /></span><span><small>项目绑定的连接身份</small><strong>{connection?.instanceId || "实例待登记"}</strong></span><span className={`credential-state credential-${connection?.credentialStatus || "unknown"}`}><Key size={14} />{connection?.credentialStatus === "configured" ? "凭据引用已配置" : "凭据待配置"}</span></div>
+            <dl className="connection-grid">
+              <div><dt>AWS Account ID</dt><dd>{connection?.accountId || "待登记"}</dd></div>
+              <div><dt>IAM 用户 / 身份</dt><dd>{connection?.iamPrincipal || "待登记"}</dd></div>
+              <div><dt>区域 / 可用区</dt><dd>{connection?.region || "待登记"} / {connection?.availabilityZone || "待登记"}</dd></div>
+              <div><dt>主机 / 登录用户</dt><dd>{connection?.host || "待登记"} / {connection?.osUser || "待登记"}</dd></div>
+              <div><dt>连接方式</dt><dd>{connection?.method || "待登记"}</dd></div>
+              <div><dt>凭据引用</dt><dd>{connection?.credentialProvider || "系统凭据库"} · {connection?.profile || "待登记"}</dd></div>
+              <div className="connection-wide"><dt>应用目录</dt><dd>{connection?.appPath || "待登记"}</dd></div>
+            </dl>
+            <p className="credential-note">这里只保存非敏感身份和凭据别名；私钥、密码、Access Key 与会话令牌不会进入项目配置、GitHub 或事件账本。</p>
+          </article>
+          <article className={`disk-card card disk-${diskLevel}`}>
+            <div className="disk-title"><span><small>EC2 根盘容量</small><strong>{Number.isFinite(diskUsage) ? formatPercent(diskUsage) : "快照待获取"}</strong></span><HardDrives size={26} weight="duotone" /></div>
+            <div className="disk-meter"><i style={{ width: `${Number.isFinite(diskUsage) ? Math.min(100, diskUsage) : 0}%` }} /></div>
+            <div className="disk-kpis">
+              <span><small>总空间</small><strong>{diskTotal ? formatBytes(diskTotal) : "—"}</strong></span>
+              <span><small>已使用</small><strong>{diskTotal ? formatBytes(diskUsed) : "—"}</strong></span>
+              <span><small>剩余空间</small><strong>{diskTotal ? formatBytes(diskFree) : "—"}</strong></span>
+              <span><small>使用率</small><strong>{formatPercent(diskUsage)}</strong></span>
+            </div>
+          </article>
+        </section>}
 
         <section className="metric-grid">
           <article><span className="metric-icon"><HardDrives size={22} /></span><div><small>{source === "github" ? "GitHub 交付资产" : "逻辑资产规模"}</small><strong>{source === "github" ? `${dashboard?.assets?.length || 0} 项` : formatBytes(totalFootprint)}</strong><span>{source === "github" ? `${formatBytes(totalFootprint)} 制品与缓存` : `${dashboard?.assets?.length || 0} 项已识别资产`}</span></div></article>

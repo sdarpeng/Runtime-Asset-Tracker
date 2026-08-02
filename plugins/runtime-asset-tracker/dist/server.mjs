@@ -33822,11 +33822,20 @@ function buildGithubBars(assets) {
     aggregateGithub("workflow_run", assets, "count")
   ];
 }
-function remoteSnapshotScript() {
+function remoteSnapshotScript(sourceConfig = {}) {
+  const context = Buffer.from(JSON.stringify({
+    project: sourceConfig.projectId || "sparklingplaycms",
+    environment: sourceConfig.id || "remote",
+    releaseRoot: sourceConfig.releaseRoot ?? "/home/ec2-user/apps/sparkling-cms-releases",
+    activeLink: sourceConfig.activeLink ?? "/home/ec2-user/apps/sparkling-cms"
+  }), "utf8").toString("base64");
   return String.raw`
 import base64, datetime, gzip, json, os, re, shutil, socket, subprocess
 
 PREFIX = "com.codex.runtime."
+CONTEXT = json.loads(base64.b64decode("${context}"))
+DEFAULT_PROJECT = CONTEXT.get("project") or "unknown"
+DEFAULT_ENVIRONMENT = CONTEXT.get("environment") or "remote"
 
 def run(args, timeout=30):
     try:
@@ -33866,7 +33875,8 @@ def safe_labels(labels):
 def label(labels, name):
     return (labels or {}).get(PREFIX + name)
 
-def project(labels, fallback="unknown"):
+def project(labels, fallback=None):
+    fallback = fallback or DEFAULT_PROJECT
     return label(labels, "project") or (labels or {}).get("com.docker.compose.project") or fallback or "unknown"
 
 def classify(labels, active=False, protected=False, dangling=False):
@@ -33987,20 +33997,20 @@ for row in json_lines(docker(["system", "df", "--format", "{{json .}}"])) if doc
 build_cache = summary.get("Build Cache") or {}
 if build_cache.get("reclaimableBytes", 0) > 0:
     assets.append({
-        "id":"docker-build-cache", "name":"Docker Build Cache", "type":"cache", "project":"docker-builder",
+        "id":"docker-build-cache", "name":"Docker Build Cache", "type":"cache", "project":DEFAULT_PROJECT,
         "environment":"remote", "status":"unused-build-cache", "classification":"reclaimable",
         "sizeBytes":build_cache.get("reclaimableBytes", 0), "createdAt":datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "labels":{}, "reason":"Docker 明确认定为未使用且可回收的 Build Cache"
     })
 
-release_root = "/home/ec2-user/apps/sparkling-cms-releases"
-active_link = "/home/ec2-user/apps/sparkling-cms"
+release_root = CONTEXT.get("releaseRoot") or ""
+active_link = CONTEXT.get("activeLink") or ""
 active_release = os.path.realpath(active_link) if os.path.exists(active_link) else ""
 if os.path.isdir(release_root):
     for entry in sorted(os.scandir(release_root), key=lambda item:item.stat().st_mtime, reverse=True)[:60]:
         if not entry.is_dir(follow_symlinks=False): continue
         active = os.path.realpath(entry.path) == active_release
-        assets.append({"id":entry.path,"name":entry.name,"type":"worktree","project":"sparklingplaycms","environment":"remote","status":"active-release" if active else "retained-release","classification":"active" if active else "retained","sizeBytes":0,"createdAt":datetime.datetime.fromtimestamp(entry.stat().st_mtime, datetime.timezone.utc).isoformat(),"labels":{},"reason":"当前活动 release" if active else "保留的 release"})
+        assets.append({"id":entry.path,"name":entry.name,"type":"worktree","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"active-release" if active else "retained-release","classification":"active" if active else "retained","sizeBytes":0,"createdAt":datetime.datetime.fromtimestamp(entry.stat().st_mtime, datetime.timezone.utc).isoformat(),"labels":{},"reason":"当前活动 release" if active else "保留的 release"})
 
 events = []
 for ledger_path in ["/var/lib/runtime-asset-tracker/events.jsonl", os.path.expanduser("~/.local/state/runtime-asset-tracker/events.jsonl")]:
@@ -34042,7 +34052,7 @@ function collectAwsSnapshot(sourceConfig) {
   if (!instance || instance.PingStatus !== "Online") {
     throw new Error(`EC2 ${instanceId} \u672A\u901A\u8FC7 Systems Manager \u5728\u7EBF\uFF0C\u5F53\u524D\u4E0D\u80FD\u8BFB\u53D6 Docker \u8FD0\u884C\u6001`);
   }
-  const encoded = Buffer.from(remoteSnapshotScript(), "utf8").toString("base64");
+  const encoded = Buffer.from(remoteSnapshotScript(sourceConfig), "utf8").toString("base64");
   const command = `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`;
   const sent = runJson("aws", [
     ...regionArgs,
@@ -34090,6 +34100,30 @@ function collectAwsSnapshot(sourceConfig) {
     return JSON.parse(gunzipSync(Buffer.from(marker.slice(5), "base64")).toString("utf8"));
   }
   throw new Error("\u8FDC\u7A0B\u5FEB\u7167\u8D85\u8FC7 125 \u79D2\u4ECD\u672A\u5B8C\u6210");
+}
+function decodeSnapshot(output) {
+  const marker = String(output || "").split(/\r?\n/).find((line) => line.startsWith("RAT1:"));
+  if (!marker) throw new Error("\u8FDC\u7A0B\u5FEB\u7167\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u8F7D\u8377");
+  return JSON.parse(gunzipSync(Buffer.from(marker.slice(5), "base64")).toString("utf8"));
+}
+function collectSshSnapshot(sourceConfig) {
+  const sshProfile = String(sourceConfig?.sshProfile || "").trim();
+  if (!sshProfile) throw new Error("\u672A\u914D\u7F6E SSH Profile\uFF1B\u79C1\u94A5\u53EA\u5E94\u7531 OpenSSH/\u7CFB\u7EDF\u51ED\u636E\u5E93\u7BA1\u7406");
+  const encoded = Buffer.from(remoteSnapshotScript(sourceConfig), "utf8").toString("base64");
+  const command = `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`;
+  const output = runStrict("ssh", [
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "IdentitiesOnly=yes",
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    "ConnectTimeout=12",
+    sshProfile,
+    command
+  ], { timeout: 15e4, maxBuffer: 32 * 1024 * 1024 });
+  return decodeSnapshot(output);
 }
 function classifyGithubAsset({ kind, expired = false, lastAccessedAt, ref, pullState, now = Date.now() }) {
   if (kind === "artifact") return expired ? "reclaimable" : "retained";
@@ -34368,6 +34402,41 @@ function executeAwsDockerCleanup(sourceConfig, allowlist) {
   remoteCache.clear();
   return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), commandId: invocation.commandId, results: [...skipped, ...payload.results || []] };
 }
+function runSshMutation(sourceConfig, script) {
+  const sshProfile = String(sourceConfig?.sshProfile || "").trim();
+  if (!sshProfile) throw new Error("\u672A\u914D\u7F6E SSH Profile\uFF1B\u79C1\u94A5\u53EA\u5E94\u7531 OpenSSH/\u7CFB\u7EDF\u51ED\u636E\u5E93\u7BA1\u7406");
+  const encoded = Buffer.from(script, "utf8").toString("base64");
+  return runStrict("ssh", [
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "IdentitiesOnly=yes",
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    "ConnectTimeout=12",
+    sshProfile,
+    `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`
+  ], { timeout: 21e4, maxBuffer: 32 * 1024 * 1024 });
+}
+function executeSshDockerCleanup(sourceConfig, allowlist) {
+  const snapshot = collectSshSnapshot(sourceConfig);
+  const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const skipped = [];
+  const approved = [];
+  for (const requested of allowlist) {
+    const current = safeAssets.get(`${requested.type}:${requested.id}`);
+    if (!current) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u5FEB\u7167\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
+    else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
+  }
+  if (!approved.length) return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: skipped };
+  const output = runSshMutation(sourceConfig, awsDockerCleanupScript(approved));
+  const match = output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
+  if (!match) throw new Error("\u8FDC\u7A0B\u6E05\u7406\u6CA1\u6709\u8FD4\u56DE\u53EF\u9A8C\u8BC1\u7ED3\u679C");
+  const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
+  remoteCache.clear();
+  return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: [...skipped, ...payload.results || []] };
+}
 function executeGithubCleanup(sourceConfig, allowlist) {
   const snapshot = collectGithubSnapshot(sourceConfig);
   const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.remoteKind}:${item.id}`, item]));
@@ -34391,7 +34460,9 @@ function executeGithubCleanup(sourceConfig, allowlist) {
 }
 function executeRemoteCleanup({ source, sourceConfig, allowlist }) {
   if (!sourceConfig) throw new Error(`${source} \u6765\u6E90\u5C1A\u672A\u914D\u7F6E`);
-  return sourceConfig.kind === "github" ? executeGithubCleanup(sourceConfig, allowlist) : executeAwsDockerCleanup(sourceConfig, allowlist);
+  if (sourceConfig.kind === "github") return executeGithubCleanup(sourceConfig, allowlist);
+  if (sourceConfig.kind === "ssh") return executeSshDockerCleanup(sourceConfig, allowlist);
+  return executeAwsDockerCleanup(sourceConfig, allowlist);
 }
 function registeredProjectOptions(config2, sourceConfig) {
   const configured = Array.isArray(config2.projects) && config2.projects.length ? config2.projects : sourceConfig?.repository ? [{ id: sourceConfig.repository, repository: sourceConfig.repository }] : [];
@@ -34439,7 +34510,7 @@ function collectRemoteDashboard({ source, scope, project, config: config2, sourc
   };
   if (!sourceConfig) return { ...empty, remoteError: "\u8BE5\u6765\u6E90\u5C1A\u672A\u914D\u7F6E" };
   try {
-    const cacheKey2 = `${source}:${sourceConfig.instanceId || sourceConfig.repository}`;
+    const cacheKey2 = `${selectedProject}:${source}:${sourceConfig.instanceId || sourceConfig.sshProfile || sourceConfig.repository}`;
     const cached2 = remoteCache.get(cacheKey2);
     let snapshot;
     let fromCache = false;
@@ -34447,7 +34518,7 @@ function collectRemoteDashboard({ source, scope, project, config: config2, sourc
       snapshot = cached2.value;
       fromCache = true;
     } else {
-      snapshot = sourceConfig.kind === "github" ? collectGithubSnapshot(sourceConfig) : collectAwsSnapshot(sourceConfig);
+      snapshot = sourceConfig.kind === "github" ? collectGithubSnapshot(sourceConfig) : sourceConfig.kind === "ssh" ? collectSshSnapshot(sourceConfig) : collectAwsSnapshot(sourceConfig);
       remoteCache.set(cacheKey2, { createdAt: Date.now(), value: snapshot });
     }
     const canonicalAssets = snapshot.assets.map((asset) => ({ ...asset, project: canonicalRemoteProject(asset.project, projectOptions) }));
@@ -34466,7 +34537,7 @@ function collectRemoteDashboard({ source, scope, project, config: config2, sourc
       assets: filteredAssets.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
       events: snapshot.events || [],
       remoteSnapshotAvailable: true,
-      snapshotMode: sourceConfig.kind === "github" ? "github-api" : "aws-ssm-readonly",
+      snapshotMode: sourceConfig.kind === "github" ? "github-api" : sourceConfig.kind === "ssh" ? "ssh-readonly" : "aws-ssm-readonly",
       activeRelease: snapshot.activeRelease,
       revision: snapshot.revision,
       cached: fromCache
@@ -34709,9 +34780,27 @@ function projectSourceConfigs(config2, project) {
   const configuredEnvironments = registered?.environments?.length ? registered.environments : selectedProject === legacyOwner ? (config2.sources || []).filter((item) => item.id !== "local" && item.id !== "github" && item.kind !== "github") : [];
   return [
     { id: "local", kind: "local" },
-    ...configuredEnvironments,
+    ...configuredEnvironments.map((source) => ({ ...source, projectId: selectedProject })),
     { id: "github", kind: "github", repository: selectedProject }
   ];
+}
+function publicConnection(source) {
+  if (!source || ["local", "github"].includes(source.kind)) return void 0;
+  const credential = source.credentialRef || {};
+  return {
+    method: source.kind === "ssh" ? "SSH" : "AWS Systems Manager",
+    profile: source.sshProfile || source.awsProfile || credential.profile || "\u672A\u6307\u5B9A",
+    credentialProvider: credential.provider || (source.kind === "ssh" ? "OpenSSH" : "AWS CLI"),
+    credentialStatus: credential.status || (source.sshProfile || source.awsProfile ? "configured" : "unknown"),
+    accountId: source.accountId || "\u5F85\u767B\u8BB0",
+    iamPrincipal: source.iamPrincipal || "\u5F85\u767B\u8BB0",
+    instanceId: source.instanceId || "\u5F85\u767B\u8BB0",
+    region: source.region || "\u5F85\u767B\u8BB0",
+    availabilityZone: source.availabilityZone || "\u5F85\u767B\u8BB0",
+    host: source.publicHost || source.privateHost || "\u7531\u8FDE\u63A5\u914D\u7F6E\u89E3\u6790",
+    osUser: source.osUser || "\u7531\u8FDE\u63A5\u914D\u7F6E\u89E3\u6790",
+    appPath: source.activeLink || source.appPath || "\u5F85\u767B\u8BB0"
+  };
 }
 function projectSourceCards(config2, projects, selectedProject, dockerAvailable) {
   const project = projects.find((item) => item.id === selectedProject);
@@ -34727,8 +34816,9 @@ function projectSourceCards(config2, projects, selectedProject, dockerAvailable)
       id: source.id,
       label: source.displayName || (source.id === "production" ? "EC2 Production" : source.id === "staging" ? "EC2 Staging" : source.label || source.id),
       kind: "server",
-      status: "configured",
-      detail: source.label || project?.label || selectedProject
+      status: source.credentialRef?.status === "missing" ? "error" : "configured",
+      detail: source.label || project?.label || selectedProject,
+      connection: publicConnection(source)
     };
   });
 }

@@ -258,9 +258,28 @@ export function projectSourceConfigs(config, project) {
       : [];
   return [
     { id: "local", kind: "local" },
-    ...configuredEnvironments,
+    ...configuredEnvironments.map((source) => ({ ...source, projectId: selectedProject })),
     { id: "github", kind: "github", repository: selectedProject },
   ];
+}
+
+function publicConnection(source) {
+  if (!source || ["local", "github"].includes(source.kind)) return undefined;
+  const credential = source.credentialRef || {};
+  return {
+    method: source.kind === "ssh" ? "SSH" : "AWS Systems Manager",
+    profile: source.sshProfile || source.awsProfile || credential.profile || "未指定",
+    credentialProvider: credential.provider || (source.kind === "ssh" ? "OpenSSH" : "AWS CLI"),
+    credentialStatus: credential.status || (source.sshProfile || source.awsProfile ? "configured" : "unknown"),
+    accountId: source.accountId || "待登记",
+    iamPrincipal: source.iamPrincipal || "待登记",
+    instanceId: source.instanceId || "待登记",
+    region: source.region || "待登记",
+    availabilityZone: source.availabilityZone || "待登记",
+    host: source.publicHost || source.privateHost || "由连接配置解析",
+    osUser: source.osUser || "由连接配置解析",
+    appPath: source.activeLink || source.appPath || "待登记",
+  };
 }
 
 function projectSourceCards(config, projects, selectedProject, dockerAvailable) {
@@ -277,8 +296,9 @@ function projectSourceCards(config, projects, selectedProject, dockerAvailable) 
       id: source.id,
       label: source.displayName || (source.id === "production" ? "EC2 Production" : source.id === "staging" ? "EC2 Staging" : source.label || source.id),
       kind: "server",
-      status: "configured",
+      status: source.credentialRef?.status === "missing" ? "error" : "configured",
       detail: source.label || project?.label || selectedProject,
+      connection: publicConnection(source),
     };
   });
 }

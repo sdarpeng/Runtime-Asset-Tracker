@@ -140,11 +140,20 @@ export function classifyDockerVolume({ labels = {}, referenced = false, protecte
   return "review";
 }
 
-export function remoteSnapshotScript() {
+export function remoteSnapshotScript(sourceConfig = {}) {
+  const context = Buffer.from(JSON.stringify({
+    project: sourceConfig.projectId || "sparklingplaycms",
+    environment: sourceConfig.id || "remote",
+    releaseRoot: sourceConfig.releaseRoot ?? "/home/ec2-user/apps/sparkling-cms-releases",
+    activeLink: sourceConfig.activeLink ?? "/home/ec2-user/apps/sparkling-cms",
+  }), "utf8").toString("base64");
   return String.raw`
 import base64, datetime, gzip, json, os, re, shutil, socket, subprocess
 
 PREFIX = "com.codex.runtime."
+CONTEXT = json.loads(base64.b64decode("${context}"))
+DEFAULT_PROJECT = CONTEXT.get("project") or "unknown"
+DEFAULT_ENVIRONMENT = CONTEXT.get("environment") or "remote"
 
 def run(args, timeout=30):
     try:
@@ -184,7 +193,8 @@ def safe_labels(labels):
 def label(labels, name):
     return (labels or {}).get(PREFIX + name)
 
-def project(labels, fallback="unknown"):
+def project(labels, fallback=None):
+    fallback = fallback or DEFAULT_PROJECT
     return label(labels, "project") or (labels or {}).get("com.docker.compose.project") or fallback or "unknown"
 
 def classify(labels, active=False, protected=False, dangling=False):
@@ -305,20 +315,20 @@ for row in json_lines(docker(["system", "df", "--format", "{{json .}}"])) if doc
 build_cache = summary.get("Build Cache") or {}
 if build_cache.get("reclaimableBytes", 0) > 0:
     assets.append({
-        "id":"docker-build-cache", "name":"Docker Build Cache", "type":"cache", "project":"docker-builder",
+        "id":"docker-build-cache", "name":"Docker Build Cache", "type":"cache", "project":DEFAULT_PROJECT,
         "environment":"remote", "status":"unused-build-cache", "classification":"reclaimable",
         "sizeBytes":build_cache.get("reclaimableBytes", 0), "createdAt":datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "labels":{}, "reason":"Docker 明确认定为未使用且可回收的 Build Cache"
     })
 
-release_root = "/home/ec2-user/apps/sparkling-cms-releases"
-active_link = "/home/ec2-user/apps/sparkling-cms"
+release_root = CONTEXT.get("releaseRoot") or ""
+active_link = CONTEXT.get("activeLink") or ""
 active_release = os.path.realpath(active_link) if os.path.exists(active_link) else ""
 if os.path.isdir(release_root):
     for entry in sorted(os.scandir(release_root), key=lambda item:item.stat().st_mtime, reverse=True)[:60]:
         if not entry.is_dir(follow_symlinks=False): continue
         active = os.path.realpath(entry.path) == active_release
-        assets.append({"id":entry.path,"name":entry.name,"type":"worktree","project":"sparklingplaycms","environment":"remote","status":"active-release" if active else "retained-release","classification":"active" if active else "retained","sizeBytes":0,"createdAt":datetime.datetime.fromtimestamp(entry.stat().st_mtime, datetime.timezone.utc).isoformat(),"labels":{},"reason":"当前活动 release" if active else "保留的 release"})
+        assets.append({"id":entry.path,"name":entry.name,"type":"worktree","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"active-release" if active else "retained-release","classification":"active" if active else "retained","sizeBytes":0,"createdAt":datetime.datetime.fromtimestamp(entry.stat().st_mtime, datetime.timezone.utc).isoformat(),"labels":{},"reason":"当前活动 release" if active else "保留的 release"})
 
 events = []
 for ledger_path in ["/var/lib/runtime-asset-tracker/events.jsonl", os.path.expanduser("~/.local/state/runtime-asset-tracker/events.jsonl")]:
@@ -359,7 +369,7 @@ function collectAwsSnapshot(sourceConfig) {
     throw new Error(`EC2 ${instanceId} 未通过 Systems Manager 在线，当前不能读取 Docker 运行态`);
   }
 
-  const encoded = Buffer.from(remoteSnapshotScript(), "utf8").toString("base64");
+  const encoded = Buffer.from(remoteSnapshotScript(sourceConfig), "utf8").toString("base64");
   const command = `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`;
   const sent = runJson("aws", [
     ...regionArgs,
@@ -397,6 +407,28 @@ function collectAwsSnapshot(sourceConfig) {
     return JSON.parse(gunzipSync(Buffer.from(marker.slice(5), "base64")).toString("utf8"));
   }
   throw new Error("远程快照超过 125 秒仍未完成");
+}
+
+function decodeSnapshot(output) {
+  const marker = String(output || "").split(/\r?\n/).find((line) => line.startsWith("RAT1:"));
+  if (!marker) throw new Error("远程快照没有返回有效载荷");
+  return JSON.parse(gunzipSync(Buffer.from(marker.slice(5), "base64")).toString("utf8"));
+}
+
+function collectSshSnapshot(sourceConfig) {
+  const sshProfile = String(sourceConfig?.sshProfile || "").trim();
+  if (!sshProfile) throw new Error("未配置 SSH Profile；私钥只应由 OpenSSH/系统凭据库管理");
+  const encoded = Buffer.from(remoteSnapshotScript(sourceConfig), "utf8").toString("base64");
+  const command = `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`;
+  const output = runStrict("ssh", [
+    "-o", "BatchMode=yes",
+    "-o", "IdentitiesOnly=yes",
+    "-o", "StrictHostKeyChecking=yes",
+    "-o", "ConnectTimeout=12",
+    sshProfile,
+    command,
+  ], { timeout: 150_000, maxBuffer: 32 * 1024 * 1024 });
+  return decodeSnapshot(output);
 }
 
 export function classifyGithubAsset({ kind, expired = false, lastAccessedAt, ref, pullState, now = Date.now() }) {
@@ -683,6 +715,39 @@ function executeAwsDockerCleanup(sourceConfig, allowlist) {
   return { completedAt: new Date().toISOString(), commandId: invocation.commandId, results: [...skipped, ...(payload.results || [])] };
 }
 
+function runSshMutation(sourceConfig, script) {
+  const sshProfile = String(sourceConfig?.sshProfile || "").trim();
+  if (!sshProfile) throw new Error("未配置 SSH Profile；私钥只应由 OpenSSH/系统凭据库管理");
+  const encoded = Buffer.from(script, "utf8").toString("base64");
+  return runStrict("ssh", [
+    "-o", "BatchMode=yes",
+    "-o", "IdentitiesOnly=yes",
+    "-o", "StrictHostKeyChecking=yes",
+    "-o", "ConnectTimeout=12",
+    sshProfile,
+    `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`,
+  ], { timeout: 210_000, maxBuffer: 32 * 1024 * 1024 });
+}
+
+function executeSshDockerCleanup(sourceConfig, allowlist) {
+  const snapshot = collectSshSnapshot(sourceConfig);
+  const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const skipped = [];
+  const approved = [];
+  for (const requested of allowlist) {
+    const current = safeAssets.get(`${requested.type}:${requested.id}`);
+    if (!current) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前快照复核不再满足安全清理条件" });
+    else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
+  }
+  if (!approved.length) return { completedAt: new Date().toISOString(), results: skipped };
+  const output = runSshMutation(sourceConfig, awsDockerCleanupScript(approved));
+  const match = output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
+  if (!match) throw new Error("远程清理没有返回可验证结果");
+  const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
+  remoteCache.clear();
+  return { completedAt: new Date().toISOString(), results: [...skipped, ...(payload.results || [])] };
+}
+
 function executeGithubCleanup(sourceConfig, allowlist) {
   const snapshot = collectGithubSnapshot(sourceConfig);
   const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.remoteKind}:${item.id}`, item]));
@@ -709,9 +774,9 @@ function executeGithubCleanup(sourceConfig, allowlist) {
 
 export function executeRemoteCleanup({ source, sourceConfig, allowlist }) {
   if (!sourceConfig) throw new Error(`${source} 来源尚未配置`);
-  return sourceConfig.kind === "github"
-    ? executeGithubCleanup(sourceConfig, allowlist)
-    : executeAwsDockerCleanup(sourceConfig, allowlist);
+  if (sourceConfig.kind === "github") return executeGithubCleanup(sourceConfig, allowlist);
+  if (sourceConfig.kind === "ssh") return executeSshDockerCleanup(sourceConfig, allowlist);
+  return executeAwsDockerCleanup(sourceConfig, allowlist);
 }
 
 function registeredProjectOptions(config, sourceConfig) {
@@ -770,7 +835,7 @@ export function collectRemoteDashboard({ source, scope, project, config, sources
   if (!sourceConfig) return { ...empty, remoteError: "该来源尚未配置" };
 
   try {
-    const cacheKey = `${source}:${sourceConfig.instanceId || sourceConfig.repository}`;
+    const cacheKey = `${selectedProject}:${source}:${sourceConfig.instanceId || sourceConfig.sshProfile || sourceConfig.repository}`;
     const cached = remoteCache.get(cacheKey);
     let snapshot;
     let fromCache = false;
@@ -778,7 +843,11 @@ export function collectRemoteDashboard({ source, scope, project, config, sources
       snapshot = cached.value;
       fromCache = true;
     } else {
-      snapshot = sourceConfig.kind === "github" ? collectGithubSnapshot(sourceConfig) : collectAwsSnapshot(sourceConfig);
+      snapshot = sourceConfig.kind === "github"
+        ? collectGithubSnapshot(sourceConfig)
+        : sourceConfig.kind === "ssh"
+          ? collectSshSnapshot(sourceConfig)
+          : collectAwsSnapshot(sourceConfig);
       remoteCache.set(cacheKey, { createdAt: Date.now(), value: snapshot });
     }
     const canonicalAssets = snapshot.assets.map((asset) => ({ ...asset, project: canonicalRemoteProject(asset.project, projectOptions) }));
@@ -799,7 +868,7 @@ export function collectRemoteDashboard({ source, scope, project, config, sources
       assets: filteredAssets.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
       events: snapshot.events || [],
       remoteSnapshotAvailable: true,
-      snapshotMode: sourceConfig.kind === "github" ? "github-api" : "aws-ssm-readonly",
+      snapshotMode: sourceConfig.kind === "github" ? "github-api" : sourceConfig.kind === "ssh" ? "ssh-readonly" : "aws-ssm-readonly",
       activeRelease: snapshot.activeRelease,
       revision: snapshot.revision,
       cached: fromCache,

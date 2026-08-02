@@ -11,6 +11,31 @@ describe("remote read-only adapters", () => {
     assert.match(script, /shutil\.disk_usage/);
   });
 
+  it("scopes remote release discovery to the selected project configuration", () => {
+    const script = remoteSnapshotScript({
+      projectId: "owner/finportex",
+      id: "production",
+      activeLink: "/home/ubuntu/apps/finportex",
+      releaseRoot: "",
+    });
+    const encoded = script.match(/CONTEXT = json\.loads\(base64\.b64decode\("([^"]+)"\)\)/)?.[1];
+    assert.ok(encoded);
+    const context = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+    assert.equal(context.project, "owner/finportex");
+    assert.equal(context.activeLink, "/home/ubuntu/apps/finportex");
+    assert.equal(context.releaseRoot, "");
+    assert.match(script, /"project":DEFAULT_PROJECT/);
+  });
+
+  it("uses OpenSSH profile references without embedding private-key material", () => {
+    const source = readFileSync(new URL("../mcp/remote.mjs", import.meta.url), "utf8");
+    assert.match(source, /function collectSshSnapshot/);
+    assert.match(source, /"BatchMode=yes"/);
+    assert.match(source, /"StrictHostKeyChecking=yes"/);
+    assert.match(source, /sourceConfig\.sshProfile/);
+    assert.doesNotMatch(source, /BEGIN (RSA |OPENSSH )?PRIVATE KEY/);
+  });
+
   it("maps Docker-reported Build Cache reclaimable bytes into the safe segment", () => {
     const bars = buildBars([], {
       "Build Cache": { totalCount: 999, sizeBytes: 7_894_000_000, reclaimableBytes: 7_894_000_000 },
@@ -138,5 +163,18 @@ describe("remote read-only adapters", () => {
     assert.match(source, /projectOptions\.map/);
     assert.match(source, /setSource\("local"\)/);
     assert.doesNotMatch(source, /setProject\("all"\)/);
+  });
+
+  it("renders project-bound EC2 identity and disk capacity KPIs", () => {
+    const source = readFileSync(new URL("../ui/src/App.jsx", import.meta.url), "utf8");
+    assert.match(source, /AWS Account ID/);
+    assert.match(source, /凭据引用/);
+    assert.match(source, /EC2 根盘容量/);
+    assert.match(source, /总空间/);
+    assert.match(source, /已使用/);
+    assert.match(source, /剩余空间/);
+    assert.match(source, /使用率/);
+    assert.match(source, /私钥、密码、Access Key 与会话令牌不会进入/);
+    assert.match(source, /disk: \{ totalBytes: 0, freeBytes: 0 \}/);
   });
 });

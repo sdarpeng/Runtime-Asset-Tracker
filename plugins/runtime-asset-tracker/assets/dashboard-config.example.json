@@ -16,7 +16,12 @@
           "displayName": "EC2 Production",
           "label": "My Project Production",
           "region": "us-east-2",
-          "instanceId": "i-example-production"
+          "availabilityZone": "us-east-2a",
+          "instanceId": "i-example-production",
+          "accountId": "123456789012",
+          "iamPrincipal": "deployment-operator",
+          "awsProfile": "my-project-prod",
+          "credentialRef": { "provider": "AWS CLI", "profile": "my-project-prod", "status": "configured" }
         },
         {
           "id": "staging",

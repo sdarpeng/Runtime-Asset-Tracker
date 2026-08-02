@@ -58,6 +58,29 @@ describe("runtime asset dashboard inventory", () => {
     assert.deepEqual(projectSourceConfigs(config, "owner/finportex").map((item) => item.id), ["local", "github"]);
   });
 
+  it("keeps SSH credentials as profile references on the owning project", () => {
+    const config = {
+      projects: [
+        { repository: "owner/cms" },
+        {
+          repository: "owner/finportex",
+          environments: [{
+            id: "production",
+            kind: "ssh",
+            sshProfile: "finportex-prod",
+            instanceId: "i-finportex",
+          }],
+        },
+      ],
+      sources: [],
+    };
+    const production = projectSourceConfigs(config, "owner/finportex").find((item) => item.id === "production");
+    assert.equal(production.kind, "ssh");
+    assert.equal(production.sshProfile, "finportex-prod");
+    assert.equal(production.projectId, "owner/finportex");
+    assert.equal(projectSourceConfigs(config, "owner/cms").some((item) => item.id === "production"), false);
+  });
+
   it("returns the four dashboard capacity bands without mutating Docker", () => {
     const dashboard = collectDashboard();
     assert.equal(dashboard.bars.length, 4);

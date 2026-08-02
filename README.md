@@ -8,7 +8,8 @@ It provides:
 - Portable Docker and Compose labels.
 - An append-only JSONL event ledger.
 - Exact local cleanup previews that only include explicitly disposable assets.
-- AWS Systems Manager inventory for EC2 Production and Staging, including image unique-layer usage, running/stopped container references, real volume sizes, and volume mount relationships.
+- AWS Systems Manager or OpenSSH inventory for project-bound EC2 Production and Staging, including root-disk total/used/free capacity, image unique-layer usage, running/stopped container references, real volume sizes, and volume mount relationships.
+- A non-secret connection identity panel for AWS Account ID, IAM principal, region, availability zone, instance ID, host, OS user, application path, and credential profile.
 - GitHub Actions cache, artifact, and workflow inventory, with safe cleanup limited to expired artifacts, closed-PR caches, and caches not accessed for more than 30 days.
 
 Every cleanup starts with an expiring exact-item preview and is revalidated immediately before execution. EC2 cleanup can remove exact unreferenced dangling or explicitly disposable image IDs, exact unreferenced explicitly disposable non-business volume names, and unused BuildKit cache. It never performs broad image/volume prune, forced deletion, container deletion, release deletion, or rollback deletion. Unknown volumes and assets without sufficient disposal evidence remain protected.
@@ -50,7 +51,7 @@ Copy `plugins/runtime-asset-tracker/assets/dashboard-config.example.json` to the
 - Windows: `%LOCALAPPDATA%\RuntimeAssetTracker\dashboard-config.json`
 - Linux: `~/.local/state/runtime-asset-tracker/dashboard-config.json`
 
-AWS inventory requires authenticated AWS CLI access and online Systems Manager managed instances. GitHub inventory requires an authenticated GitHub CLI session.
+AWS inventory requires authenticated AWS CLI access and online Systems Manager managed instances. SSH inventory uses a named OpenSSH profile with strict host-key verification. Configuration may contain non-secret identity metadata and credential-profile names, but must never contain private-key bytes, passwords, AWS access keys, session tokens, or browser cookies. GitHub inventory requires an authenticated GitHub CLI session.
 
 ## Repository layout
 
