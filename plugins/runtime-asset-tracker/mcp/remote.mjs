@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 
 const remoteCache = new Map();
@@ -173,9 +174,10 @@ export function remoteSnapshotScript(sourceConfig = {}) {
     releaseRoot: sourceConfig.releaseRoot ?? "/home/ec2-user/apps/sparkling-cms-releases",
     activeLink: sourceConfig.activeLink ?? "/home/ec2-user/apps/sparkling-cms",
     expiryWindowDays: Number(sourceConfig.expiryWindowDays || 7),
+    transportPath: sourceConfig.transportPath || "",
   }), "utf8").toString("base64");
   return String.raw`
-import base64, datetime, gzip, json, os, re, shutil, socket, subprocess
+import base64, datetime, gzip, hashlib, json, os, re, shutil, socket, subprocess
 
 PREFIX = "com.codex.runtime."
 CONTEXT = json.loads(base64.b64decode("${context}"))
@@ -244,8 +246,7 @@ def expiry_class(labels, created_at=None):
     return "retained", expires.isoformat()
 
 def project(labels, fallback=None):
-    fallback = fallback or DEFAULT_PROJECT
-    return label(labels, "project") or (labels or {}).get("com.docker.compose.project") or fallback or "unknown"
+    return label(labels, "project") or DEFAULT_PROJECT or fallback or "unknown"
 
 def classify(labels, active=False, protected=False, dangling=False, created_at=None):
     if active: return "active"
@@ -308,7 +309,7 @@ for item in container_details:
         "project": project(labels), "environment": label(labels, "environment") or "remote",
         "status": (item.get("State") or {}).get("Status") or "unknown", "classification": classify(labels, active=active, created_at=item.get("Created")),
         "sizeBytes": parse_bytes((container_row_map.get(item.get("Id")) or {}).get("Size")), "createdAt": item.get("Created"),
-        "labels": labels, "lineage":{"imageId":item.get("Image"),"mounts":[{"type":mount.get("Type"),"name":mount.get("Name"),"destination":mount.get("Destination")} for mount in (item.get("Mounts") or [])]}, "reason": "正在运行" if active else "已停止，等待归属确认"
+        "labels": labels, "lineage":{"composeProject":labels.get("com.docker.compose.project"),"imageId":item.get("Image"),"mounts":[{"type":mount.get("Type"),"name":mount.get("Name"),"destination":mount.get("Destination")} for mount in (item.get("Mounts") or [])]}, "reason": "正在运行" if active else "已停止，等待归属确认"
     })
 
 image_rows = json_lines(docker(["image", "ls", "--no-trunc", "--format", "{{json .}}"])) if docker_available else []
@@ -371,7 +372,7 @@ for item in volume_details:
         "id":name, "name":name, "type":"volume", "project":project(labels, name.split("_")[0]),
         "environment":label(labels, "environment") or "remote", "status":"mounted-running" if active else ("mounted-stopped" if mounted else "unmounted"),
         "classification":volume_class, "sizeBytes":volume_sizes.get(name, 0), "createdAt":item.get("CreatedAt"), "expiresAt":expires_at,
-        "labels":labels, "lineage":{"consumers":volume_consumers.get(name, []),"mountpoint":item.get("Mountpoint")}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
+        "labels":labels, "lineage":{"composeProject":labels.get("com.docker.compose.project"),"consumers":volume_consumers.get(name, []),"mountpoint":item.get("Mountpoint")}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
     })
 
 for row in json_lines(docker(["system", "df", "--format", "{{json .}}"])) if docker_available else []:
@@ -415,8 +416,66 @@ limits = {"container":200, "image":500, "volume":500, "worktree":60, "cache":10}
 assets = [item for kind in ["container", "image", "volume", "worktree", "cache"] for item in [entry for entry in assets if entry.get("type") == kind][:limits[kind]]]
 result = {"host":socket.gethostname(),"dockerAvailable":docker_available,"disk":{"totalBytes":usage.total,"freeBytes":usage.free},"summary":summary,"assets":assets,"events":events[:24],"activeRelease":active_release,"revision":revision}
 payload = gzip.compress(json.dumps(result, separators=(",",":"), ensure_ascii=False).encode("utf-8"))
-print("RAT1:" + base64.b64encode(payload).decode("ascii"))
+encoded_payload = base64.b64encode(payload).decode("ascii")
+transport_path = CONTEXT.get("transportPath") or ""
+if transport_path and len(encoded_payload) > 16000:
+    descriptor = os.open(transport_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+        handle.write(encoded_payload)
+    print("RAT2:%d:%s" % (len(encoded_payload), hashlib.sha256(encoded_payload.encode("ascii")).hexdigest()))
+else:
+    print("RAT1:" + encoded_payload)
 `;
+}
+
+function runAwsSsmCommand(regionArgs, instanceId, command, comment, timeoutSeconds = 120) {
+  const sent = runJson("aws", [
+    ...regionArgs,
+    "ssm", "send-command",
+    "--instance-ids", instanceId,
+    "--document-name", "AWS-RunShellScript",
+    "--comment", comment,
+    "--parameters", JSON.stringify({ commands: [command] }),
+    "--timeout-seconds", String(timeoutSeconds),
+    "--output", "json",
+  ], { timeout: 30_000 });
+  const commandId = sent.Command?.CommandId;
+  if (!commandId) throw new Error("Systems Manager 未返回 commandId");
+
+  const startedAt = Date.now();
+  const waitLimit = (timeoutSeconds + 5) * 1_000;
+  while (Date.now() - startedAt < waitLimit) {
+    sleep(1_000);
+    let invocation;
+    try {
+      invocation = runJson("aws", [
+        ...regionArgs,
+        "ssm", "get-command-invocation",
+        "--command-id", commandId,
+        "--instance-id", instanceId,
+        "--output", "json",
+      ], { timeout: 20_000 });
+    } catch (error) {
+      if (/InvocationDoesNotExist/i.test(error.message)) continue;
+      throw error;
+    }
+    if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
+    if (invocation.Status !== "Success") throw new Error(invocation.StandardErrorContent || `SSM 快照状态：${invocation.Status}`);
+    return invocation;
+  }
+  throw new Error(`远程命令超过 ${waitLimit / 1_000} 秒仍未完成`);
+}
+
+export function decodeSnapshotPayload(encoded, { expectedLength, expectedSha256 } = {}) {
+  const payload = String(encoded || "").trim();
+  if (Number.isFinite(expectedLength) && payload.length !== expectedLength) {
+    throw new Error(`远程快照分块长度不一致：预期 ${expectedLength}，实际 ${payload.length}`);
+  }
+  if (expectedSha256) {
+    const actualSha256 = createHash("sha256").update(payload, "ascii").digest("hex");
+    if (actualSha256 !== expectedSha256) throw new Error("远程快照分块校验失败");
+  }
+  return JSON.parse(gunzipSync(Buffer.from(payload, "base64")).toString("utf8"));
 }
 
 function collectAwsSnapshot(sourceConfig) {
@@ -434,50 +493,52 @@ function collectAwsSnapshot(sourceConfig) {
     throw new Error(`EC2 ${instanceId} 未通过 Systems Manager 在线，当前不能读取 Docker 运行态`);
   }
 
-  const encoded = Buffer.from(remoteSnapshotScript(sourceConfig), "utf8").toString("base64");
+  const transportPath = `/tmp/runtime-asset-tracker-${randomUUID()}.b64`;
+  const encoded = Buffer.from(remoteSnapshotScript({ ...sourceConfig, transportPath }), "utf8").toString("base64");
   const command = `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`;
-  const sent = runJson("aws", [
-    ...regionArgs,
-    "ssm", "send-command",
-    "--instance-ids", instanceId,
-    "--document-name", "AWS-RunShellScript",
-    "--comment", "Runtime Asset Tracker read-only snapshot",
-    "--parameters", JSON.stringify({ commands: [command] }),
-    "--timeout-seconds", "120",
-    "--output", "json",
-  ], { timeout: 30_000 });
-  const commandId = sent.Command?.CommandId;
-  if (!commandId) throw new Error("Systems Manager 未返回 commandId");
+  const invocation = runAwsSsmCommand(regionArgs, instanceId, command, "Runtime Asset Tracker read-only snapshot");
+  const lines = String(invocation.StandardOutputContent || "").split(/\r?\n/);
+  const directMarker = lines.find((line) => line.startsWith("RAT1:"));
+  if (directMarker) return decodeSnapshotPayload(directMarker.slice(5));
 
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < 125_000) {
-    sleep(1_000);
-    let invocation;
-    try {
-      invocation = runJson("aws", [
-        ...regionArgs,
-        "ssm", "get-command-invocation",
-        "--command-id", commandId,
-        "--instance-id", instanceId,
-        "--output", "json",
-      ], { timeout: 20_000 });
-    } catch (error) {
-      if (/InvocationDoesNotExist/i.test(error.message)) continue;
-      throw error;
-    }
-    if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
-    if (invocation.Status !== "Success") throw new Error(invocation.StandardErrorContent || `SSM 快照状态：${invocation.Status}`);
-    const marker = String(invocation.StandardOutputContent || "").split(/\r?\n/).find((line) => line.startsWith("RAT1:"));
-    if (!marker) throw new Error("远程快照没有返回有效载荷");
-    return JSON.parse(gunzipSync(Buffer.from(marker.slice(5), "base64")).toString("utf8"));
+  const stagedMarker = lines.find((line) => line.startsWith("RAT2:"));
+  const stagedMatch = stagedMarker?.match(/^RAT2:(\d+):([a-f0-9]{64})$/);
+  if (!stagedMatch) throw new Error("远程快照没有返回有效载荷");
+  const expectedLength = Number(stagedMatch[1]);
+  if (!Number.isSafeInteger(expectedLength) || expectedLength <= 0 || expectedLength > 32 * 1024 * 1024) {
+    throw new Error("远程快照分块长度超出安全范围");
   }
-  throw new Error("远程快照超过 125 秒仍未完成");
+  const chunkSize = 16_000;
+  const chunks = [];
+  let primaryError;
+  let snapshot;
+  try {
+    for (let offset = 0; offset < expectedLength; offset += chunkSize) {
+      const count = Math.min(chunkSize, expectedLength - offset);
+      const chunkCommand = `python3 -c "p='${transportPath}';f=open(p,'rb');f.seek(${offset});print(f.read(${count}).decode('ascii'))"`;
+      const chunkInvocation = runAwsSsmCommand(regionArgs, instanceId, chunkCommand, "Runtime Asset Tracker snapshot chunk", 30);
+      const chunk = String(chunkInvocation.StandardOutputContent || "").trim();
+      if (chunk.length !== count) throw new Error(`远程快照分块 ${offset / chunkSize + 1} 长度不一致`);
+      chunks.push(chunk);
+    }
+    snapshot = decodeSnapshotPayload(chunks.join(""), { expectedLength, expectedSha256: stagedMatch[2] });
+  } catch (error) {
+    primaryError = error;
+  }
+  try {
+    const cleanupCommand = `python3 -c "import os;p='${transportPath}';os.path.exists(p) and os.remove(p)"`;
+    runAwsSsmCommand(regionArgs, instanceId, cleanupCommand, "Runtime Asset Tracker snapshot temp cleanup", 30);
+  } catch (cleanupError) {
+    if (!primaryError) primaryError = new Error(`远程快照已读取，但临时文件清理失败：${cleanupError.message}`);
+  }
+  if (primaryError) throw primaryError;
+  return snapshot;
 }
 
 function decodeSnapshot(output) {
   const marker = String(output || "").split(/\r?\n/).find((line) => line.startsWith("RAT1:"));
   if (!marker) throw new Error("远程快照没有返回有效载荷");
-  return JSON.parse(gunzipSync(Buffer.from(marker.slice(5), "base64")).toString("utf8"));
+  return decodeSnapshotPayload(marker.slice(5));
 }
 
 function collectSshSnapshot(sourceConfig) {

@@ -54,6 +54,8 @@ Copy `plugins/runtime-asset-tracker/assets/dashboard-config.example.json` to the
 
 AWS inventory requires authenticated AWS CLI access and online Systems Manager managed instances. SSH inventory uses a named OpenSSH profile with strict host-key verification. Configuration may contain non-secret identity metadata and credential-profile names, but must never contain private-key bytes, passwords, AWS access keys, session tokens, or browser cookies. GitHub inventory requires an authenticated GitHub CLI session.
 
+Systems Manager snapshots automatically use a checksum-verified chunked transport when their compressed payload exceeds the Run Command inline-output limit. The temporary remote payload is created with mode `0600` under `/tmp`, read in bounded chunks, verified by length and SHA-256, and then removed by exact path. Assets discovered on a project-bound EC2 environment inherit the registered GitHub repository as their global project; Docker Compose project names remain lineage metadata rather than creating or overriding registered projects.
+
 ## Repository layout
 
 - `.agents/plugins/marketplace.json` — Codex team marketplace catalog.

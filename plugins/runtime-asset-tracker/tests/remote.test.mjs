@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, remoteSnapshotScript, resolveExpiry } from "../mcp/remote.mjs";
+import { gzipSync } from "node:zlib";
+import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, remoteSnapshotScript, resolveExpiry } from "../mcp/remote.mjs";
 
 describe("remote read-only adapters", () => {
   it("keeps the EC2 collector free of cleanup and service mutation commands", () => {
@@ -25,6 +27,29 @@ describe("remote read-only adapters", () => {
     assert.equal(context.activeLink, "/home/ubuntu/apps/finportex");
     assert.equal(context.releaseRoot, "");
     assert.match(script, /"project":DEFAULT_PROJECT/);
+    assert.match(script, /return label\(labels, "project"\) or DEFAULT_PROJECT or fallback or "unknown"/);
+    assert.match(script, /"composeProject":labels\.get\("com\.docker\.compose\.project"\)/);
+  });
+
+  it("stages oversized SSM snapshots in a private file for checksum-verified chunk reads", () => {
+    const script = remoteSnapshotScript({ transportPath: "/tmp/runtime-asset-tracker-test.b64" });
+    assert.match(script, /len\(encoded_payload\) > 16000/);
+    assert.match(script, /os\.O_WRONLY \| os\.O_CREAT \| os\.O_TRUNC, 0o600/);
+    assert.match(script, /RAT2:%d:%s/);
+    assert.match(script, /hashlib\.sha256/);
+    const source = readFileSync(new URL("../mcp/remote.mjs", import.meta.url), "utf8");
+    assert.match(source, /const chunkSize = 16_000/);
+    assert.match(source, /os\.path\.exists\(p\) and os\.remove\(p\)/);
+    assert.doesNotMatch(source, /snapshot temp cleanup[^\n]+\brm\b/);
+  });
+
+  it("rejects truncated or corrupted chunked snapshot payloads", () => {
+    const value = { host: "staging", assets: [{ id: "asset-1" }] };
+    const encoded = gzipSync(JSON.stringify(value)).toString("base64");
+    const sha256 = createHash("sha256").update(encoded, "ascii").digest("hex");
+    assert.deepEqual(decodeSnapshotPayload(encoded, { expectedLength: encoded.length, expectedSha256: sha256 }), value);
+    assert.throws(() => decodeSnapshotPayload(encoded.slice(0, -4), { expectedLength: encoded.length, expectedSha256: sha256 }), /长度不一致/);
+    assert.throws(() => decodeSnapshotPayload(`${encoded.slice(0, -1)}A`, { expectedLength: encoded.length, expectedSha256: sha256 }), /校验失败/);
   });
 
   it("uses OpenSSH profile references without embedding private-key material", () => {

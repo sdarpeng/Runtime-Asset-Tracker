@@ -33722,10 +33722,11 @@ import { execFileSync as execFileSync2 } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statfsSync, statSync, writeFileSync } from "node:fs";
 import { homedir, hostname as hostname3, platform } from "node:os";
 import { dirname, join, parse as parse3, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID as randomUUID2 } from "node:crypto";
 
 // mcp/remote.mjs
 import { execFileSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 var remoteCache = /* @__PURE__ */ new Map();
 var CACHE_TTL_MS = 6e4;
@@ -33849,10 +33850,11 @@ function remoteSnapshotScript(sourceConfig = {}) {
     environment: sourceConfig.id || "remote",
     releaseRoot: sourceConfig.releaseRoot ?? "/home/ec2-user/apps/sparkling-cms-releases",
     activeLink: sourceConfig.activeLink ?? "/home/ec2-user/apps/sparkling-cms",
-    expiryWindowDays: Number(sourceConfig.expiryWindowDays || 7)
+    expiryWindowDays: Number(sourceConfig.expiryWindowDays || 7),
+    transportPath: sourceConfig.transportPath || ""
   }), "utf8").toString("base64");
   return String.raw`
-import base64, datetime, gzip, json, os, re, shutil, socket, subprocess
+import base64, datetime, gzip, hashlib, json, os, re, shutil, socket, subprocess
 
 PREFIX = "com.codex.runtime."
 CONTEXT = json.loads(base64.b64decode("${context}"))
@@ -33921,8 +33923,7 @@ def expiry_class(labels, created_at=None):
     return "retained", expires.isoformat()
 
 def project(labels, fallback=None):
-    fallback = fallback or DEFAULT_PROJECT
-    return label(labels, "project") or (labels or {}).get("com.docker.compose.project") or fallback or "unknown"
+    return label(labels, "project") or DEFAULT_PROJECT or fallback or "unknown"
 
 def classify(labels, active=False, protected=False, dangling=False, created_at=None):
     if active: return "active"
@@ -33985,7 +33986,7 @@ for item in container_details:
         "project": project(labels), "environment": label(labels, "environment") or "remote",
         "status": (item.get("State") or {}).get("Status") or "unknown", "classification": classify(labels, active=active, created_at=item.get("Created")),
         "sizeBytes": parse_bytes((container_row_map.get(item.get("Id")) or {}).get("Size")), "createdAt": item.get("Created"),
-        "labels": labels, "lineage":{"imageId":item.get("Image"),"mounts":[{"type":mount.get("Type"),"name":mount.get("Name"),"destination":mount.get("Destination")} for mount in (item.get("Mounts") or [])]}, "reason": "正在运行" if active else "已停止，等待归属确认"
+        "labels": labels, "lineage":{"composeProject":labels.get("com.docker.compose.project"),"imageId":item.get("Image"),"mounts":[{"type":mount.get("Type"),"name":mount.get("Name"),"destination":mount.get("Destination")} for mount in (item.get("Mounts") or [])]}, "reason": "正在运行" if active else "已停止，等待归属确认"
     })
 
 image_rows = json_lines(docker(["image", "ls", "--no-trunc", "--format", "{{json .}}"])) if docker_available else []
@@ -34048,7 +34049,7 @@ for item in volume_details:
         "id":name, "name":name, "type":"volume", "project":project(labels, name.split("_")[0]),
         "environment":label(labels, "environment") or "remote", "status":"mounted-running" if active else ("mounted-stopped" if mounted else "unmounted"),
         "classification":volume_class, "sizeBytes":volume_sizes.get(name, 0), "createdAt":item.get("CreatedAt"), "expiresAt":expires_at,
-        "labels":labels, "lineage":{"consumers":volume_consumers.get(name, []),"mountpoint":item.get("Mountpoint")}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
+        "labels":labels, "lineage":{"composeProject":labels.get("com.docker.compose.project"),"consumers":volume_consumers.get(name, []),"mountpoint":item.get("Mountpoint")}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
     })
 
 for row in json_lines(docker(["system", "df", "--format", "{{json .}}"])) if docker_available else []:
@@ -34092,28 +34093,18 @@ limits = {"container":200, "image":500, "volume":500, "worktree":60, "cache":10}
 assets = [item for kind in ["container", "image", "volume", "worktree", "cache"] for item in [entry for entry in assets if entry.get("type") == kind][:limits[kind]]]
 result = {"host":socket.gethostname(),"dockerAvailable":docker_available,"disk":{"totalBytes":usage.total,"freeBytes":usage.free},"summary":summary,"assets":assets,"events":events[:24],"activeRelease":active_release,"revision":revision}
 payload = gzip.compress(json.dumps(result, separators=(",",":"), ensure_ascii=False).encode("utf-8"))
-print("RAT1:" + base64.b64encode(payload).decode("ascii"))
+encoded_payload = base64.b64encode(payload).decode("ascii")
+transport_path = CONTEXT.get("transportPath") or ""
+if transport_path and len(encoded_payload) > 16000:
+    descriptor = os.open(transport_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+        handle.write(encoded_payload)
+    print("RAT2:%d:%s" % (len(encoded_payload), hashlib.sha256(encoded_payload.encode("ascii")).hexdigest()))
+else:
+    print("RAT1:" + encoded_payload)
 `;
 }
-function collectAwsSnapshot(sourceConfig) {
-  const instanceId = sourceConfig?.instanceId;
-  if (!instanceId) throw new Error("\u672A\u914D\u7F6E EC2 instanceId");
-  const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
-  const managed = runJson("aws", [
-    ...regionArgs,
-    "ssm",
-    "describe-instance-information",
-    "--filters",
-    `Key=InstanceIds,Values=${instanceId}`,
-    "--output",
-    "json"
-  ]);
-  const instance = managed.InstanceInformationList?.find((item) => item.InstanceId === instanceId);
-  if (!instance || instance.PingStatus !== "Online") {
-    throw new Error(`EC2 ${instanceId} \u672A\u901A\u8FC7 Systems Manager \u5728\u7EBF\uFF0C\u5F53\u524D\u4E0D\u80FD\u8BFB\u53D6 Docker \u8FD0\u884C\u6001`);
-  }
-  const encoded = Buffer.from(remoteSnapshotScript(sourceConfig), "utf8").toString("base64");
-  const command = `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`;
+function runAwsSsmCommand(regionArgs, instanceId, command, comment, timeoutSeconds = 120) {
   const sent = runJson("aws", [
     ...regionArgs,
     "ssm",
@@ -34123,18 +34114,19 @@ function collectAwsSnapshot(sourceConfig) {
     "--document-name",
     "AWS-RunShellScript",
     "--comment",
-    "Runtime Asset Tracker read-only snapshot",
+    comment,
     "--parameters",
     JSON.stringify({ commands: [command] }),
     "--timeout-seconds",
-    "120",
+    String(timeoutSeconds),
     "--output",
     "json"
   ], { timeout: 3e4 });
   const commandId = sent.Command?.CommandId;
   if (!commandId) throw new Error("Systems Manager \u672A\u8FD4\u56DE commandId");
   const startedAt = Date.now();
-  while (Date.now() - startedAt < 125e3) {
+  const waitLimit = (timeoutSeconds + 5) * 1e3;
+  while (Date.now() - startedAt < waitLimit) {
     sleep(1e3);
     let invocation;
     try {
@@ -34155,16 +34147,82 @@ function collectAwsSnapshot(sourceConfig) {
     }
     if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
     if (invocation.Status !== "Success") throw new Error(invocation.StandardErrorContent || `SSM \u5FEB\u7167\u72B6\u6001\uFF1A${invocation.Status}`);
-    const marker = String(invocation.StandardOutputContent || "").split(/\r?\n/).find((line) => line.startsWith("RAT1:"));
-    if (!marker) throw new Error("\u8FDC\u7A0B\u5FEB\u7167\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u8F7D\u8377");
-    return JSON.parse(gunzipSync(Buffer.from(marker.slice(5), "base64")).toString("utf8"));
+    return invocation;
   }
-  throw new Error("\u8FDC\u7A0B\u5FEB\u7167\u8D85\u8FC7 125 \u79D2\u4ECD\u672A\u5B8C\u6210");
+  throw new Error(`\u8FDC\u7A0B\u547D\u4EE4\u8D85\u8FC7 ${waitLimit / 1e3} \u79D2\u4ECD\u672A\u5B8C\u6210`);
+}
+function decodeSnapshotPayload(encoded, { expectedLength, expectedSha256 } = {}) {
+  const payload = String(encoded || "").trim();
+  if (Number.isFinite(expectedLength) && payload.length !== expectedLength) {
+    throw new Error(`\u8FDC\u7A0B\u5FEB\u7167\u5206\u5757\u957F\u5EA6\u4E0D\u4E00\u81F4\uFF1A\u9884\u671F ${expectedLength}\uFF0C\u5B9E\u9645 ${payload.length}`);
+  }
+  if (expectedSha256) {
+    const actualSha256 = createHash("sha256").update(payload, "ascii").digest("hex");
+    if (actualSha256 !== expectedSha256) throw new Error("\u8FDC\u7A0B\u5FEB\u7167\u5206\u5757\u6821\u9A8C\u5931\u8D25");
+  }
+  return JSON.parse(gunzipSync(Buffer.from(payload, "base64")).toString("utf8"));
+}
+function collectAwsSnapshot(sourceConfig) {
+  const instanceId = sourceConfig?.instanceId;
+  if (!instanceId) throw new Error("\u672A\u914D\u7F6E EC2 instanceId");
+  const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
+  const managed = runJson("aws", [
+    ...regionArgs,
+    "ssm",
+    "describe-instance-information",
+    "--filters",
+    `Key=InstanceIds,Values=${instanceId}`,
+    "--output",
+    "json"
+  ]);
+  const instance = managed.InstanceInformationList?.find((item) => item.InstanceId === instanceId);
+  if (!instance || instance.PingStatus !== "Online") {
+    throw new Error(`EC2 ${instanceId} \u672A\u901A\u8FC7 Systems Manager \u5728\u7EBF\uFF0C\u5F53\u524D\u4E0D\u80FD\u8BFB\u53D6 Docker \u8FD0\u884C\u6001`);
+  }
+  const transportPath = `/tmp/runtime-asset-tracker-${randomUUID()}.b64`;
+  const encoded = Buffer.from(remoteSnapshotScript({ ...sourceConfig, transportPath }), "utf8").toString("base64");
+  const command = `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`;
+  const invocation = runAwsSsmCommand(regionArgs, instanceId, command, "Runtime Asset Tracker read-only snapshot");
+  const lines = String(invocation.StandardOutputContent || "").split(/\r?\n/);
+  const directMarker = lines.find((line) => line.startsWith("RAT1:"));
+  if (directMarker) return decodeSnapshotPayload(directMarker.slice(5));
+  const stagedMarker = lines.find((line) => line.startsWith("RAT2:"));
+  const stagedMatch = stagedMarker?.match(/^RAT2:(\d+):([a-f0-9]{64})$/);
+  if (!stagedMatch) throw new Error("\u8FDC\u7A0B\u5FEB\u7167\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u8F7D\u8377");
+  const expectedLength = Number(stagedMatch[1]);
+  if (!Number.isSafeInteger(expectedLength) || expectedLength <= 0 || expectedLength > 32 * 1024 * 1024) {
+    throw new Error("\u8FDC\u7A0B\u5FEB\u7167\u5206\u5757\u957F\u5EA6\u8D85\u51FA\u5B89\u5168\u8303\u56F4");
+  }
+  const chunkSize = 16e3;
+  const chunks2 = [];
+  let primaryError;
+  let snapshot;
+  try {
+    for (let offset = 0; offset < expectedLength; offset += chunkSize) {
+      const count = Math.min(chunkSize, expectedLength - offset);
+      const chunkCommand = `python3 -c "p='${transportPath}';f=open(p,'rb');f.seek(${offset});print(f.read(${count}).decode('ascii'))"`;
+      const chunkInvocation = runAwsSsmCommand(regionArgs, instanceId, chunkCommand, "Runtime Asset Tracker snapshot chunk", 30);
+      const chunk = String(chunkInvocation.StandardOutputContent || "").trim();
+      if (chunk.length !== count) throw new Error(`\u8FDC\u7A0B\u5FEB\u7167\u5206\u5757 ${offset / chunkSize + 1} \u957F\u5EA6\u4E0D\u4E00\u81F4`);
+      chunks2.push(chunk);
+    }
+    snapshot = decodeSnapshotPayload(chunks2.join(""), { expectedLength, expectedSha256: stagedMatch[2] });
+  } catch (error51) {
+    primaryError = error51;
+  }
+  try {
+    const cleanupCommand = `python3 -c "import os;p='${transportPath}';os.path.exists(p) and os.remove(p)"`;
+    runAwsSsmCommand(regionArgs, instanceId, cleanupCommand, "Runtime Asset Tracker snapshot temp cleanup", 30);
+  } catch (cleanupError) {
+    if (!primaryError) primaryError = new Error(`\u8FDC\u7A0B\u5FEB\u7167\u5DF2\u8BFB\u53D6\uFF0C\u4F46\u4E34\u65F6\u6587\u4EF6\u6E05\u7406\u5931\u8D25\uFF1A${cleanupError.message}`);
+  }
+  if (primaryError) throw primaryError;
+  return snapshot;
 }
 function decodeSnapshot(output) {
   const marker = String(output || "").split(/\r?\n/).find((line) => line.startsWith("RAT1:"));
   if (!marker) throw new Error("\u8FDC\u7A0B\u5FEB\u7167\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u8F7D\u8377");
-  return JSON.parse(gunzipSync(Buffer.from(marker.slice(5), "base64")).toString("utf8"));
+  return decodeSnapshotPayload(marker.slice(5));
 }
 function collectSshSnapshot(sourceConfig) {
   const sshProfile = String(sourceConfig?.sshProfile || "").trim();
@@ -35275,7 +35333,7 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
       });
     }
   }
-  const token = randomUUID();
+  const token = randomUUID2();
   const preview = {
     token,
     source: selectedSource,
@@ -35294,7 +35352,7 @@ function appendCleanupEvent(event, details, environment = "local") {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
   const item = {
     schemaVersion: 1,
-    eventId: randomUUID(),
+    eventId: randomUUID2(),
     occurredAt: (/* @__PURE__ */ new Date()).toISOString(),
     event,
     host: hostname3(),
