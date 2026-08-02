@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { collectDashboard, createCleanupPreview, normalizeGithubRepository, parseBytes, registeredProjects } from "../mcp/inventory.mjs";
+import { collectDashboard, createCleanupPreview, normalizeGithubRepository, parseBytes, projectSourceConfigs, registeredProjects } from "../mcp/inventory.mjs";
 
 describe("runtime asset dashboard inventory", () => {
   it("parses Docker size units and clamps invalid negative values", () => {
@@ -26,6 +26,36 @@ describe("runtime asset dashboard inventory", () => {
   it("keeps the legacy single GitHub repository config compatible", () => {
     const projects = registeredProjects({ sources: [{ id: "github", kind: "github", repository: "owner/legacy" }] });
     assert.deepEqual(projects.map((item) => item.id), ["owner/legacy"]);
+  });
+
+  it("binds EC2 environments to their registered project", () => {
+    const config = {
+      projects: [
+        {
+          repository: "owner/cms",
+          environments: [
+            { id: "production", kind: "aws-ssm", instanceId: "i-cms-production" },
+            { id: "staging", kind: "aws-ssm", instanceId: "i-cms-staging" },
+          ],
+        },
+        { repository: "owner/finportex" },
+      ],
+      sources: [],
+    };
+    assert.deepEqual(projectSourceConfigs(config, "owner/cms").map((item) => item.id), ["local", "production", "staging", "github"]);
+    assert.deepEqual(projectSourceConfigs(config, "owner/finportex").map((item) => item.id), ["local", "github"]);
+  });
+
+  it("does not leak legacy EC2 sources into another project", () => {
+    const config = {
+      projects: [{ repository: "owner/cms" }, { repository: "owner/finportex" }],
+      sources: [
+        { id: "production", kind: "aws-ssm", instanceId: "i-cms-production" },
+        { id: "github", kind: "github", repository: "owner/cms" },
+      ],
+    };
+    assert.deepEqual(projectSourceConfigs(config, "owner/cms").map((item) => item.id), ["local", "production", "github"]);
+    assert.deepEqual(projectSourceConfigs(config, "owner/finportex").map((item) => item.id), ["local", "github"]);
   });
 
   it("returns the four dashboard capacity bands without mutating Docker", () => {

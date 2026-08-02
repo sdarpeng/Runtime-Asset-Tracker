@@ -226,9 +226,61 @@ export function registeredProjects(config = loadConfig()) {
       label: String(item.label || repository.split("/").at(-1)),
       aliases: [...new Set([...(item.aliases || []), item.id, item.label, repository.split("/").at(-1)].filter(Boolean).map(String))],
       gitRoots: [...new Set((item.gitRoots || []).filter(Boolean).map(String))],
+      environments: (item.environments || []).filter((source) => source?.id && source?.kind),
     });
   }
   return [...unique.values()];
+}
+
+function publicProjectOptions(projects) {
+  return projects.map(({ id, repository, label }) => ({ id, repository, label }));
+}
+
+function resolveProjectId(value, projects, config) {
+  const requested = value && value !== "all" ? canonicalProjectId(value, projects) : "";
+  if (projects.some((item) => item.id === requested)) return requested;
+  const legacyGithub = (config.sources || []).find((item) => item.kind === "github" || item.id === "github");
+  const legacyProject = canonicalProjectId(legacyGithub?.repository, projects);
+  if (projects.some((item) => item.id === legacyProject)) return legacyProject;
+  return projects[0]?.id || "unknown";
+}
+
+export function projectSourceConfigs(config, project) {
+  const projects = registeredProjects(config);
+  const selectedProject = resolveProjectId(project, projects, config);
+  const registered = projects.find((item) => item.id === selectedProject);
+  const legacyGithub = (config.sources || []).find((item) => item.kind === "github" || item.id === "github");
+  const legacyOwner = canonicalProjectId(legacyGithub?.repository, projects);
+  const configuredEnvironments = registered?.environments?.length
+    ? registered.environments
+    : selectedProject === legacyOwner
+      ? (config.sources || []).filter((item) => item.id !== "local" && item.id !== "github" && item.kind !== "github")
+      : [];
+  return [
+    { id: "local", kind: "local" },
+    ...configuredEnvironments,
+    { id: "github", kind: "github", repository: selectedProject },
+  ];
+}
+
+function projectSourceCards(config, projects, selectedProject, dockerAvailable) {
+  const project = projects.find((item) => item.id === selectedProject);
+  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform() === "win32" ? "D:\\" : "/");
+  return projectSourceConfigs(config, selectedProject).map((source) => {
+    if (source.id === "local") {
+      return { id: "local", label: `Local ${diskRoot}`, kind: "local", status: dockerAvailable ? "connected" : "unavailable", detail: project?.label || selectedProject };
+    }
+    if (source.id === "github") {
+      return { id: "github", label: "GitHub", kind: "github", status: "configured", detail: project?.repository || selectedProject };
+    }
+    return {
+      id: source.id,
+      label: source.displayName || (source.id === "production" ? "EC2 Production" : source.id === "staging" ? "EC2 Staging" : source.label || source.id),
+      kind: "server",
+      status: "configured",
+      detail: source.label || project?.label || selectedProject,
+    };
+  });
 }
 
 function canonicalProjectId(value, projects) {
@@ -354,76 +406,59 @@ function aggregate(type, assets, fallback = {}) {
   };
 }
 
-export function collectDashboard({ scope = "environment", source = "local", project = "all" } = {}) {
-  const cacheKey = `${scope}:${source}:${project}`;
+export function collectDashboard({ scope = "project", source = "local", project = "all" } = {}) {
+  const config = loadConfig();
+  const projects = registeredProjects(config);
+  const selectedProject = resolveProjectId(project, projects, config);
+  const sourceConfigs = projectSourceConfigs(config, selectedProject);
+  const selectedSource = sourceConfigs.some((item) => item.id === source) ? source : "local";
+  const cacheKey = `${selectedSource}:${selectedProject}`;
   const cached = dashboardCache.get(cacheKey);
   if (cached && Date.now() - cached.createdAt < 20_000) return { ...cached.value, generatedAt: new Date().toISOString(), cached: true };
-  if (source !== "local") {
-    const remoteConfig = loadConfig();
-    const projectOptions = registeredProjects(remoteConfig);
-    const remoteDiskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform() === "win32" ? "D:\\" : "/");
-    const configuredSources = new Map((remoteConfig.sources || []).map((item) => [item.id, item]));
-    const sources = [
-      { id: "local", label: `Local ${remoteDiskRoot}`, kind: "local", status: "connected", detail: hostname() },
-      { id: "production", label: "EC2 Production", kind: "server", status: configuredSources.has("production") ? "configured" : "not-configured", detail: configuredSources.get("production")?.label || "等待配置" },
-      { id: "staging", label: "EC2 Staging", kind: "server", status: configuredSources.has("staging") ? "configured" : "not-configured", detail: configuredSources.get("staging")?.label || "等待配置" },
-      { id: "github", label: "GitHub", kind: "github", status: configuredSources.has("github") ? "configured" : "not-configured", detail: projectOptions.length ? `${projectOptions.length} 个注册仓库` : "等待配置" },
-    ];
-    return collectRemoteDashboard({ source, scope, project, config: remoteConfig, sources });
+  const sources = projectSourceCards(config, projects, selectedProject, true);
+  if (selectedSource !== "local") {
+    const scopedConfig = { ...config, sources: sourceConfigs.filter((item) => item.id !== "local") };
+    return collectRemoteDashboard({ source: selectedSource, scope: "project", project: selectedProject, config: scopedConfig, sources });
   }
-  const config = loadConfig();
-  const projectOptions = registeredProjects(config);
   const docker = dockerInventory();
-  const worktrees = worktreeInventory(config, projectOptions);
-  const allAssets = [...worktrees, ...docker.assets].map((asset) => ({ ...asset, project: canonicalProjectId(asset.project, projectOptions) }));
-  const sourceAssets = source === "local" ? allAssets : [];
-  const filtered = project === "all" ? sourceAssets : sourceAssets.filter((asset) => asset.project === project);
+  const worktrees = worktreeInventory(config, projects);
+  const allAssets = [...worktrees, ...docker.assets].map((asset) => ({ ...asset, project: canonicalProjectId(asset.project, projects) }));
+  const filtered = allAssets.filter((asset) => asset.project === selectedProject);
   const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform() === "win32" ? "D:\\" : "/");
   let disk = { totalBytes: 0, freeBytes: 0 };
   try {
     const stats = statfsSync(diskRoot);
     disk = { totalBytes: Number(stats.blocks) * Number(stats.bsize), freeBytes: Number(stats.bavail) * Number(stats.bsize) };
   } catch { /* disk metrics are optional */ }
-  const summary = docker.summary;
   const bars = [
     aggregate("worktree", filtered),
-    aggregate("image", filtered, summary.Images),
-    aggregate("volume", filtered, summary["Local Volumes"]),
+    aggregate("image", filtered),
+    aggregate("volume", filtered),
     {
       type: "cache",
-      totalBytes: Number(summary["Build Cache"]?.sizeBytes || 0),
-      count: Number(summary["Build Cache"]?.totalCount || 0),
+      totalBytes: 0,
+      count: 0,
       activeBytes: 0,
       protectedBytes: 0,
-      retainedBytes: Math.max(0, Number(summary["Build Cache"]?.sizeBytes || 0) - Number(summary["Build Cache"]?.reclaimableBytes || 0)),
-      reclaimableBytes: Number(summary["Build Cache"]?.reclaimableBytes || 0),
+      retainedBytes: 0,
+      reclaimableBytes: 0,
       unit: "bytes",
     },
   ];
-  const projects = projectOptions.length
-    ? projectOptions.map((item) => item.id)
-    : [...new Set(allAssets.map((asset) => asset.project).filter((value) => value && value !== "unknown"))].sort();
-  const configuredSources = new Map((config.sources || []).map((item) => [item.id, item]));
-  const sources = [
-    { id: "local", label: `Local ${diskRoot}`, kind: "local", status: docker.available ? "connected" : "unavailable", detail: hostname() },
-    { id: "production", label: "EC2 Production", kind: "server", status: configuredSources.has("production") ? "configured" : "not-configured", detail: configuredSources.get("production")?.label || "等待配置" },
-    { id: "staging", label: "EC2 Staging", kind: "server", status: configuredSources.has("staging") ? "configured" : "not-configured", detail: configuredSources.get("staging")?.label || "等待配置" },
-    { id: "github", label: "GitHub", kind: "github", status: configuredSources.has("github") ? "configured" : "not-configured", detail: projectOptions.length ? `${projectOptions.length} 个注册仓库` : "等待配置" },
-  ];
   const dashboard = {
     generatedAt: new Date().toISOString(),
-    scope,
-    selectedSource: source,
-    selectedProject: project,
+    scope: "project",
+    selectedSource,
+    selectedProject,
     host: hostname(),
     dockerAvailable: docker.available,
     disk,
     bars,
-    sources,
-    projects,
-    projectOptions,
+    sources: projectSourceCards(config, projects, selectedProject, docker.available),
+    projects: projects.map((item) => item.id),
+    projectOptions: publicProjectOptions(projects),
     assets: filtered.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
-    events: readLedger(),
+    events: readLedger().filter((event) => canonicalProjectId(event.project, projects) === selectedProject),
     schedule: config.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" },
   };
   dashboardCache.set(cacheKey, { createdAt: Date.now(), value: dashboard });
@@ -432,11 +467,12 @@ export function collectDashboard({ scope = "environment", source = "local", proj
 
 export function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"] } = {}) {
   const dashboard = collectDashboard({ source, project });
-  if (source !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${source} 快照不可用`);
+  const selectedSource = dashboard.selectedSource || source;
+  if (selectedSource !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${selectedSource} 快照不可用`);
   const allowlist = dashboard.assets.filter((asset) => {
     if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
-    if (source === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
-    return source === "github"
+    if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
+    return selectedSource === "github"
       ? ["artifact", "actions_cache"].includes(asset.type)
       : ["image", "volume", "cache"].includes(asset.type);
   }).map((asset) => ({
@@ -448,7 +484,7 @@ export function createCleanupPreview({ source = "local", project = "all", types 
     reason: asset.reason,
     remoteKind: asset.remoteKind,
   }));
-  if (source === "local" && types.includes("cache")) {
+  if (selectedSource === "local" && types.includes("cache")) {
     const cache = dashboard.bars.find((item) => item.type === "cache");
     if (Number(cache?.reclaimableBytes || 0) > 0) {
       allowlist.push({
@@ -464,11 +500,11 @@ export function createCleanupPreview({ source = "local", project = "all", types 
   const token = randomUUID();
   const preview = {
     token,
-    source,
+    source: selectedSource,
     project: dashboard.selectedProject || project,
-    policy: source === "github"
+    policy: selectedSource === "github"
       ? "只删除已过期制品、已关闭 PR 的缓存和超过 30 天未访问的缓存"
-      : source === "local" ? "只删除未被任何容器引用的悬空/显式 disposable 镜像、未挂载且显式 disposable 的卷，以及 Docker 未使用的 Build Cache"
+      : selectedSource === "local" ? "只删除未被任何容器引用的悬空/显式 disposable 镜像、未挂载且显式 disposable 的卷，以及 Docker 未使用的 Build Cache"
         : "只删除复核后仍未被容器引用的悬空/显式 disposable 镜像、未挂载且显式 disposable 的卷，以及 Docker 未使用的 Build Cache；容器和 release 永不进入清单",
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
@@ -509,7 +545,7 @@ export function executeCleanup({ token, confirmed = false }) {
   if (!confirmed) throw new Error("Cleanup requires confirmation for the exact preview allowlist.");
   if (preview.source !== "local") {
     const config = loadConfig();
-    const baseSourceConfig = (config.sources || []).find((item) => item.id === preview.source);
+    const baseSourceConfig = projectSourceConfigs(config, preview.project).find((item) => item.id === preview.source);
     const sourceConfig = preview.source === "github" && preview.project && preview.project !== "all"
       ? { ...baseSourceConfig, repository: preview.project }
       : baseSourceConfig;
@@ -525,7 +561,7 @@ export function executeCleanup({ token, confirmed = false }) {
     return cleanup;
   }
   dashboardCache.clear();
-  const current = collectDashboard({ source: "local" });
+  const current = collectDashboard({ source: "local", project: preview.project });
   const safeAssets = new Map(current.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
   const currentCache = current.bars.find((item) => item.type === "cache");
   if (Number(currentCache?.reclaimableBytes || 0) > 0) {

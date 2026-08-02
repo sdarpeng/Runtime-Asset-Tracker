@@ -121,7 +121,7 @@ describe("remote read-only adapters", () => {
     assert.match(source, /disabled=\{!snapshotOnline \|\| loading\} onClick=\{requestPreview\}/);
   });
 
-  it("renders GitHub delivery categories and selects Pull Requests by default", () => {
+  it("uses one global project selector and renders GitHub delivery categories", () => {
     const source = readFileSync(new URL("../ui/src/App.jsx", import.meta.url), "utf8");
     assert.match(source, /pull_request: \{ label: "Pull Requests"/);
     assert.match(source, /artifact: \{ label: "Actions Artifacts"/);
@@ -129,10 +129,14 @@ describe("remote read-only adapters", () => {
     assert.match(source, /workflow_run: \{ label: "Workflow Runs"/);
     assert.match(source, /next === "github" \? "pull_request" : "image"/);
     assert.match(source, /Open \/ Draft PR/);
-    assert.match(source, /className="repository-toolbar card"/);
-    assert.match(source, /className="repository-picker"/);
+    assert.doesNotMatch(source, /className="repository-toolbar card"/);
+    assert.doesNotMatch(source, /className="repository-picker"/);
+    assert.doesNotMatch(source, /scope-toggle/);
+    assert.doesNotMatch(source, /selectScope/);
     assert.doesNotMatch(source, /repository-metric/);
-    assert.match(source, />注册项目</);
+    assert.match(source, />当前项目（全局）</);
     assert.match(source, /projectOptions\.map/);
+    assert.match(source, /setSource\("local"\)/);
+    assert.doesNotMatch(source, /setProject\("all"\)/);
   });
 });

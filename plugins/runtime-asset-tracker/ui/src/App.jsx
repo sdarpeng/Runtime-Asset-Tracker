@@ -110,7 +110,7 @@ const bridge = createBridge();
 async function callTool(name, args = {}) {
   if (bridge) return bridge.call(name, args);
   const routes = {
-    open_runtime_dashboard: ["GET", `/api/dashboard?scope=${encodeURIComponent(args.scope || "environment")}&source=${encodeURIComponent(args.source || "local")}&project=${encodeURIComponent(args.project || "all")}`],
+    open_runtime_dashboard: ["GET", `/api/dashboard?scope=${encodeURIComponent(args.scope || "project")}&source=${encodeURIComponent(args.source || "local")}&project=${encodeURIComponent(args.project || "all")}`],
     preview_cleanup: ["POST", "/api/cleanup-preview"],
     execute_cleanup: ["POST", "/api/cleanup-execute"],
     save_cleanup_schedule: ["POST", "/api/schedule"],
@@ -210,7 +210,6 @@ function ScheduleModal({ schedule, onClose, onSave }) {
 
 export function App() {
   const [dashboard, setDashboard] = useState(null);
-  const [scope, setScope] = useState("environment");
   const [source, setSource] = useState("local");
   const [project, setProject] = useState("all");
   const [selectedType, setSelectedType] = useState("image");
@@ -222,7 +221,11 @@ export function App() {
 
   const acceptResult = useCallback((result) => {
     const content = result?.structuredContent || result;
-    if (content?.dashboard) setDashboard(content.dashboard);
+    if (content?.dashboard) {
+      setDashboard(content.dashboard);
+      if (content.dashboard.selectedSource) setSource(content.dashboard.selectedSource);
+      if (content.dashboard.selectedProject) setProject(content.dashboard.selectedProject);
+    }
     if (content?.preview) setPreview(content.preview);
     if (content?.schedule) setDashboard((current) => current ? { ...current, schedule: content.schedule } : current);
     if (content?.cleanup) {
@@ -236,35 +239,47 @@ export function App() {
   const refresh = useCallback(async (next = {}) => {
     setLoading(true);
     try {
-      const result = await callTool("open_runtime_dashboard", { scope: next.scope || scope, source: next.source || source, project: next.project || project });
+      const result = await callTool("open_runtime_dashboard", { scope: "project", source: next.source || source, project: next.project || project });
       acceptResult(result);
     } catch (error) {
       setNotice(`刷新失败：${error.message || error}`);
     } finally { setLoading(false); }
-  }, [acceptResult, project, scope, source]);
+  }, [acceptResult, project, source]);
 
   useEffect(() => { refresh(); }, []);
   useEffect(() => bridge?.onResult(acceptResult), [acceptResult]);
 
-  const selectScope = (next) => { setScope(next); refresh({ scope: next }); };
   const selectSource = (next) => {
     setSource(next);
-    setProject("all");
     setSelectedType(next === "github" ? "pull_request" : "image");
     if (next !== "local") {
       setDashboard((current) => current ? {
         ...current,
         selectedSource: next,
-        selectedProject: "all",
+        selectedProject: project,
         host: "等待远程快照",
         bars: [],
         assets: [],
         events: [],
       } : current);
     }
-    refresh({ source: next, project: "all" });
+    refresh({ source: next, project });
   };
-  const selectProject = (next) => { setProject(next); refresh({ project: next }); };
+  const selectProject = (next) => {
+    setProject(next);
+    setSource("local");
+    setSelectedType("image");
+    setDashboard((current) => current ? {
+      ...current,
+      selectedProject: next,
+      selectedSource: "local",
+      sources: current.sources.filter((item) => item.id === "local" || item.id === "github"),
+      bars: [],
+      assets: [],
+      events: [],
+    } : current);
+    refresh({ project: next, source: "local" });
+  };
 
   const visibleAssets = useMemo(() => (dashboard?.assets || []).filter((asset) => asset.type === selectedType && `${asset.name} ${asset.project} ${asset.status}`.toLowerCase().includes(query.toLowerCase())).slice(0, 18), [dashboard, query, selectedType]);
   const totalFootprint = (dashboard?.bars || []).filter((item) => item.unit !== "count").reduce((sum, item) => sum + Number(item.totalBytes || 0), 0);
@@ -298,8 +313,7 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><HardDrives size={26} weight="duotone" /></span><span><strong>Runtime Assets</strong><small>跨项目运行资产台</small></span></div>
-        <div className="scope-toggle"><button className={scope === "environment" ? "active" : ""} onClick={() => selectScope("environment")} type="button">基于环境</button><button className={scope === "project" ? "active" : ""} onClick={() => selectScope("project")} type="button">基于项目</button></div>
-        {scope === "project" && <label className="project-select"><span>注册项目</span><select value={effectiveProject} onChange={(event) => selectProject(event.target.value)}><option value="all">全部注册项目</option>{projectOptions.map((item) => <option value={item.id} key={item.id}>{item.label} · {item.repository}</option>)}</select><CaretDown size={16} /></label>}
+        <label className="project-select"><span>当前项目（全局）</span><select aria-label="当前项目" value={effectiveProject} onChange={(event) => selectProject(event.target.value)}>{projectOptions.map((item) => <option value={item.id} key={item.id}>{item.label} · {item.repository}</option>)}</select><CaretDown size={16} /></label>
         <nav className="source-list" aria-label="数据源">
           {dashboard?.sources?.map((item) => {
             const Icon = sourceIcons[item.kind];
@@ -311,11 +325,9 @@ export function App() {
 
       <main className="dashboard">
         <header className="topbar">
-          <div><div className="eyebrow">RUNTIME ASSET TRACKER</div><h1>运行资产控制台</h1><p>{selectedSource?.label || "Local"} · {dashboard?.host || "正在连接"}</p></div>
+          <div><div className="eyebrow">RUNTIME ASSET TRACKER</div><h1>运行资产控制台</h1><p>{selectedProjectOption?.label || effectiveProject} · {selectedSource?.label || "Local"} · {dashboard?.host || "正在连接"}</p></div>
           <div className="top-actions"><span className={`live-pill ${loading ? "loading" : ""} ${!snapshotOnline ? "offline" : ""}`}><i />{loading ? "正在刷新" : snapshotOnline ? (source === "local" ? "实时账本在线" : "安全连接在线") : "快照不可用"}</span><button className="icon-button" onClick={() => refresh()} type="button" aria-label="刷新"><ArrowClockwise size={20} className={loading ? "spin" : ""} /></button></div>
         </header>
-
-        {source === "github" && <section className="repository-toolbar card" aria-label="GitHub 仓库上下文"><div className="repository-context"><span className="repository-mark"><GithubLogo size={22} weight="fill" /></span><span><small>当前 GitHub 仓库</small><strong>{selectedProjectOption?.label || effectiveProject}</strong><em>{selectedProjectOption?.repository || effectiveProject}</em></span></div><label className="repository-picker"><span>切换仓库</span><select aria-label="当前 GitHub 仓库" value={effectiveProject} onChange={(event) => selectProject(event.target.value)}>{projectOptions.map((item) => <option value={item.id} key={item.id}>{item.label} · {item.repository}</option>)}</select><CaretDown size={16} /></label></section>}
 
         <section className="metric-grid">
           <article><span className="metric-icon"><HardDrives size={22} /></span><div><small>{source === "github" ? "GitHub 交付资产" : "逻辑资产规模"}</small><strong>{source === "github" ? `${dashboard?.assets?.length || 0} 项` : formatBytes(totalFootprint)}</strong><span>{source === "github" ? `${formatBytes(totalFootprint)} 制品与缓存` : `${dashboard?.assets?.length || 0} 项已识别资产`}</span></div></article>

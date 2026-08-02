@@ -8,7 +8,25 @@
       "repository": "owner/repository",
       "label": "My Project",
       "aliases": ["my-project"],
-      "gitRoots": ["D:\\MyProject"]
+      "gitRoots": ["D:\\MyProject"],
+      "environments": [
+        {
+          "id": "production",
+          "kind": "aws-ssm",
+          "displayName": "EC2 Production",
+          "label": "My Project Production",
+          "region": "us-east-2",
+          "instanceId": "i-example-production"
+        },
+        {
+          "id": "staging",
+          "kind": "aws-ssm",
+          "displayName": "EC2 Staging",
+          "label": "My Project Staging",
+          "region": "us-east-2",
+          "instanceId": "i-example-staging"
+        }
+      ]
     },
     {
       "id": "owner/another-repository",
@@ -16,27 +34,7 @@
       "label": "Another Project"
     }
   ],
-  "sources": [
-    {
-      "id": "production",
-      "kind": "aws-ssm",
-      "label": "Production account / region",
-      "region": "us-east-2",
-      "instanceId": "i-example"
-    },
-    {
-      "id": "staging",
-      "kind": "aws-ssm",
-      "label": "Staging account / region",
-      "region": "us-east-2",
-      "instanceId": "i-example"
-    },
-    {
-      "id": "github",
-      "kind": "github",
-      "repository": "owner/repository"
-    }
-  ],
+  "sources": [],
   "schedule": {
     "enabled": false,
     "cadence": "weekly",

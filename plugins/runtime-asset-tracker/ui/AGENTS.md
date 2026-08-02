@@ -8,6 +8,8 @@ When implementing from a selected generated mock, treat that image as the source
 
 Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts/prepare-sites-build.mjs`, and `tests/sites-worker.test.mjs` intact so the same local prototype can be handed to Sites. Before a Sites handoff, run `npm run build` and `npm run test:sites`; the build must leave `dist/client/index.html`, `dist/server/index.js`, and `dist/.openai/hosting.json`.
 
-Registered projects are authoritative GitHub repositories. Worktrees and Docker assets belong to those projects but must never create project choices by themselves. On the GitHub page, expose repository switching in a dedicated context toolbar above the KPI cards; never embed a select inside an individual KPI card.
+Registered projects are authoritative GitHub repositories. The global project selector is the highest UI context and must always remain visible beneath the product brand. Worktrees and Docker assets belong to those projects but must never create project choices by themselves. Remove environment/project mode tabs and do not add a second repository selector on the GitHub view.
+
+Derive Local, EC2, and GitHub sources from the selected project. Never show, query, preview cleanup for, or mutate an EC2 environment owned by another project. A project without a registered EC2 environment shows only its registered Local and GitHub sources.
 
 The GitHub source is a delivery view, not a Docker host. Its four persistent categories are Pull Requests, Actions Artifacts, Actions Cache, and Workflow Runs. Show PR lifecycle state and never reuse Docker Images or Docker Volumes labels on this source.

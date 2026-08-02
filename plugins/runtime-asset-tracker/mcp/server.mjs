@@ -129,7 +129,7 @@ async function startHttp() {
       }
       if (request.method === "GET" && url.pathname === "/api/dashboard") {
         sendJson(response, 200, { dashboard: collectDashboard({
-          scope: url.searchParams.get("scope") || "environment",
+          scope: url.searchParams.get("scope") || "project",
           source: url.searchParams.get("source") || "local",
           project: url.searchParams.get("project") || "all",
         }) });
