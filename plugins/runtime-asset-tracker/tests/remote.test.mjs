@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { awsBuildCacheCleanupScript, buildBars, classifyGithubAsset, collectRemoteDashboard, remoteSnapshotScript } from "../mcp/remote.mjs";
+import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, remoteSnapshotScript } from "../mcp/remote.mjs";
 
 describe("remote read-only adapters", () => {
   it("keeps the EC2 collector free of cleanup and service mutation commands", () => {
@@ -21,10 +21,53 @@ describe("remote read-only adapters", () => {
     assert.equal(cache.count, 999);
   });
 
+  it("classifies only unreferenced dangling or disposable images as safely reclaimable", () => {
+    assert.equal(classifyDockerImage({ referenced: true, dangling: true }), "active");
+    assert.equal(classifyDockerImage({ dangling: true }), "reclaimable");
+    assert.equal(classifyDockerImage({ labels: { "com.codex.runtime.disposable": "true" } }), "reclaimable");
+    assert.equal(classifyDockerImage({ labels: { "com.codex.runtime.disposable": "false" }, dangling: true }), "protected");
+    assert.equal(classifyDockerImage({ dangling: false }), "retained");
+  });
+
+  it("requires zero references and an explicit disposable label for safe volume cleanup", () => {
+    const disposable = { "com.codex.runtime.disposable": "true" };
+    assert.equal(classifyDockerVolume({ labels: disposable, referenced: true }), "active");
+    assert.equal(classifyDockerVolume({ labels: disposable }), "reclaimable");
+    assert.equal(classifyDockerVolume({ labels: disposable, protectedName: true }), "protected");
+    assert.equal(classifyDockerVolume({}), "review");
+  });
+
+  it("maps exact safe image unique bytes and volume bytes into their chart segments", () => {
+    const bars = buildBars([
+      { type: "image", classification: "reclaimable", sizeBytes: 125 },
+      { type: "image", classification: "retained", sizeBytes: 75 },
+      { type: "volume", classification: "reclaimable", sizeBytes: 40 },
+      { type: "volume", classification: "protected", sizeBytes: 60 },
+    ], {
+      Images: { totalCount: 2, sizeBytes: 250, reclaimableBytes: 200 },
+      "Local Volumes": { totalCount: 2, sizeBytes: 100, reclaimableBytes: 40 },
+    });
+    assert.equal(bars.find((item) => item.type === "image").reclaimableBytes, 125);
+    assert.equal(bars.find((item) => item.type === "volume").reclaimableBytes, 40);
+  });
+
   it("limits EC2 cleanup to unused Build Cache", () => {
     const script = awsBuildCacheCleanupScript();
     assert.match(script, /docker builder prune --all --force/);
     assert.doesNotMatch(script, /system prune|image prune|volume prune|container prune|\brm\b/i);
+  });
+
+  it("uses exact non-force image and volume removal with a second reference check", () => {
+    const script = awsDockerCleanupScript([
+      { type: "image", id: "sha256:abc", name: "dangling", sizeBytes: 12 },
+      { type: "volume", id: "temporary_cache", name: "temporary_cache", sizeBytes: 34 },
+    ]);
+    assert.match(script, /ancestor=/);
+    assert.match(script, /volume=/);
+    assert.match(script, /\["image", "rm", identifier\]/);
+    assert.match(script, /\["volume", "rm", identifier\]/);
+    assert.match(script, /com\.codex\.runtime\./);
+    assert.doesNotMatch(script, /system.+prune|image.+prune|volume.+prune|\["image", "rm", "--force"|\["volume", "rm", "--force"/i);
   });
 
   it("only classifies expired artifacts, closed PR caches, and 30-day stale caches as safe", () => {

@@ -17,7 +17,7 @@ describe("runtime asset dashboard inventory", () => {
     assert.ok(Array.isArray(dashboard.events));
   });
 
-  it("creates an exact preview containing only explicitly disposable assets", () => {
+  it("creates an exact preview containing only assets that passed the safe classifier", () => {
     const preview = createCleanupPreview();
     assert.ok(preview.token);
     assert.ok(Array.isArray(preview.allowlist));

@@ -91,6 +91,24 @@ export function buildBars(assets, summary = {}) {
   ];
 }
 
+function runtimeLabel(labels, name) {
+  return labels?.[`com.codex.runtime.${name}`];
+}
+
+export function classifyDockerImage({ labels = {}, referenced = false, dangling = false } = {}) {
+  if (referenced) return "active";
+  if (runtimeLabel(labels, "retention") === "protected" || runtimeLabel(labels, "disposable") === "false") return "protected";
+  if (runtimeLabel(labels, "disposable") === "true" || dangling) return "reclaimable";
+  return "retained";
+}
+
+export function classifyDockerVolume({ labels = {}, referenced = false, protectedName = false } = {}) {
+  if (referenced) return "active";
+  if (protectedName || runtimeLabel(labels, "retention") === "protected" || runtimeLabel(labels, "disposable") === "false") return "protected";
+  if (runtimeLabel(labels, "disposable") === "true") return "reclaimable";
+  return "review";
+}
+
 export function remoteSnapshotScript() {
   return String.raw`
 import base64, datetime, gzip, json, os, re, shutil, socket, subprocess
@@ -130,7 +148,7 @@ def parse_bytes(value):
     return int(float(match.group(1)) * units.get((match.group(2) or "B").upper(), 1))
 
 def safe_labels(labels):
-    return {k:v for k,v in (labels or {}).items() if k.startswith(PREFIX) or k.startswith("com.docker.compose.") or k == "org.opencontainers.image.revision"}
+    return {k:v for k,v in (labels or {}).items() if k.startswith(PREFIX) or k.startswith("com.docker.compose.") or k in ["org.opencontainers.image.revision", "org.opencontainers.image.source"]}
 
 def label(labels, name):
     return (labels or {}).get(PREFIX + name)
@@ -160,6 +178,24 @@ referenced_images = {item.get("Image") for item in container_details if item.get
 all_mounted = {mount.get("Name") for item in container_details for mount in (item.get("Mounts") or []) if mount.get("Type") == "volume"}
 active_mounted = {mount.get("Name") for item in container_details if (item.get("State") or {}).get("Running") for mount in (item.get("Mounts") or []) if mount.get("Type") == "volume"}
 
+df_verbose = docker(["system", "df", "-v"]) if docker_available else ""
+def section(text, start_marker, end_marker):
+    start = text.find(start_marker)
+    if start < 0: return ""
+    body = text[start + len(start_marker):]
+    end = body.find(end_marker)
+    return body if end < 0 else body[:end]
+
+image_unique_sizes = {}
+for line in section(df_verbose, "Images space usage:", "Containers space usage:").splitlines()[1:]:
+    parts = re.split(r"\s{2,}", line.strip())
+    if len(parts) >= 8: image_unique_sizes[parts[2]] = parse_bytes(parts[6])
+
+volume_sizes = {}
+for line in section(df_verbose, "Local Volumes space usage:", "Build cache usage:").splitlines()[1:]:
+    parts = re.split(r"\s{2,}", line.strip())
+    if len(parts) >= 3: volume_sizes[parts[0]] = parse_bytes(parts[2])
+
 container_row_map = {row.get("ID"): row for row in container_rows}
 for item in container_details:
     labels = safe_labels((item.get("Config") or {}).get("Labels"))
@@ -181,9 +217,7 @@ for row in image_rows:
     ref = "%s:%s" % (row.get("Repository") or "<none>", row.get("Tag") or "<none>")
     if ref not in entry["tags"]: entry["tags"].append(ref)
 
-governed = set(referenced_images)
-for value in ["true", "false"]:
-    governed.update(filter(None, docker(["image", "ls", "--no-trunc", "--filter", "label=" + PREFIX + "disposable=" + value, "--format", "{{.ID}}"]).splitlines()))
+governed = set(image_map.keys())
 image_details = {}
 for ids in [list(governed)[start:start+30] for start in range(0, len(governed), 30)]:
     text = docker(["image", "inspect"] + ids)
@@ -196,12 +230,18 @@ for image_id, entry in image_map.items():
     labels = safe_labels((item.get("Config") or {}).get("Labels"))
     tags = entry["tags"]
     dangling = not tags or all(tag.startswith("<none>") for tag in tags)
-    active = image_id in running_images
+    running = image_id in running_images
+    referenced = image_id in referenced_images
+    protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
+    disposable = label(labels, "disposable") == "true"
+    image_class = "active" if referenced else ("protected" if protected else ("reclaimable" if disposable or dangling else "retained"))
+    unique_size = next((size for short_id, size in image_unique_sizes.items() if short_id in image_id), 0)
     assets.append({
         "id":image_id, "name":tags[0] if tags else image_id[:19], "type":"image", "project":project(labels, (tags[0].split(":")[0] if tags else "unknown")),
-        "environment":label(labels, "environment") or "remote", "status":"in-use" if image_id in referenced_images else "unused",
-        "classification":classify(labels, active=active, dangling=dangling), "sizeBytes":parse_bytes(entry["row"].get("Size")),
-        "createdAt":entry["row"].get("CreatedAt"), "labels":{}, "reason":"活动容器镜像" if active else "未引用但没有可丢弃标签"
+        "environment":label(labels, "environment") or "remote", "status":"in-use" if running else ("referenced-stopped" if referenced else ("dangling" if dangling else "unused")),
+        "classification":image_class, "sizeBytes":unique_size,
+        "createdAt":item.get("Created") or entry["row"].get("CreatedAt"), "labels":{},
+        "reason":"被运行容器引用" if running else ("仍被已停止容器引用" if referenced else ("保留策略明确保护" if protected else ("未引用且明确可丢弃" if disposable else ("未被任何容器引用的悬空镜像" if dangling else "未引用但没有可丢弃标签"))))
     })
 
 volume_rows = json_lines(docker(["volume", "ls", "--format", "{{json .}}"])) if docker_available else []
@@ -216,12 +256,16 @@ for item in volume_details:
     name = item.get("Name") or "unknown"
     labels = safe_labels(item.get("Labels"))
     active = name in active_mounted
+    mounted = name in all_mounted
     protected = bool(protected_pattern.search(name))
+    policy_protected = protected or label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
+    disposable = label(labels, "disposable") == "true"
+    volume_class = "active" if mounted else ("protected" if policy_protected else ("reclaimable" if disposable else "review"))
     assets.append({
         "id":name, "name":name, "type":"volume", "project":project(labels, name.split("_")[0]),
-        "environment":label(labels, "environment") or "remote", "status":"mounted-running" if active else ("mounted-stopped" if name in all_mounted else "unmounted"),
-        "classification":classify(labels, active=active, protected=protected), "sizeBytes":0, "createdAt":item.get("CreatedAt"),
-        "labels":{}, "reason":"名称表明可能包含业务数据" if protected else ("正在被运行容器挂载" if active else "卷默认保护")
+        "environment":label(labels, "environment") or "remote", "status":"mounted-running" if active else ("mounted-stopped" if mounted else "unmounted"),
+        "classification":volume_class, "sizeBytes":volume_sizes.get(name, 0), "createdAt":item.get("CreatedAt"),
+        "labels":{}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
     })
 
 for row in json_lines(docker(["system", "df", "--format", "{{json .}}"])) if docker_available else []:
@@ -261,7 +305,7 @@ usage = shutil.disk_usage("/")
 revision = ""
 if active_release:
     revision = run(["git", "-C", active_release, "rev-parse", "HEAD"])[1]
-limits = {"container":40, "image":50, "volume":50, "worktree":30, "cache":10}
+limits = {"container":200, "image":500, "volume":500, "worktree":60, "cache":10}
 assets = [item for kind in ["container", "image", "volume", "worktree", "cache"] for item in [entry for entry in assets if entry.get("type") == kind][:limits[kind]]]
 result = {"host":socket.gethostname(),"dockerAvailable":docker_available,"disk":{"totalBytes":usage.total,"freeBytes":usage.free},"summary":summary,"assets":assets,"events":events[:24],"activeRelease":active_release,"revision":revision}
 payload = gzip.compress(json.dumps(result, separators=(",",":"), ensure_ascii=False).encode("utf-8"))
@@ -432,6 +476,82 @@ else
 fi`;
 }
 
+export function awsDockerCleanupScript(allowlist) {
+  const payload = Buffer.from(JSON.stringify(allowlist.map((item) => ({
+    type: item.type,
+    id: item.id,
+    name: item.name,
+    sizeBytes: Number(item.sizeBytes || 0),
+  }))), "utf8").toString("base64");
+  return String.raw`import base64, gzip, json, re, subprocess
+
+items = json.loads(base64.b64decode("${payload}"))
+
+def run(args, timeout=180):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+    return result.returncode, result.stdout.strip(), result.stderr.strip()
+
+docker = ["docker"]
+code, _, _ = run(docker + ["version"])
+if code != 0:
+    docker = ["sudo", "-n", "docker"]
+    code, _, _ = run(docker + ["version"])
+if code != 0:
+    raise SystemExit("Docker daemon is unavailable")
+
+def inspect(kind, identifier):
+    code, out, _ = run(docker + [kind, "inspect", identifier])
+    if code != 0: return None
+    try:
+        rows = json.loads(out or "[]")
+        return rows[0] if rows else None
+    except Exception:
+        return None
+
+def label(labels, name):
+    return (labels or {}).get("com.codex.runtime." + name)
+
+results = []
+for item in items:
+    kind = item.get("type")
+    identifier = str(item.get("id") or "")
+    safe = False
+    reason = "执行前复核不再满足安全清理条件"
+    if kind == "cache" and identifier == "docker-build-cache":
+        code, _, error = run(docker + ["builder", "prune", "--all", "--force"])
+        results.append({**item, "status":"removed" if code == 0 else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if code == 0 else 0, "reason":"仅清理未使用 Build Cache" if code == 0 else error[-300:]})
+        continue
+    if kind == "image":
+        detail = inspect("image", identifier)
+        if detail:
+            labels = (detail.get("Config") or {}).get("Labels") or {}
+            code, refs, _ = run(docker + ["ps", "-aq", "--filter", "ancestor=" + identifier])
+            tags = detail.get("RepoTags") or []
+            digests = detail.get("RepoDigests") or []
+            dangling = not tags and not digests
+            protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
+            safe = code == 0 and not refs and not protected and (label(labels, "disposable") == "true" or dangling)
+            reason = "未被任何容器引用的悬空/显式 disposable 镜像"
+    elif kind == "volume":
+        detail = inspect("volume", identifier)
+        if detail:
+            labels = detail.get("Labels") or {}
+            code, refs, _ = run(docker + ["ps", "-aq", "--filter", "volume=" + identifier])
+            protected_name = re.search(r"postgres|mysql|maria|redis|valkey|upload|media|assets?|database|db[-_]?data|backup", identifier, re.I)
+            protected = bool(protected_name) or label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
+            safe = code == 0 and not refs and not protected and label(labels, "disposable") == "true"
+            reason = "未被任何容器挂载且明确 disposable 的卷"
+    if not safe:
+        results.append({**item, "status":"skipped", "reclaimedBytes":0, "reason":"执行前复核不再满足安全清理条件"})
+        continue
+    command = docker + (["image", "rm", identifier] if kind == "image" else ["volume", "rm", identifier])
+    code, _, error = run(command)
+    results.append({**item, "status":"removed" if code == 0 else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if code == 0 else 0, "reason":reason if code == 0 else error[-300:]})
+
+encoded = base64.b64encode(gzip.compress(json.dumps({"results":results}, separators=(",",":"), ensure_ascii=False).encode("utf-8"))).decode("ascii")
+print("RATCLEAN1:" + encoded)`;
+}
+
 function runSsmMutation(sourceConfig, script, comment) {
   const instanceId = sourceConfig?.instanceId;
   if (!instanceId) throw new Error("未配置 EC2 instanceId");
@@ -478,38 +598,30 @@ function runSsmMutation(sourceConfig, script, comment) {
     }
     if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
     if (invocation.Status !== "Success") throw new Error(invocation.StandardErrorContent || `SSM 清理状态：${invocation.Status}`);
-    return { commandId, output: String(invocation.StandardOutputContent || "").slice(-1_000) };
+    return { commandId, output: String(invocation.StandardOutputContent || "").slice(-24_000) };
   }
   throw new Error("远程清理超过 185 秒仍未完成");
 }
 
-function executeAwsBuildCacheCleanup(sourceConfig, allowlist) {
-  const requested = allowlist.find((item) => item.type === "cache" && item.id === "docker-build-cache");
-  if (!requested) return { completedAt: new Date().toISOString(), results: [] };
-  const before = collectAwsSnapshot(sourceConfig);
-  const beforeCache = before.summary?.["Build Cache"] || {};
-  const safeBytes = Number(beforeCache.reclaimableBytes || 0);
-  if (safeBytes <= 0) {
-    return {
-      completedAt: new Date().toISOString(),
-      results: [{ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前复核已无未使用 Build Cache" }],
-    };
+function executeAwsDockerCleanup(sourceConfig, allowlist) {
+  const snapshot = collectAwsSnapshot(sourceConfig);
+  const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const skipped = [];
+  const approved = [];
+  for (const requested of allowlist) {
+    const current = safeAssets.get(`${requested.type}:${requested.id}`);
+    if (!current) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前快照复核不再满足安全清理条件" });
+    else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
-  const invocation = runSsmMutation(sourceConfig, awsBuildCacheCleanupScript(), "Runtime Asset Tracker safe Build Cache cleanup");
+  if (!approved.length) return { completedAt: new Date().toISOString(), results: skipped };
+  const script = awsDockerCleanupScript(approved);
+  const encoded = Buffer.from(script, "utf8").toString("base64");
+  const invocation = runSsmMutation(sourceConfig, `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`, "Runtime Asset Tracker exact safe Docker cleanup");
+  const match = invocation.output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
+  if (!match) throw new Error("远程清理没有返回可验证结果");
+  const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
   remoteCache.clear();
-  const after = collectAwsSnapshot(sourceConfig);
-  const afterBytes = Number(after.summary?.["Build Cache"]?.sizeBytes || 0);
-  return {
-    completedAt: new Date().toISOString(),
-    commandId: invocation.commandId,
-    results: [{
-      ...requested,
-      sizeBytes: safeBytes,
-      status: "removed",
-      reclaimedBytes: Math.max(0, Number(beforeCache.sizeBytes || 0) - afterBytes),
-      reason: "Docker builder prune 仅移除了执行时仍未使用的 Build Cache",
-    }],
-  };
+  return { completedAt: new Date().toISOString(), commandId: invocation.commandId, results: [...skipped, ...(payload.results || [])] };
 }
 
 function executeGithubCleanup(sourceConfig, allowlist) {
@@ -540,7 +652,7 @@ export function executeRemoteCleanup({ source, sourceConfig, allowlist }) {
   if (!sourceConfig) throw new Error(`${source} 来源尚未配置`);
   return sourceConfig.kind === "github"
     ? executeGithubCleanup(sourceConfig, allowlist)
-    : executeAwsBuildCacheCleanup(sourceConfig, allowlist);
+    : executeAwsDockerCleanup(sourceConfig, allowlist);
 }
 
 export function collectRemoteDashboard({ source, scope, project, config, sources }) {

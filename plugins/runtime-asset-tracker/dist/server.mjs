@@ -33834,7 +33834,7 @@ def parse_bytes(value):
     return int(float(match.group(1)) * units.get((match.group(2) or "B").upper(), 1))
 
 def safe_labels(labels):
-    return {k:v for k,v in (labels or {}).items() if k.startswith(PREFIX) or k.startswith("com.docker.compose.") or k == "org.opencontainers.image.revision"}
+    return {k:v for k,v in (labels or {}).items() if k.startswith(PREFIX) or k.startswith("com.docker.compose.") or k in ["org.opencontainers.image.revision", "org.opencontainers.image.source"]}
 
 def label(labels, name):
     return (labels or {}).get(PREFIX + name)
@@ -33864,6 +33864,24 @@ referenced_images = {item.get("Image") for item in container_details if item.get
 all_mounted = {mount.get("Name") for item in container_details for mount in (item.get("Mounts") or []) if mount.get("Type") == "volume"}
 active_mounted = {mount.get("Name") for item in container_details if (item.get("State") or {}).get("Running") for mount in (item.get("Mounts") or []) if mount.get("Type") == "volume"}
 
+df_verbose = docker(["system", "df", "-v"]) if docker_available else ""
+def section(text, start_marker, end_marker):
+    start = text.find(start_marker)
+    if start < 0: return ""
+    body = text[start + len(start_marker):]
+    end = body.find(end_marker)
+    return body if end < 0 else body[:end]
+
+image_unique_sizes = {}
+for line in section(df_verbose, "Images space usage:", "Containers space usage:").splitlines()[1:]:
+    parts = re.split(r"\s{2,}", line.strip())
+    if len(parts) >= 8: image_unique_sizes[parts[2]] = parse_bytes(parts[6])
+
+volume_sizes = {}
+for line in section(df_verbose, "Local Volumes space usage:", "Build cache usage:").splitlines()[1:]:
+    parts = re.split(r"\s{2,}", line.strip())
+    if len(parts) >= 3: volume_sizes[parts[0]] = parse_bytes(parts[2])
+
 container_row_map = {row.get("ID"): row for row in container_rows}
 for item in container_details:
     labels = safe_labels((item.get("Config") or {}).get("Labels"))
@@ -33885,9 +33903,7 @@ for row in image_rows:
     ref = "%s:%s" % (row.get("Repository") or "<none>", row.get("Tag") or "<none>")
     if ref not in entry["tags"]: entry["tags"].append(ref)
 
-governed = set(referenced_images)
-for value in ["true", "false"]:
-    governed.update(filter(None, docker(["image", "ls", "--no-trunc", "--filter", "label=" + PREFIX + "disposable=" + value, "--format", "{{.ID}}"]).splitlines()))
+governed = set(image_map.keys())
 image_details = {}
 for ids in [list(governed)[start:start+30] for start in range(0, len(governed), 30)]:
     text = docker(["image", "inspect"] + ids)
@@ -33900,12 +33916,18 @@ for image_id, entry in image_map.items():
     labels = safe_labels((item.get("Config") or {}).get("Labels"))
     tags = entry["tags"]
     dangling = not tags or all(tag.startswith("<none>") for tag in tags)
-    active = image_id in running_images
+    running = image_id in running_images
+    referenced = image_id in referenced_images
+    protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
+    disposable = label(labels, "disposable") == "true"
+    image_class = "active" if referenced else ("protected" if protected else ("reclaimable" if disposable or dangling else "retained"))
+    unique_size = next((size for short_id, size in image_unique_sizes.items() if short_id in image_id), 0)
     assets.append({
         "id":image_id, "name":tags[0] if tags else image_id[:19], "type":"image", "project":project(labels, (tags[0].split(":")[0] if tags else "unknown")),
-        "environment":label(labels, "environment") or "remote", "status":"in-use" if image_id in referenced_images else "unused",
-        "classification":classify(labels, active=active, dangling=dangling), "sizeBytes":parse_bytes(entry["row"].get("Size")),
-        "createdAt":entry["row"].get("CreatedAt"), "labels":{}, "reason":"活动容器镜像" if active else "未引用但没有可丢弃标签"
+        "environment":label(labels, "environment") or "remote", "status":"in-use" if running else ("referenced-stopped" if referenced else ("dangling" if dangling else "unused")),
+        "classification":image_class, "sizeBytes":unique_size,
+        "createdAt":item.get("Created") or entry["row"].get("CreatedAt"), "labels":{},
+        "reason":"被运行容器引用" if running else ("仍被已停止容器引用" if referenced else ("保留策略明确保护" if protected else ("未引用且明确可丢弃" if disposable else ("未被任何容器引用的悬空镜像" if dangling else "未引用但没有可丢弃标签"))))
     })
 
 volume_rows = json_lines(docker(["volume", "ls", "--format", "{{json .}}"])) if docker_available else []
@@ -33920,12 +33942,16 @@ for item in volume_details:
     name = item.get("Name") or "unknown"
     labels = safe_labels(item.get("Labels"))
     active = name in active_mounted
+    mounted = name in all_mounted
     protected = bool(protected_pattern.search(name))
+    policy_protected = protected or label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
+    disposable = label(labels, "disposable") == "true"
+    volume_class = "active" if mounted else ("protected" if policy_protected else ("reclaimable" if disposable else "review"))
     assets.append({
         "id":name, "name":name, "type":"volume", "project":project(labels, name.split("_")[0]),
-        "environment":label(labels, "environment") or "remote", "status":"mounted-running" if active else ("mounted-stopped" if name in all_mounted else "unmounted"),
-        "classification":classify(labels, active=active, protected=protected), "sizeBytes":0, "createdAt":item.get("CreatedAt"),
-        "labels":{}, "reason":"名称表明可能包含业务数据" if protected else ("正在被运行容器挂载" if active else "卷默认保护")
+        "environment":label(labels, "environment") or "remote", "status":"mounted-running" if active else ("mounted-stopped" if mounted else "unmounted"),
+        "classification":volume_class, "sizeBytes":volume_sizes.get(name, 0), "createdAt":item.get("CreatedAt"),
+        "labels":{}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
     })
 
 for row in json_lines(docker(["system", "df", "--format", "{{json .}}"])) if docker_available else []:
@@ -33965,7 +33991,7 @@ usage = shutil.disk_usage("/")
 revision = ""
 if active_release:
     revision = run(["git", "-C", active_release, "rev-parse", "HEAD"])[1]
-limits = {"container":40, "image":50, "volume":50, "worktree":30, "cache":10}
+limits = {"container":200, "image":500, "volume":500, "worktree":60, "cache":10}
 assets = [item for kind in ["container", "image", "volume", "worktree", "cache"] for item in [entry for entry in assets if entry.get("type") == kind][:limits[kind]]]
 result = {"host":socket.gethostname(),"dockerAvailable":docker_available,"disk":{"totalBytes":usage.total,"freeBytes":usage.free},"summary":summary,"assets":assets,"events":events[:24],"activeRelease":active_release,"revision":revision}
 payload = gzip.compress(json.dumps(result, separators=(",",":"), ensure_ascii=False).encode("utf-8"))
@@ -34130,16 +34156,80 @@ function collectGithubSnapshot(sourceConfig) {
     repository
   };
 }
-function awsBuildCacheCleanupScript() {
-  return String.raw`set -eu
-if docker version >/dev/null 2>&1; then
-  docker builder prune --all --force
-elif sudo -n docker version >/dev/null 2>&1; then
-  sudo -n docker builder prune --all --force
-else
-  echo "Docker daemon is unavailable" >&2
-  exit 40
-fi`;
+function awsDockerCleanupScript(allowlist) {
+  const payload = Buffer.from(JSON.stringify(allowlist.map((item) => ({
+    type: item.type,
+    id: item.id,
+    name: item.name,
+    sizeBytes: Number(item.sizeBytes || 0)
+  }))), "utf8").toString("base64");
+  return String.raw`import base64, gzip, json, re, subprocess
+
+items = json.loads(base64.b64decode("${payload}"))
+
+def run(args, timeout=180):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+    return result.returncode, result.stdout.strip(), result.stderr.strip()
+
+docker = ["docker"]
+code, _, _ = run(docker + ["version"])
+if code != 0:
+    docker = ["sudo", "-n", "docker"]
+    code, _, _ = run(docker + ["version"])
+if code != 0:
+    raise SystemExit("Docker daemon is unavailable")
+
+def inspect(kind, identifier):
+    code, out, _ = run(docker + [kind, "inspect", identifier])
+    if code != 0: return None
+    try:
+        rows = json.loads(out or "[]")
+        return rows[0] if rows else None
+    except Exception:
+        return None
+
+def label(labels, name):
+    return (labels or {}).get("com.codex.runtime." + name)
+
+results = []
+for item in items:
+    kind = item.get("type")
+    identifier = str(item.get("id") or "")
+    safe = False
+    reason = "执行前复核不再满足安全清理条件"
+    if kind == "cache" and identifier == "docker-build-cache":
+        code, _, error = run(docker + ["builder", "prune", "--all", "--force"])
+        results.append({**item, "status":"removed" if code == 0 else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if code == 0 else 0, "reason":"仅清理未使用 Build Cache" if code == 0 else error[-300:]})
+        continue
+    if kind == "image":
+        detail = inspect("image", identifier)
+        if detail:
+            labels = (detail.get("Config") or {}).get("Labels") or {}
+            code, refs, _ = run(docker + ["ps", "-aq", "--filter", "ancestor=" + identifier])
+            tags = detail.get("RepoTags") or []
+            digests = detail.get("RepoDigests") or []
+            dangling = not tags and not digests
+            protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
+            safe = code == 0 and not refs and not protected and (label(labels, "disposable") == "true" or dangling)
+            reason = "未被任何容器引用的悬空/显式 disposable 镜像"
+    elif kind == "volume":
+        detail = inspect("volume", identifier)
+        if detail:
+            labels = detail.get("Labels") or {}
+            code, refs, _ = run(docker + ["ps", "-aq", "--filter", "volume=" + identifier])
+            protected_name = re.search(r"postgres|mysql|maria|redis|valkey|upload|media|assets?|database|db[-_]?data|backup", identifier, re.I)
+            protected = bool(protected_name) or label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
+            safe = code == 0 and not refs and not protected and label(labels, "disposable") == "true"
+            reason = "未被任何容器挂载且明确 disposable 的卷"
+    if not safe:
+        results.append({**item, "status":"skipped", "reclaimedBytes":0, "reason":"执行前复核不再满足安全清理条件"})
+        continue
+    command = docker + (["image", "rm", identifier] if kind == "image" else ["volume", "rm", identifier])
+    code, _, error = run(command)
+    results.append({**item, "status":"removed" if code == 0 else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if code == 0 else 0, "reason":reason if code == 0 else error[-300:]})
+
+encoded = base64.b64encode(gzip.compress(json.dumps({"results":results}, separators=(",",":"), ensure_ascii=False).encode("utf-8"))).decode("ascii")
+print("RATCLEAN1:" + encoded)`;
 }
 function runSsmMutation(sourceConfig, script, comment) {
   const instanceId = sourceConfig?.instanceId;
@@ -34199,37 +34289,29 @@ function runSsmMutation(sourceConfig, script, comment) {
     }
     if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
     if (invocation.Status !== "Success") throw new Error(invocation.StandardErrorContent || `SSM \u6E05\u7406\u72B6\u6001\uFF1A${invocation.Status}`);
-    return { commandId, output: String(invocation.StandardOutputContent || "").slice(-1e3) };
+    return { commandId, output: String(invocation.StandardOutputContent || "").slice(-24e3) };
   }
   throw new Error("\u8FDC\u7A0B\u6E05\u7406\u8D85\u8FC7 185 \u79D2\u4ECD\u672A\u5B8C\u6210");
 }
-function executeAwsBuildCacheCleanup(sourceConfig, allowlist) {
-  const requested = allowlist.find((item) => item.type === "cache" && item.id === "docker-build-cache");
-  if (!requested) return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: [] };
-  const before = collectAwsSnapshot(sourceConfig);
-  const beforeCache = before.summary?.["Build Cache"] || {};
-  const safeBytes = Number(beforeCache.reclaimableBytes || 0);
-  if (safeBytes <= 0) {
-    return {
-      completedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      results: [{ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u590D\u6838\u5DF2\u65E0\u672A\u4F7F\u7528 Build Cache" }]
-    };
+function executeAwsDockerCleanup(sourceConfig, allowlist) {
+  const snapshot = collectAwsSnapshot(sourceConfig);
+  const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const skipped = [];
+  const approved = [];
+  for (const requested of allowlist) {
+    const current = safeAssets.get(`${requested.type}:${requested.id}`);
+    if (!current) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u5FEB\u7167\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
+    else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
-  const invocation = runSsmMutation(sourceConfig, awsBuildCacheCleanupScript(), "Runtime Asset Tracker safe Build Cache cleanup");
+  if (!approved.length) return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: skipped };
+  const script = awsDockerCleanupScript(approved);
+  const encoded = Buffer.from(script, "utf8").toString("base64");
+  const invocation = runSsmMutation(sourceConfig, `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`, "Runtime Asset Tracker exact safe Docker cleanup");
+  const match = invocation.output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
+  if (!match) throw new Error("\u8FDC\u7A0B\u6E05\u7406\u6CA1\u6709\u8FD4\u56DE\u53EF\u9A8C\u8BC1\u7ED3\u679C");
+  const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
   remoteCache.clear();
-  const after = collectAwsSnapshot(sourceConfig);
-  const afterBytes = Number(after.summary?.["Build Cache"]?.sizeBytes || 0);
-  return {
-    completedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    commandId: invocation.commandId,
-    results: [{
-      ...requested,
-      sizeBytes: safeBytes,
-      status: "removed",
-      reclaimedBytes: Math.max(0, Number(beforeCache.sizeBytes || 0) - afterBytes),
-      reason: "Docker builder prune \u4EC5\u79FB\u9664\u4E86\u6267\u884C\u65F6\u4ECD\u672A\u4F7F\u7528\u7684 Build Cache"
-    }]
-  };
+  return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), commandId: invocation.commandId, results: [...skipped, ...payload.results || []] };
 }
 function executeGithubCleanup(sourceConfig, allowlist) {
   const snapshot = collectGithubSnapshot(sourceConfig);
@@ -34254,7 +34336,7 @@ function executeGithubCleanup(sourceConfig, allowlist) {
 }
 function executeRemoteCleanup({ source, sourceConfig, allowlist }) {
   if (!sourceConfig) throw new Error(`${source} \u6765\u6E90\u5C1A\u672A\u914D\u7F6E`);
-  return sourceConfig.kind === "github" ? executeGithubCleanup(sourceConfig, allowlist) : executeAwsBuildCacheCleanup(sourceConfig, allowlist);
+  return sourceConfig.kind === "github" ? executeGithubCleanup(sourceConfig, allowlist) : executeAwsDockerCleanup(sourceConfig, allowlist);
 }
 function collectRemoteDashboard({ source, scope, project, config: config2, sources }) {
   const schedule = config2.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" };
@@ -34372,16 +34454,17 @@ function inspectMany(kind, identifiers) {
   });
 }
 function safeLabels(labels) {
-  return Object.fromEntries(Object.entries(labels || {}).filter(([key]) => key.startsWith(RUNTIME_PREFIX) || key.startsWith("com.docker.compose.") || key === "org.opencontainers.image.revision"));
+  return Object.fromEntries(Object.entries(labels || {}).filter(([key]) => key.startsWith(RUNTIME_PREFIX) || key.startsWith("com.docker.compose.") || ["org.opencontainers.image.revision", "org.opencontainers.image.source"].includes(key)));
 }
 function labelValue(labels, key) {
   return labels?.[`${RUNTIME_PREFIX}${key}`];
 }
-function classification({ labels = {}, active = false, dangling = false, knownProtected = false }) {
+function classification({ labels = {}, active = false, dangling = false, knownProtected = false, assetType = "generic" }) {
   if (active) return "active";
   if (knownProtected || labelValue(labels, "retention") === "protected" || labelValue(labels, "disposable") === "false") return "protected";
   if (labelValue(labels, "disposable") === "true") return "reclaimable";
-  if (dangling) return "review";
+  if (assetType === "image" && dangling) return "reclaimable";
+  if (assetType === "volume") return "review";
   return "retained";
 }
 function projectFrom(labels, fallback = "unknown") {
@@ -34390,17 +34473,23 @@ function projectFrom(labels, fallback = "unknown") {
 function environmentFrom(labels) {
   return labelValue(labels, "environment") || "local";
 }
-function parseVerboseVolumeSizes() {
+function parseVerboseDockerSizes() {
   const output = run("docker", ["system", "df", "-v"], { timeout: 3e4, maxBuffer: 64 * 1024 * 1024 });
-  const marker = "Local Volumes space usage:";
-  const start = output.indexOf(marker);
-  if (start < 0) return /* @__PURE__ */ new Map();
-  const section = output.slice(start + marker.length).split("Build cache usage:")[0];
-  const lines = section.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(1);
-  return new Map(lines.flatMap((line) => {
+  const imageMarker = "Images space usage:";
+  const imageStart = output.indexOf(imageMarker);
+  const imageSection = imageStart < 0 ? "" : output.slice(imageStart + imageMarker.length).split("Containers space usage:")[0];
+  const imageUniqueSizes = new Map(imageSection.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(1).flatMap((line) => {
+    const parts = line.split(/\s{2,}/);
+    return parts.length >= 8 ? [[parts[2], parseBytes(parts[6])]] : [];
+  }));
+  const volumeMarker = "Local Volumes space usage:";
+  const volumeStart = output.indexOf(volumeMarker);
+  const volumeSection = volumeStart < 0 ? "" : output.slice(volumeStart + volumeMarker.length).split("Build cache usage:")[0];
+  const volumeSizes = new Map(volumeSection.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(1).flatMap((line) => {
     const parts = line.split(/\s{2,}/);
     return parts.length >= 3 ? [[parts[0], parseBytes(parts[2])]] : [];
   }));
+  return { imageUniqueSizes, volumeSizes };
 }
 function dockerSummary() {
   const rows = jsonLines(run("docker", ["system", "df", "--format", "{{json .}}"]));
@@ -34416,7 +34505,9 @@ function dockerInventory() {
   if (!available) return { available: false, assets: [], summary: {} };
   const containerRows = jsonLines(run("docker", ["ps", "-a", "--size", "--no-trunc", "--format", "{{json .}}"]));
   const containerDetails = inspectMany("container", containerRows.map((item) => item.ID));
+  const verboseSizes = parseVerboseDockerSizes();
   const runningImageIds = new Set(containerDetails.filter((item) => item.State?.Running).map((item) => item.Image));
+  const referencedImageIds = new Set(containerDetails.map((item) => item.Image).filter(Boolean));
   const allMountedVolumes = new Set(containerDetails.flatMap((item) => (item.Mounts || []).filter((mount) => mount.Type === "volume").map((mount) => mount.Name)));
   const activeMountedVolumes = new Set(containerDetails.filter((item) => item.State?.Running).flatMap((item) => (item.Mounts || []).filter((mount) => mount.Type === "volume").map((mount) => mount.Name)));
   const containers = containerDetails.map((item) => {
@@ -34437,12 +34528,6 @@ function dockerInventory() {
     };
   });
   const imageRows = jsonLines(run("docker", ["image", "ls", "--no-trunc", "--format", "{{json .}}"]));
-  const governedImageIds = [
-    ...runningImageIds,
-    ...run("docker", ["image", "ls", "--no-trunc", "--filter", "label=com.codex.runtime.disposable=true", "--format", "{{.ID}}"]).split(/\r?\n/),
-    ...run("docker", ["image", "ls", "--no-trunc", "--filter", "label=com.codex.runtime.disposable=false", "--format", "{{.ID}}"]).split(/\r?\n/)
-  ].filter(Boolean);
-  const imageDetails = new Map(inspectMany("image", governedImageIds).map((item) => [item.Id, item]));
   const consolidatedImages = /* @__PURE__ */ new Map();
   for (const row of imageRows) {
     const existing = consolidatedImages.get(row.ID) || { ...row, tags: [] };
@@ -34450,35 +34535,39 @@ function dockerInventory() {
     if (!existing.tags.includes(reference)) existing.tags.push(reference);
     consolidatedImages.set(row.ID, existing);
   }
+  const imageDetails = new Map(inspectMany("image", [...consolidatedImages.keys()]).map((item) => [item.Id, item]));
   const images = [...consolidatedImages.values()].map((row) => {
     const item = imageDetails.get(row.ID);
     const labels = safeLabels(item?.Config?.Labels);
     const tags = row.tags;
-    const active = runningImageIds.has(row.ID);
+    const running = runningImageIds.has(row.ID);
+    const referenced = referencedImageIds.has(row.ID);
     const dangling = tags.length === 0 || tags.every((tag) => tag.startsWith("<none>"));
+    const policyProtected = labelValue(labels, "retention") === "protected" || labelValue(labels, "disposable") === "false";
     return {
       id: row.ID,
       name: tags[0] || row.ID.slice(7, 19),
       type: "image",
       project: projectFrom(labels, tags[0]?.split(/[/:]/)[0]),
       environment: environmentFrom(labels),
-      status: active ? "in-use" : dangling ? "dangling" : "unused",
-      classification: classification({ labels, active, dangling }),
-      sizeBytes: parseBytes(row.Size),
+      status: running ? "in-use" : referenced ? "referenced-stopped" : dangling ? "dangling" : "unused",
+      classification: classification({ labels, active: referenced, dangling, assetType: "image" }),
+      sizeBytes: [...verboseSizes.imageUniqueSizes.entries()].find(([shortId]) => String(row.ID).includes(shortId))?.[1] || 0,
       createdAt: item?.Created || row.CreatedAt,
       labels,
-      reason: active ? "\u88AB\u8FD0\u884C\u5BB9\u5668\u5F15\u7528" : labelValue(labels, "disposable") === "true" ? "\u672A\u5F15\u7528\u4E14\u660E\u786E\u53EF\u4E22\u5F03" : dangling ? "\u60AC\u7A7A\u955C\u50CF\uFF0C\u9700\u786E\u8BA4\u5F52\u5C5E" : "\u672A\u5F15\u7528\u4F46\u6CA1\u6709\u53EF\u4E22\u5F03\u6807\u7B7E"
+      reason: running ? "\u88AB\u8FD0\u884C\u5BB9\u5668\u5F15\u7528" : referenced ? "\u4ECD\u88AB\u5DF2\u505C\u6B62\u5BB9\u5668\u5F15\u7528" : policyProtected ? "\u4FDD\u7559\u7B56\u7565\u660E\u786E\u4FDD\u62A4" : labelValue(labels, "disposable") === "true" ? "\u672A\u88AB\u4EFB\u4F55\u5BB9\u5668\u5F15\u7528\u4E14\u660E\u786E\u53EF\u4E22\u5F03" : dangling ? "\u672A\u88AB\u4EFB\u4F55\u5BB9\u5668\u5F15\u7528\u7684\u60AC\u7A7A\u955C\u50CF" : "\u672A\u5F15\u7528\u4F46\u6CA1\u6709\u53EF\u4E22\u5F03\u6807\u7B7E"
     };
   });
   const volumeRows = jsonLines(run("docker", ["volume", "ls", "--format", "{{json .}}"]));
   const volumeDetails = inspectMany("volume", volumeRows.map((item) => item.Name));
-  const volumeSizes = parseVerboseVolumeSizes();
-  const protectedName = /(postgres|mysql|redis|valkey|uploads?|media|assets?|database|db[-_]?data)/i;
+  const volumeSizes = verboseSizes.volumeSizes;
+  const protectedName = /(postgres|mysql|maria|redis|valkey|uploads?|media|assets?|database|db[-_]?data|backup)/i;
   const volumes = volumeDetails.map((item) => {
     const labels = safeLabels(item.Labels);
     const active = activeMountedVolumes.has(item.Name);
     const mounted = allMountedVolumes.has(item.Name);
     const knownProtected = protectedName.test(item.Name);
+    const policyProtected = knownProtected || labelValue(labels, "retention") === "protected" || labelValue(labels, "disposable") === "false";
     return {
       id: item.Name,
       name: item.Name,
@@ -34486,11 +34575,11 @@ function dockerInventory() {
       project: projectFrom(labels, item.Labels?.["com.docker.compose.project"]),
       environment: environmentFrom(labels),
       status: active ? "mounted-running" : mounted ? "mounted-stopped" : "unmounted",
-      classification: classification({ labels, active, knownProtected }),
+      classification: classification({ labels, active: mounted, knownProtected, assetType: "volume" }),
       sizeBytes: volumeSizes.get(item.Name) || 0,
       createdAt: item.CreatedAt,
       labels,
-      reason: active ? "\u88AB\u8FD0\u884C\u5BB9\u5668\u6302\u8F7D" : knownProtected ? "\u540D\u79F0\u8868\u660E\u53EF\u80FD\u5305\u542B\u4E1A\u52A1\u6570\u636E" : labelValue(labels, "disposable") === "true" ? "\u672A\u6302\u8F7D\u4E14\u660E\u786E\u53EF\u4E22\u5F03" : "\u5377\u9ED8\u8BA4\u4FDD\u62A4"
+      reason: active ? "\u88AB\u8FD0\u884C\u5BB9\u5668\u6302\u8F7D" : mounted ? "\u4ECD\u88AB\u5DF2\u505C\u6B62\u5BB9\u5668\u6302\u8F7D" : policyProtected ? "\u540D\u79F0\u6216\u4FDD\u7559\u7B56\u7565\u8868\u660E\u53EF\u80FD\u5305\u542B\u4E1A\u52A1\u6570\u636E" : labelValue(labels, "disposable") === "true" ? "\u672A\u88AB\u4EFB\u4F55\u5BB9\u5668\u6302\u8F7D\u4E14\u660E\u786E\u53EF\u4E22\u5F03" : "\u672A\u8BC1\u660E\u53EF\u4E22\u5F03\uFF0C\u7B49\u5F85\u786E\u8BA4"
     };
   });
   return { available: true, assets: [...containers, ...images, ...volumes], summary: dockerSummary() };
@@ -34584,15 +34673,19 @@ function saveSchedule(schedule) {
 function aggregate2(type, assets, fallback = {}) {
   const matching = assets.filter((asset) => asset.type === type);
   const sum = (kind) => matching.filter((asset) => asset.classification === kind).reduce((total2, asset) => total2 + Number(asset.sizeBytes || 0), 0);
-  const total = matching.reduce((value, asset) => value + Number(asset.sizeBytes || 0), 0) || Number(fallback.sizeBytes || 0);
+  const measured = matching.reduce((value, asset) => value + Number(asset.sizeBytes || 0), 0);
+  const total = type === "worktree" ? measured : Math.max(measured, Number(fallback.sizeBytes || 0));
+  const activeBytes = sum("active");
+  const protectedBytes = sum("protected");
+  const reclaimableBytes = sum("reclaimable");
   return {
     type,
     totalBytes: total,
-    count: matching.length,
-    activeBytes: sum("active"),
-    protectedBytes: sum("protected"),
-    retainedBytes: sum("retained") + sum("review"),
-    reclaimableBytes: sum("reclaimable"),
+    count: Number(fallback.totalCount ?? matching.length),
+    activeBytes,
+    protectedBytes,
+    retainedBytes: Math.max(0, total - activeBytes - protectedBytes - reclaimableBytes),
+    reclaimableBytes,
     unit: type === "worktree" ? "count" : "bytes"
   };
 }
@@ -34672,8 +34765,8 @@ function createCleanupPreview({ source = "local", types = ["container", "image",
   if (source !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${source} \u5FEB\u7167\u4E0D\u53EF\u7528`);
   const allowlist = dashboard.assets.filter((asset) => {
     if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
-    if (source === "local" && asset.type !== "cache") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
-    return asset.type === "cache";
+    if (source === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
+    return ["image", "volume", "cache"].includes(asset.type);
   }).map((asset) => ({
     type: asset.type,
     id: asset.id,
@@ -34700,7 +34793,7 @@ function createCleanupPreview({ source = "local", types = ["container", "image",
   const preview = {
     token,
     source,
-    policy: source === "github" ? "\u53EA\u5220\u9664\u5DF2\u8FC7\u671F\u5236\u54C1\u3001\u5DF2\u5173\u95ED PR \u7684\u7F13\u5B58\u548C\u8D85\u8FC7 30 \u5929\u672A\u8BBF\u95EE\u7684\u7F13\u5B58" : source === "local" ? "\u53EA\u5220\u9664\u663E\u5F0F disposable \u8D44\u4EA7\u548C Docker \u672A\u4F7F\u7528\u7684 Build Cache" : "\u53EA\u6267\u884C Docker builder prune\uFF1B\u955C\u50CF\u3001\u5377\u3001\u5BB9\u5668\u548C release \u6C38\u4E0D\u8FDB\u5165\u6E05\u5355",
+    policy: source === "github" ? "\u53EA\u5220\u9664\u5DF2\u8FC7\u671F\u5236\u54C1\u3001\u5DF2\u5173\u95ED PR \u7684\u7F13\u5B58\u548C\u8D85\u8FC7 30 \u5929\u672A\u8BBF\u95EE\u7684\u7F13\u5B58" : source === "local" ? "\u53EA\u5220\u9664\u672A\u88AB\u4EFB\u4F55\u5BB9\u5668\u5F15\u7528\u7684\u60AC\u7A7A/\u663E\u5F0F disposable \u955C\u50CF\u3001\u672A\u6302\u8F7D\u4E14\u663E\u5F0F disposable \u7684\u5377\uFF0C\u4EE5\u53CA Docker \u672A\u4F7F\u7528\u7684 Build Cache" : "\u53EA\u5220\u9664\u590D\u6838\u540E\u4ECD\u672A\u88AB\u5BB9\u5668\u5F15\u7528\u7684\u60AC\u7A7A/\u663E\u5F0F disposable \u955C\u50CF\u3001\u672A\u6302\u8F7D\u4E14\u663E\u5F0F disposable \u7684\u5377\uFF0C\u4EE5\u53CA Docker \u672A\u4F7F\u7528\u7684 Build Cache\uFF1B\u5BB9\u5668\u548C release \u6C38\u4E0D\u8FDB\u5165\u6E05\u5355",
     createdAt: (/* @__PURE__ */ new Date()).toISOString(),
     expiresAt: new Date(Date.now() + 10 * 6e4).toISOString(),
     allowlist,
@@ -34751,12 +34844,29 @@ function executeCleanup({ token, confirmed = false }) {
     }, preview.source);
     return cleanup;
   }
+  dashboardCache.clear();
+  const current = collectDashboard({ source: "local" });
+  const safeAssets = new Map(current.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const currentCache = current.bars.find((item) => item.type === "cache");
+  if (Number(currentCache?.reclaimableBytes || 0) > 0) {
+    safeAssets.set("cache:docker-build-cache", {
+      type: "cache",
+      id: "docker-build-cache",
+      sizeBytes: Number(currentCache.reclaimableBytes),
+      reason: "Docker \u660E\u786E\u8BA4\u5B9A\u4E3A\u672A\u4F7F\u7528\u4E14\u53EF\u56DE\u6536\u7684 Build Cache"
+    });
+  }
   const results = [];
-  for (const asset of preview.allowlist) {
+  for (const requested of preview.allowlist) {
+    const asset = safeAssets.get(`${requested.type}:${requested.id}`);
+    if (!asset) {
+      results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
+      continue;
+    }
     const args = asset.type === "container" ? ["container", "rm", asset.id] : asset.type === "image" ? ["image", "rm", asset.id] : asset.type === "volume" ? ["volume", "rm", asset.id] : asset.type === "cache" && asset.id === "docker-build-cache" ? ["builder", "prune", "--all", "--force"] : null;
     if (!args) continue;
     const output = run("docker", args, { timeout: 3e4 });
-    results.push({ ...asset, status: output ? "removed" : "failed" });
+    results.push({ ...requested, sizeBytes: asset.sizeBytes, status: output ? "removed" : "failed", reclaimedBytes: output ? Number(asset.sizeBytes || 0) : 0 });
   }
   previewStore.delete(token);
   dashboardCache.clear();

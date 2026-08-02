@@ -8,10 +8,10 @@ It provides:
 - Portable Docker and Compose labels.
 - An append-only JSONL event ledger.
 - Exact local cleanup previews that only include explicitly disposable assets.
-- AWS Systems Manager inventory for EC2 Production and Staging, with safe cleanup limited to unused Docker BuildKit cache.
+- AWS Systems Manager inventory for EC2 Production and Staging, including image unique-layer usage, running/stopped container references, real volume sizes, and volume mount relationships.
 - GitHub Actions cache, artifact, and workflow inventory, with safe cleanup limited to expired artifacts, closed-PR caches, and caches not accessed for more than 30 days.
 
-Every cleanup starts with an expiring exact-item preview and is revalidated immediately before execution. EC2 image, volume, container, network, release, and rollback assets are never included in remote cleanup. Unknown volumes and assets without an explicit disposable classification remain protected.
+Every cleanup starts with an expiring exact-item preview and is revalidated immediately before execution. EC2 cleanup can remove exact unreferenced dangling or explicitly disposable image IDs, exact unreferenced explicitly disposable non-business volume names, and unused BuildKit cache. It never performs broad image/volume prune, forced deletion, container deletion, release deletion, or rollback deletion. Unknown volumes and assets without sufficient disposal evidence remain protected.
 
 ![Runtime Asset Tracker dashboard](plugins/runtime-asset-tracker/assets/runtime-asset-dashboard.png)
 

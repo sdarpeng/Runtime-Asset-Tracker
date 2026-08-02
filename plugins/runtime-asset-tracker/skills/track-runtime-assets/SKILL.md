@@ -22,7 +22,7 @@ Track lifecycle facts; do not create a new release-approval system. Ledger write
 
 Use the bundled `open_runtime_dashboard` MCP tool when the user wants a graphical inventory, environment/project comparison, capacity map, asset drill-down, or event timeline. The dashboard uses live local Docker, Git worktree, and ledger data. GitHub snapshots use the authenticated `gh` CLI; EC2 snapshots use authenticated AWS Systems Manager Run Command and execute read-only inventory commands. Configured remote sources must show an explicit unavailable or authentication-error state until their adapter returns real data; never substitute local values.
 
-Remote cleanup is deliberately narrow and always starts with an exact preview. For EC2, the only remotely executable cleanup is unused Docker BuildKit cache through `docker builder prune --all --force`; images, volumes, containers, networks, release directories, and rollback state are excluded. For GitHub, cleanup is limited to exact cache or artifact IDs that are independently reclassified as safe immediately before deletion: expired artifacts, caches belonging to closed pull requests, or caches not accessed for more than 30 days. A disconnected source remains unavailable instead of falling back to local data.
+Remote cleanup is deliberately narrow and always starts with an exact preview. For EC2, safely reclaimable images are limited to images that are not referenced by any running or stopped container and are either dangling or explicitly labeled `disposable=true`; protected retention always wins. Safely reclaimable volumes must be unreferenced by every container, explicitly labeled `disposable=true`, and free of database, upload, media, backup, or other protected-state signals. Unused Docker BuildKit cache is also eligible. Containers, networks, release directories, rollback state, and unknown volumes are excluded. For GitHub, cleanup is limited to exact cache or artifact IDs that are independently reclassified as safe immediately before deletion: expired artifacts, caches belonging to closed pull requests, or caches not accessed for more than 30 days. A disconnected source remains unavailable instead of falling back to local data.
 
 For local standalone preview, run `node dist/server.mjs --http` from the plugin root and open `http://127.0.0.1:47831`.
 
@@ -69,7 +69,7 @@ node scripts/run-compose.mjs --project my-project --environment local -- up --bu
 - Do not remove existing OCI revision/source labels; extend them.
 - Preserve project-specific release and rollback behavior.
 - A tracker installation may start a new observer process, but must not restart Docker or application containers.
-- Never broaden EC2 cleanup into `docker system prune`, image deletion, volume deletion, container deletion, or release-directory removal.
+- Never broaden EC2 cleanup into `docker system prune`, bulk image/volume prune, forced image deletion, container deletion, or release-directory removal. Delete only exact image or volume IDs that pass the same live safety checks immediately before removal.
 - Never delete a GitHub cache or artifact solely because it is large; it must satisfy the explicit safe classification and exact-ID revalidation rules.
 
 ## Bundled Resources

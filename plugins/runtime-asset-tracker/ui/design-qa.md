@@ -24,11 +24,12 @@
 - Environment/project toggle and project filtering: passed.
 - Local inventory, worktree, Docker image, Docker volume, and ledger rendering: passed.
 - GitHub live snapshot: passed; 4 Actions caches, 342 MB, and 30 workflow events loaded from the authenticated GitHub API.
-- Staging live snapshot: passed through AWS Systems Manager; 149 Docker images, 26 Docker volumes, 7.35 GB of build cache, and 24 recent ledger events were read without changing the host.
+- Staging live snapshot: passed through AWS Systems Manager; the latest read-only snapshot contains 149 Docker images and 26 Docker volumes. It measures 58.22 GB of image storage and 5.07 GB of volume storage without changing the host.
 - Production unavailable state: passed; the instance is running but is not online in Systems Manager, so the UI clears all remote values, shows a visible error, and never reuses local data.
-- Remote capacity classification: passed; Staging identifies 7.35 GB of unused Docker BuildKit cache as safely reclaimable, while GitHub identifies 86.3 MB of closed-PR cache as safely reclaimable instead of putting all remote capacity into `待确认`.
+- Remote capacity classification: passed; the latest Staging snapshot currently has no image, volume, or BuildKit cache asset satisfying the safe rules, so its safe segment is correctly 0 B rather than presenting unlabeled legacy assets as safe. A prior snapshot correctly identified 7.35 GB of unused BuildKit cache, and GitHub identified 86.3 MB of closed-PR cache.
 - Remote cleanup entrypoints: passed; connected Staging and GitHub sources can open an exact cleanup preview. Production remains disabled only because its Systems Manager connection is offline, and will enable automatically when its live snapshot becomes available.
-- Remote safety boundary: passed; EC2 preview is limited to Docker BuildKit cache and GitHub preview to exact revalidated cache/artifact IDs. Images, volumes, containers, releases, and rollback state are excluded.
+- Remote image and volume analysis: passed; every running and stopped container reference is mapped, image unique-layer sizes and real volume sizes are read from Docker, and the safe segment contains only exact image/volume IDs that satisfy the declared rules.
+- Remote safety boundary: passed; EC2 image deletion is limited to unreferenced dangling or explicitly disposable images, volume deletion to unreferenced explicitly disposable non-business volumes, and cache deletion to unused BuildKit cache. Execution repeats the reference, label, and protected-name checks and never uses forced or broad prune operations. GitHub remains limited to exact revalidated cache/artifact IDs.
 - Local cleanup preview: passed; 0 eligible candidates kept the confirmation button disabled.
 - Console warnings/errors: none.
 - MCP stdio tool/resource discovery: passed.

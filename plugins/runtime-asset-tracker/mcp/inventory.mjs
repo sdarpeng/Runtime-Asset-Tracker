@@ -60,18 +60,19 @@ function inspectMany(kind, identifiers) {
 
 function safeLabels(labels) {
   return Object.fromEntries(Object.entries(labels || {}).filter(([key]) =>
-    key.startsWith(RUNTIME_PREFIX) || key.startsWith("com.docker.compose.") || key === "org.opencontainers.image.revision"));
+    key.startsWith(RUNTIME_PREFIX) || key.startsWith("com.docker.compose.") || ["org.opencontainers.image.revision", "org.opencontainers.image.source"].includes(key)));
 }
 
 function labelValue(labels, key) {
   return labels?.[`${RUNTIME_PREFIX}${key}`];
 }
 
-function classification({ labels = {}, active = false, dangling = false, knownProtected = false }) {
+function classification({ labels = {}, active = false, dangling = false, knownProtected = false, assetType = "generic" }) {
   if (active) return "active";
   if (knownProtected || labelValue(labels, "retention") === "protected" || labelValue(labels, "disposable") === "false") return "protected";
   if (labelValue(labels, "disposable") === "true") return "reclaimable";
-  if (dangling) return "review";
+  if (assetType === "image" && dangling) return "reclaimable";
+  if (assetType === "volume") return "review";
   return "retained";
 }
 
@@ -83,17 +84,24 @@ function environmentFrom(labels) {
   return labelValue(labels, "environment") || "local";
 }
 
-function parseVerboseVolumeSizes() {
+function parseVerboseDockerSizes() {
   const output = run("docker", ["system", "df", "-v"], { timeout: 30_000, maxBuffer: 64 * 1024 * 1024 });
-  const marker = "Local Volumes space usage:";
-  const start = output.indexOf(marker);
-  if (start < 0) return new Map();
-  const section = output.slice(start + marker.length).split("Build cache usage:")[0];
-  const lines = section.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(1);
-  return new Map(lines.flatMap((line) => {
+  const imageMarker = "Images space usage:";
+  const imageStart = output.indexOf(imageMarker);
+  const imageSection = imageStart < 0 ? "" : output.slice(imageStart + imageMarker.length).split("Containers space usage:")[0];
+  const imageUniqueSizes = new Map(imageSection.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(1).flatMap((line) => {
+    const parts = line.split(/\s{2,}/);
+    return parts.length >= 8 ? [[parts[2], parseBytes(parts[6])]] : [];
+  }));
+
+  const volumeMarker = "Local Volumes space usage:";
+  const volumeStart = output.indexOf(volumeMarker);
+  const volumeSection = volumeStart < 0 ? "" : output.slice(volumeStart + volumeMarker.length).split("Build cache usage:")[0];
+  const volumeSizes = new Map(volumeSection.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(1).flatMap((line) => {
     const parts = line.split(/\s{2,}/);
     return parts.length >= 3 ? [[parts[0], parseBytes(parts[2])]] : [];
   }));
+  return { imageUniqueSizes, volumeSizes };
 }
 
 function dockerSummary() {
@@ -112,7 +120,9 @@ function dockerInventory() {
 
   const containerRows = jsonLines(run("docker", ["ps", "-a", "--size", "--no-trunc", "--format", "{{json .}}"]));
   const containerDetails = inspectMany("container", containerRows.map((item) => item.ID));
+  const verboseSizes = parseVerboseDockerSizes();
   const runningImageIds = new Set(containerDetails.filter((item) => item.State?.Running).map((item) => item.Image));
+  const referencedImageIds = new Set(containerDetails.map((item) => item.Image).filter(Boolean));
   const allMountedVolumes = new Set(containerDetails.flatMap((item) => (item.Mounts || []).filter((mount) => mount.Type === "volume").map((mount) => mount.Name)));
   const activeMountedVolumes = new Set(containerDetails.filter((item) => item.State?.Running).flatMap((item) =>
     (item.Mounts || []).filter((mount) => mount.Type === "volume").map((mount) => mount.Name)));
@@ -136,12 +146,6 @@ function dockerInventory() {
   });
 
   const imageRows = jsonLines(run("docker", ["image", "ls", "--no-trunc", "--format", "{{json .}}"]));
-  const governedImageIds = [
-    ...runningImageIds,
-    ...run("docker", ["image", "ls", "--no-trunc", "--filter", "label=com.codex.runtime.disposable=true", "--format", "{{.ID}}"] ).split(/\r?\n/),
-    ...run("docker", ["image", "ls", "--no-trunc", "--filter", "label=com.codex.runtime.disposable=false", "--format", "{{.ID}}"] ).split(/\r?\n/),
-  ].filter(Boolean);
-  const imageDetails = new Map(inspectMany("image", governedImageIds).map((item) => [item.Id, item]));
   const consolidatedImages = new Map();
   for (const row of imageRows) {
     const existing = consolidatedImages.get(row.ID) || { ...row, tags: [] };
@@ -149,36 +153,40 @@ function dockerInventory() {
     if (!existing.tags.includes(reference)) existing.tags.push(reference);
     consolidatedImages.set(row.ID, existing);
   }
+  const imageDetails = new Map(inspectMany("image", [...consolidatedImages.keys()]).map((item) => [item.Id, item]));
   const images = [...consolidatedImages.values()].map((row) => {
     const item = imageDetails.get(row.ID);
     const labels = safeLabels(item?.Config?.Labels);
     const tags = row.tags;
-    const active = runningImageIds.has(row.ID);
+    const running = runningImageIds.has(row.ID);
+    const referenced = referencedImageIds.has(row.ID);
     const dangling = tags.length === 0 || tags.every((tag) => tag.startsWith("<none>"));
+    const policyProtected = labelValue(labels, "retention") === "protected" || labelValue(labels, "disposable") === "false";
     return {
       id: row.ID,
       name: tags[0] || row.ID.slice(7, 19),
       type: "image",
       project: projectFrom(labels, tags[0]?.split(/[/:]/)[0]),
       environment: environmentFrom(labels),
-      status: active ? "in-use" : dangling ? "dangling" : "unused",
-      classification: classification({ labels, active, dangling }),
-      sizeBytes: parseBytes(row.Size),
+      status: running ? "in-use" : referenced ? "referenced-stopped" : dangling ? "dangling" : "unused",
+      classification: classification({ labels, active: referenced, dangling, assetType: "image" }),
+      sizeBytes: [...verboseSizes.imageUniqueSizes.entries()].find(([shortId]) => String(row.ID).includes(shortId))?.[1] || 0,
       createdAt: item?.Created || row.CreatedAt,
       labels,
-      reason: active ? "被运行容器引用" : labelValue(labels, "disposable") === "true" ? "未引用且明确可丢弃" : dangling ? "悬空镜像，需确认归属" : "未引用但没有可丢弃标签",
+      reason: running ? "被运行容器引用" : referenced ? "仍被已停止容器引用" : policyProtected ? "保留策略明确保护" : labelValue(labels, "disposable") === "true" ? "未被任何容器引用且明确可丢弃" : dangling ? "未被任何容器引用的悬空镜像" : "未引用但没有可丢弃标签",
     };
   });
 
   const volumeRows = jsonLines(run("docker", ["volume", "ls", "--format", "{{json .}}"]));
   const volumeDetails = inspectMany("volume", volumeRows.map((item) => item.Name));
-  const volumeSizes = parseVerboseVolumeSizes();
-  const protectedName = /(postgres|mysql|redis|valkey|uploads?|media|assets?|database|db[-_]?data)/i;
+  const volumeSizes = verboseSizes.volumeSizes;
+  const protectedName = /(postgres|mysql|maria|redis|valkey|uploads?|media|assets?|database|db[-_]?data|backup)/i;
   const volumes = volumeDetails.map((item) => {
     const labels = safeLabels(item.Labels);
     const active = activeMountedVolumes.has(item.Name);
     const mounted = allMountedVolumes.has(item.Name);
     const knownProtected = protectedName.test(item.Name);
+    const policyProtected = knownProtected || labelValue(labels, "retention") === "protected" || labelValue(labels, "disposable") === "false";
     return {
       id: item.Name,
       name: item.Name,
@@ -186,11 +194,11 @@ function dockerInventory() {
       project: projectFrom(labels, item.Labels?.["com.docker.compose.project"]),
       environment: environmentFrom(labels),
       status: active ? "mounted-running" : mounted ? "mounted-stopped" : "unmounted",
-      classification: classification({ labels, active, knownProtected }),
+      classification: classification({ labels, active: mounted, knownProtected, assetType: "volume" }),
       sizeBytes: volumeSizes.get(item.Name) || 0,
       createdAt: item.CreatedAt,
       labels,
-      reason: active ? "被运行容器挂载" : knownProtected ? "名称表明可能包含业务数据" : labelValue(labels, "disposable") === "true" ? "未挂载且明确可丢弃" : "卷默认保护",
+      reason: active ? "被运行容器挂载" : mounted ? "仍被已停止容器挂载" : policyProtected ? "名称或保留策略表明可能包含业务数据" : labelValue(labels, "disposable") === "true" ? "未被任何容器挂载且明确可丢弃" : "未证明可丢弃，等待确认",
     };
   });
 
@@ -283,15 +291,19 @@ export function saveSchedule(schedule) {
 function aggregate(type, assets, fallback = {}) {
   const matching = assets.filter((asset) => asset.type === type);
   const sum = (kind) => matching.filter((asset) => asset.classification === kind).reduce((total, asset) => total + Number(asset.sizeBytes || 0), 0);
-  const total = matching.reduce((value, asset) => value + Number(asset.sizeBytes || 0), 0) || Number(fallback.sizeBytes || 0);
+  const measured = matching.reduce((value, asset) => value + Number(asset.sizeBytes || 0), 0);
+  const total = type === "worktree" ? measured : Math.max(measured, Number(fallback.sizeBytes || 0));
+  const activeBytes = sum("active");
+  const protectedBytes = sum("protected");
+  const reclaimableBytes = sum("reclaimable");
   return {
     type,
     totalBytes: total,
-    count: matching.length,
-    activeBytes: sum("active"),
-    protectedBytes: sum("protected"),
-    retainedBytes: sum("retained") + sum("review"),
-    reclaimableBytes: sum("reclaimable"),
+    count: Number(fallback.totalCount ?? matching.length),
+    activeBytes,
+    protectedBytes,
+    retainedBytes: Math.max(0, total - activeBytes - protectedBytes - reclaimableBytes),
+    reclaimableBytes,
     unit: type === "worktree" ? "count" : "bytes",
   };
 }
@@ -372,8 +384,8 @@ export function createCleanupPreview({ source = "local", types = ["container", "
   if (source !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${source} 快照不可用`);
   const allowlist = dashboard.assets.filter((asset) => {
     if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
-    if (source === "local" && asset.type !== "cache") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
-    return asset.type === "cache";
+    if (source === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
+    return ["image", "volume", "cache"].includes(asset.type);
   }).map((asset) => ({
     type: asset.type,
     id: asset.id,
@@ -402,8 +414,8 @@ export function createCleanupPreview({ source = "local", types = ["container", "
     source,
     policy: source === "github"
       ? "只删除已过期制品、已关闭 PR 的缓存和超过 30 天未访问的缓存"
-      : source === "local" ? "只删除显式 disposable 资产和 Docker 未使用的 Build Cache"
-        : "只执行 Docker builder prune；镜像、卷、容器和 release 永不进入清单",
+      : source === "local" ? "只删除未被任何容器引用的悬空/显式 disposable 镜像、未挂载且显式 disposable 的卷，以及 Docker 未使用的 Build Cache"
+        : "只删除复核后仍未被容器引用的悬空/显式 disposable 镜像、未挂载且显式 disposable 的卷，以及 Docker 未使用的 Build Cache；容器和 release 永不进入清单",
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
     allowlist,
@@ -455,8 +467,25 @@ export function executeCleanup({ token, confirmed = false }) {
     }, preview.source);
     return cleanup;
   }
+  dashboardCache.clear();
+  const current = collectDashboard({ source: "local" });
+  const safeAssets = new Map(current.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const currentCache = current.bars.find((item) => item.type === "cache");
+  if (Number(currentCache?.reclaimableBytes || 0) > 0) {
+    safeAssets.set("cache:docker-build-cache", {
+      type: "cache",
+      id: "docker-build-cache",
+      sizeBytes: Number(currentCache.reclaimableBytes),
+      reason: "Docker 明确认定为未使用且可回收的 Build Cache",
+    });
+  }
   const results = [];
-  for (const asset of preview.allowlist) {
+  for (const requested of preview.allowlist) {
+    const asset = safeAssets.get(`${requested.type}:${requested.id}`);
+    if (!asset) {
+      results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前复核不再满足安全清理条件" });
+      continue;
+    }
     const args = asset.type === "container" ? ["container", "rm", asset.id]
       : asset.type === "image" ? ["image", "rm", asset.id]
         : asset.type === "volume" ? ["volume", "rm", asset.id]
@@ -464,7 +493,7 @@ export function executeCleanup({ token, confirmed = false }) {
           : null;
     if (!args) continue;
     const output = run("docker", args, { timeout: 30_000 });
-    results.push({ ...asset, status: output ? "removed" : "failed" });
+    results.push({ ...requested, sizeBytes: asset.sizeBytes, status: output ? "removed" : "failed", reclaimedBytes: output ? Number(asset.sizeBytes || 0) : 0 });
   }
   previewStore.delete(token);
   dashboardCache.clear();

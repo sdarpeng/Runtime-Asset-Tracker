@@ -31,8 +31,8 @@ const classifications = {
 
 const barMeta = {
   worktree: { label: "Worktrees", caption: "本地工作区与分支", Icon: GitBranch },
-  image: { label: "Docker Images", caption: "镜像与构建产物", Icon: Package },
-  volume: { label: "Docker Volumes", caption: "持久化数据卷", Icon: Database },
+  image: { label: "Docker Images", caption: "唯一层占用与容器引用", Icon: Package },
+  volume: { label: "Docker Volumes", caption: "真实占用与挂载关系", Icon: Database },
   cache: { label: "Build Cache", caption: "构建缓存", Icon: Stack },
 };
 
@@ -319,7 +319,7 @@ export function App() {
           </article>
         </section>
 
-        <footer className="action-dock"><div><span className="dock-icon"><WarningCircle size={21} weight="duotone" /></span><span><strong>安全清理始终绑定当前预览</strong><small>{source === "github" ? "只删除失效缓存和过期制品。" : source === "local" ? "不会执行广泛 prune，也不会自动删除未知卷。" : "EC2 只清理 Docker Build Cache，不碰镜像、卷、容器和 release。"}</small></span></div><div className="dock-actions"><button className="button secondary" type="button" disabled={source !== "local"} onClick={() => setScheduleOpen(true)}><ClockCountdown size={19} />定时清理</button><button className="button primary" type="button" disabled={!snapshotOnline || loading} onClick={requestPreview}><Broom size={19} />立即清理</button></div></footer>
+        <footer className="action-dock"><div><span className="dock-icon"><WarningCircle size={21} weight="duotone" /></span><span><strong>安全清理始终绑定当前预览</strong><small>{source === "github" ? "只删除失效缓存和过期制品。" : source === "local" ? "分析镜像引用和卷挂载；未知卷不会自动删除。" : "EC2 精确复核镜像引用和卷挂载，不碰容器、业务卷和 release。"}</small></span></div><div className="dock-actions"><button className="button secondary" type="button" disabled={source !== "local"} onClick={() => setScheduleOpen(true)}><ClockCountdown size={19} />定时清理</button><button className="button primary" type="button" disabled={!snapshotOnline || loading} onClick={requestPreview}><Broom size={19} />立即清理</button></div></footer>
       </main>
       {notice && <button className="toast" type="button" onClick={() => setNotice("")}><CheckCircle size={18} />{notice}<X size={15} /></button>}
       <CleanupModal preview={preview} loading={loading} onClose={() => setPreview(null)} onConfirm={confirmCleanup} />
