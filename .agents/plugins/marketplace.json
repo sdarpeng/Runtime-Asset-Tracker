@@ -1,0 +1,20 @@
+{
+  "name": "sparklingplay-runtime-assets",
+  "interface": {
+    "displayName": "SparklingPlay Runtime Assets"
+  },
+  "plugins": [
+    {
+      "name": "runtime-asset-tracker",
+      "source": {
+        "source": "local",
+        "path": "./plugins/runtime-asset-tracker"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer"
+    }
+  ]
+}

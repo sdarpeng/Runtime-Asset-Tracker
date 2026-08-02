@@ -1,0 +1,33 @@
+{
+  "gitRoots": [
+    "D:\\MyProject"
+  ],
+  "sources": [
+    {
+      "id": "production",
+      "kind": "aws-ssm",
+      "label": "Production account / region",
+      "region": "us-east-2",
+      "instanceId": "i-example"
+    },
+    {
+      "id": "staging",
+      "kind": "aws-ssm",
+      "label": "Staging account / region",
+      "region": "us-east-2",
+      "instanceId": "i-example"
+    },
+    {
+      "id": "github",
+      "kind": "github",
+      "repository": "owner/repository"
+    }
+  ],
+  "schedule": {
+    "enabled": false,
+    "cadence": "weekly",
+    "day": "sunday",
+    "time": "03:00",
+    "mode": "preview-only"
+  }
+}

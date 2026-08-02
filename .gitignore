@@ -1,0 +1,10 @@
+node_modules/
+ui/node_modules/
+ui/dist/
+coverage/
+.runtime-assets/
+.env
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

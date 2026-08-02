@@ -1,0 +1,25 @@
+x-runtime-labels: &runtime-labels
+  com.codex.runtime.project: ${RUNTIME_ASSET_PROJECT:-example-project}
+  com.codex.runtime.environment: ${RUNTIME_ASSET_ENVIRONMENT:-local}
+  com.codex.runtime.release: ${RUNTIME_ASSET_RELEASE:-development}
+  com.codex.runtime.git-sha: ${TARGET_COMMIT:-unknown}
+  com.codex.runtime.owner: ${RUNTIME_ASSET_OWNER:-platform-engineering}
+  com.codex.runtime.created-by: docker-compose
+
+services:
+  api:
+    labels:
+      <<: *runtime-labels
+      com.codex.runtime.asset-kind: container
+      com.codex.runtime.service: api
+      com.codex.runtime.retention: development
+      com.codex.runtime.disposable: "true"
+
+volumes:
+  postgres-data:
+    labels:
+      <<: *runtime-labels
+      com.codex.runtime.asset-kind: volume
+      com.codex.runtime.service: postgres
+      com.codex.runtime.retention: protected
+      com.codex.runtime.disposable: "false"

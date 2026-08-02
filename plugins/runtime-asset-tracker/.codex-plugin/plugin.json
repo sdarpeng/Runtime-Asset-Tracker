@@ -1,0 +1,36 @@
+{
+  "name": "runtime-asset-tracker",
+  "version": "0.1.0+codex.20260802192926",
+  "description": "Track Docker images, containers, volumes, Compose operations, and deployments with portable labels and an append-only JSONL ledger.",
+  "author": {
+    "name": "SparklingPlay Engineering"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Runtime Asset Tracker",
+    "shortDescription": "Label and trace Docker assets across projects.",
+    "longDescription": "A cross-project runtime asset console with an MCP Apps dashboard, portable Docker labels, append-only lifecycle ledger, cleanup previews, and Linux/Windows observers. It tracks and classifies assets without introducing release approval gates.",
+    "developerName": "SparklingPlay Engineering",
+    "category": "Developer",
+    "capabilities": [
+      "Docker asset labels",
+      "Append-only event ledger",
+      "Compose tracking",
+      "Cross-platform installation",
+      "Interactive dashboard",
+      "Exact cleanup preview",
+      "Read-only EC2 and GitHub snapshots"
+    ],
+    "brandColor": "#20B8EC",
+    "screenshots": [
+      "./assets/runtime-asset-dashboard.png",
+      "./assets/runtime-asset-dashboard-github.png"
+    ],
+    "defaultPrompt": [
+      "Open the runtime asset dashboard and show what is reclaimable.",
+      "Preview safe Docker cleanup without deleting anything.",
+      "Show recent runtime asset events across projects."
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "runtime-asset-tracker": {
+      "command": "node",
+      "args": [
+        "./dist/server.mjs"
+      ],
+      "cwd": "."
+    }
+  }
+}

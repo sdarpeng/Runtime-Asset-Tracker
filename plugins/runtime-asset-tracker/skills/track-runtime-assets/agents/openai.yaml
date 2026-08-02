@@ -1,0 +1,4 @@
+interface:
+  display_name: "Runtime Asset Tracker"
+  short_description: "Trace Docker assets without release gates."
+  default_prompt: "Use $track-runtime-assets to label and track runtime assets for this project without adding approval gates."
