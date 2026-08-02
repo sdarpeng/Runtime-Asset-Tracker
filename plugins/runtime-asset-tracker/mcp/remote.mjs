@@ -52,6 +52,7 @@ function emptyBars() {
     count: 0,
     activeBytes: 0,
     protectedBytes: 0,
+    expiringBytes: 0,
     retainedBytes: 0,
     reclaimableBytes: 0,
     unit: type === "worktree" ? "count" : "bytes",
@@ -65,6 +66,7 @@ function aggregate(type, assets, summary) {
     .reduce((total, asset) => total + (type === "worktree" ? 1 : Number(asset.sizeBytes || 0)), 0);
   const activeBytes = sum("active");
   const protectedBytes = sum("protected");
+  const expiringBytes = sum("expiring");
   const reclaimableBytes = type === "cache"
     ? Math.max(sum("reclaimable"), Number(summary?.reclaimableBytes || 0))
     : sum("reclaimable");
@@ -76,7 +78,8 @@ function aggregate(type, assets, summary) {
     count: Number(summary?.totalCount ?? matching.length),
     activeBytes,
     protectedBytes,
-    retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - reclaimableBytes),
+    expiringBytes,
+    retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - expiringBytes - reclaimableBytes),
     reclaimableBytes,
     unit: type === "worktree" ? "count" : "bytes",
   };
@@ -99,6 +102,7 @@ function aggregateGithub(type, assets, unit) {
     .reduce((total, asset) => total + measure(asset), 0);
   const activeBytes = sum("active");
   const protectedBytes = sum("protected");
+  const expiringBytes = sum("expiring");
   const reclaimableBytes = sum("reclaimable");
   const totalBytes = matching.reduce((total, asset) => total + measure(asset), 0);
   return {
@@ -107,7 +111,8 @@ function aggregateGithub(type, assets, unit) {
     count: matching.length,
     activeBytes,
     protectedBytes,
-    retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - reclaimableBytes),
+    expiringBytes,
+    retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - expiringBytes - reclaimableBytes),
     reclaimableBytes,
     unit,
   };
@@ -126,16 +131,37 @@ function runtimeLabel(labels, name) {
   return labels?.[`com.codex.runtime.${name}`];
 }
 
-export function classifyDockerImage({ labels = {}, referenced = false, dangling = false } = {}) {
+export function resolveExpiry({ labels = {}, createdAt, expiresAt } = {}) {
+  const explicit = expiresAt || runtimeLabel(labels, "expires-at") || runtimeLabel(labels, "retention-until");
+  if (explicit && Number.isFinite(Date.parse(explicit))) return new Date(explicit).toISOString();
+  const ttlDays = Number(runtimeLabel(labels, "ttl-days"));
+  const created = Date.parse(createdAt || "");
+  return ttlDays > 0 && Number.isFinite(created) ? new Date(created + ttlDays * 24 * 60 * 60_000).toISOString() : undefined;
+}
+
+export function expiryClassification(expiresAt, now = Date.now(), windowDays = 7) {
+  const expiry = Date.parse(expiresAt || "");
+  if (!Number.isFinite(expiry)) return undefined;
+  if (expiry <= now) return "expired";
+  return expiry - now <= windowDays * 24 * 60 * 60_000 ? "expiring" : "retained";
+}
+
+export function classifyDockerImage({ labels = {}, referenced = false, dangling = false, createdAt, expiresAt, now = Date.now() } = {}) {
   if (referenced) return "active";
   if (runtimeLabel(labels, "retention") === "protected" || runtimeLabel(labels, "disposable") === "false") return "protected";
+  const expiry = expiryClassification(resolveExpiry({ labels, createdAt, expiresAt }), now);
+  if (expiry === "expiring") return "expiring";
+  if (expiry === "retained") return "retained";
   if (runtimeLabel(labels, "disposable") === "true" || dangling) return "reclaimable";
   return "retained";
 }
 
-export function classifyDockerVolume({ labels = {}, referenced = false, protectedName = false } = {}) {
+export function classifyDockerVolume({ labels = {}, referenced = false, protectedName = false, createdAt, expiresAt, now = Date.now() } = {}) {
   if (referenced) return "active";
   if (protectedName || runtimeLabel(labels, "retention") === "protected" || runtimeLabel(labels, "disposable") === "false") return "protected";
+  const expiry = expiryClassification(resolveExpiry({ labels, createdAt, expiresAt }), now);
+  if (expiry === "expiring") return "expiring";
+  if (expiry === "retained") return "review";
   if (runtimeLabel(labels, "disposable") === "true") return "reclaimable";
   return "review";
 }
@@ -146,6 +172,7 @@ export function remoteSnapshotScript(sourceConfig = {}) {
     environment: sourceConfig.id || "remote",
     releaseRoot: sourceConfig.releaseRoot ?? "/home/ec2-user/apps/sparkling-cms-releases",
     activeLink: sourceConfig.activeLink ?? "/home/ec2-user/apps/sparkling-cms",
+    expiryWindowDays: Number(sourceConfig.expiryWindowDays || 7),
   }), "utf8").toString("base64");
   return String.raw`
 import base64, datetime, gzip, json, os, re, shutil, socket, subprocess
@@ -154,6 +181,7 @@ PREFIX = "com.codex.runtime."
 CONTEXT = json.loads(base64.b64decode("${context}"))
 DEFAULT_PROJECT = CONTEXT.get("project") or "unknown"
 DEFAULT_ENVIRONMENT = CONTEXT.get("environment") or "remote"
+EXPIRY_WINDOW_DAYS = int(CONTEXT.get("expiryWindowDays") or 7)
 
 def run(args, timeout=30):
     try:
@@ -193,13 +221,38 @@ def safe_labels(labels):
 def label(labels, name):
     return (labels or {}).get(PREFIX + name)
 
+def parse_time(value):
+    if not value: return None
+    try: return datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception: return None
+
+def expiry_at(labels, created_at=None):
+    explicit = label(labels, "expires-at") or label(labels, "retention-until")
+    parsed = parse_time(explicit)
+    if parsed: return parsed
+    try: ttl_days = float(label(labels, "ttl-days") or 0)
+    except Exception: ttl_days = 0
+    created = parse_time(created_at)
+    return created + datetime.timedelta(days=ttl_days) if created and ttl_days > 0 else None
+
+def expiry_class(labels, created_at=None):
+    expires = expiry_at(labels, created_at)
+    if not expires: return None, None
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if expires <= now: return "expired", expires.isoformat()
+    if expires - now <= datetime.timedelta(days=EXPIRY_WINDOW_DAYS): return "expiring", expires.isoformat()
+    return "retained", expires.isoformat()
+
 def project(labels, fallback=None):
     fallback = fallback or DEFAULT_PROJECT
     return label(labels, "project") or (labels or {}).get("com.docker.compose.project") or fallback or "unknown"
 
-def classify(labels, active=False, protected=False, dangling=False):
+def classify(labels, active=False, protected=False, dangling=False, created_at=None):
     if active: return "active"
     if protected or label(labels, "retention") == "protected" or label(labels, "disposable") == "false": return "protected"
+    expiry, _ = expiry_class(labels, created_at)
+    if expiry == "expiring": return "expiring"
+    if expiry == "retained": return "retained"
     if label(labels, "disposable") == "true": return "reclaimable"
     if dangling: return "review"
     return "retained"
@@ -218,6 +271,15 @@ running_images = {item.get("Image") for item in container_details if (item.get("
 referenced_images = {item.get("Image") for item in container_details if item.get("Image")}
 all_mounted = {mount.get("Name") for item in container_details for mount in (item.get("Mounts") or []) if mount.get("Type") == "volume"}
 active_mounted = {mount.get("Name") for item in container_details if (item.get("State") or {}).get("Running") for mount in (item.get("Mounts") or []) if mount.get("Type") == "volume"}
+image_consumers = {}
+volume_consumers = {}
+for item in container_details:
+    name = str(item.get("Name") or "").lstrip("/")
+    state = (item.get("State") or {}).get("Status") or "unknown"
+    if item.get("Image"): image_consumers.setdefault(item.get("Image"), []).append({"id":item.get("Id"),"name":name,"state":state})
+    for mount in (item.get("Mounts") or []):
+        if mount.get("Type") == "volume" and mount.get("Name"):
+            volume_consumers.setdefault(mount.get("Name"), []).append({"id":item.get("Id"),"name":name,"state":state,"destination":mount.get("Destination")})
 
 df_verbose = docker(["system", "df", "-v"]) if docker_available else ""
 def section(text, start_marker, end_marker):
@@ -244,9 +306,9 @@ for item in container_details:
     assets.append({
         "id": item.get("Id"), "name": str(item.get("Name") or "").lstrip("/"), "type":"container",
         "project": project(labels), "environment": label(labels, "environment") or "remote",
-        "status": (item.get("State") or {}).get("Status") or "unknown", "classification": classify(labels, active=active),
+        "status": (item.get("State") or {}).get("Status") or "unknown", "classification": classify(labels, active=active, created_at=item.get("Created")),
         "sizeBytes": parse_bytes((container_row_map.get(item.get("Id")) or {}).get("Size")), "createdAt": item.get("Created"),
-        "labels": {}, "reason": "正在运行" if active else "已停止，等待归属确认"
+        "labels": labels, "lineage":{"imageId":item.get("Image"),"mounts":[{"type":mount.get("Type"),"name":mount.get("Name"),"destination":mount.get("Destination")} for mount in (item.get("Mounts") or [])]}, "reason": "正在运行" if active else "已停止，等待归属确认"
     })
 
 image_rows = json_lines(docker(["image", "ls", "--no-trunc", "--format", "{{json .}}"])) if docker_available else []
@@ -275,13 +337,15 @@ for image_id, entry in image_map.items():
     referenced = image_id in referenced_images
     protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
     disposable = label(labels, "disposable") == "true"
-    image_class = "active" if referenced else ("protected" if protected else ("reclaimable" if disposable or dangling else "retained"))
+    created_at = item.get("Created") or entry["row"].get("CreatedAt")
+    expiry_state, expires_at = expiry_class(labels, created_at)
+    image_class = "active" if referenced else ("protected" if protected else ("expiring" if expiry_state == "expiring" else ("retained" if expiry_state == "retained" else ("reclaimable" if disposable or dangling else "retained"))))
     unique_size = next((size for short_id, size in image_unique_sizes.items() if short_id in image_id), 0)
     assets.append({
         "id":image_id, "name":tags[0] if tags else image_id[:19], "type":"image", "project":project(labels, (tags[0].split(":")[0] if tags else "unknown")),
         "environment":label(labels, "environment") or "remote", "status":"in-use" if running else ("referenced-stopped" if referenced else ("dangling" if dangling else "unused")),
         "classification":image_class, "sizeBytes":unique_size,
-        "createdAt":item.get("Created") or entry["row"].get("CreatedAt"), "labels":{},
+        "createdAt":created_at, "expiresAt":expires_at, "labels":labels, "lineage":{"consumers":image_consumers.get(image_id, []),"tags":tags,"revision":labels.get("org.opencontainers.image.revision"),"source":labels.get("org.opencontainers.image.source")},
         "reason":"被运行容器引用" if running else ("仍被已停止容器引用" if referenced else ("保留策略明确保护" if protected else ("未引用且明确可丢弃" if disposable else ("未被任何容器引用的悬空镜像" if dangling else "未引用但没有可丢弃标签"))))
     })
 
@@ -301,12 +365,13 @@ for item in volume_details:
     protected = bool(protected_pattern.search(name))
     policy_protected = protected or label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
     disposable = label(labels, "disposable") == "true"
-    volume_class = "active" if mounted else ("protected" if policy_protected else ("reclaimable" if disposable else "review"))
+    expiry_state, expires_at = expiry_class(labels, item.get("CreatedAt"))
+    volume_class = "active" if mounted else ("protected" if policy_protected else ("expiring" if expiry_state == "expiring" else ("review" if expiry_state == "retained" else ("reclaimable" if disposable else "review"))))
     assets.append({
         "id":name, "name":name, "type":"volume", "project":project(labels, name.split("_")[0]),
         "environment":label(labels, "environment") or "remote", "status":"mounted-running" if active else ("mounted-stopped" if mounted else "unmounted"),
-        "classification":volume_class, "sizeBytes":volume_sizes.get(name, 0), "createdAt":item.get("CreatedAt"),
-        "labels":{}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
+        "classification":volume_class, "sizeBytes":volume_sizes.get(name, 0), "createdAt":item.get("CreatedAt"), "expiresAt":expires_at,
+        "labels":labels, "lineage":{"consumers":volume_consumers.get(name, []),"mountpoint":item.get("Mountpoint")}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
     })
 
 for row in json_lines(docker(["system", "df", "--format", "{{json .}}"])) if docker_available else []:
@@ -431,11 +496,19 @@ function collectSshSnapshot(sourceConfig) {
   return decodeSnapshot(output);
 }
 
-export function classifyGithubAsset({ kind, expired = false, lastAccessedAt, ref, pullState, now = Date.now() }) {
-  if (kind === "artifact") return expired ? "reclaimable" : "retained";
-  const stale = now - new Date(lastAccessedAt || 0).getTime() > 30 * 24 * 60 * 60_000;
+export function classifyGithubAsset({ kind, expired = false, expiresAt, lastAccessedAt, ref, pullState, now = Date.now(), expiryWindowDays = 7 }) {
+  if (kind === "artifact") {
+    const expiry = Date.parse(expiresAt || "");
+    if (expired || (Number.isFinite(expiry) && expiry <= now)) return "reclaimable";
+    if (Number.isFinite(expiry) && expiry - now <= expiryWindowDays * 24 * 60 * 60_000) return "expiring";
+    return "retained";
+  }
+  const lastAccessed = new Date(lastAccessedAt || 0).getTime();
+  const staleAt = lastAccessed + 30 * 24 * 60 * 60_000;
+  const stale = now >= staleAt;
   const closedPullRequest = /^refs\/pull\/\d+\/merge$/.test(String(ref || "")) && pullState === "closed";
-  return stale || closedPullRequest ? "reclaimable" : "retained";
+  if (stale || closedPullRequest) return "reclaimable";
+  return staleAt - now <= expiryWindowDays * 24 * 60 * 60_000 ? "expiring" : "retained";
 }
 
 function collectGithubSnapshot(sourceConfig) {
@@ -479,9 +552,11 @@ function collectGithubSnapshot(sourceConfig) {
       project: repository,
       environment: "github",
       status: item.expired ? "expired-artifact" : "artifact",
-      classification: classifyGithubAsset({ kind: "artifact", expired: item.expired }),
+      classification: classifyGithubAsset({ kind: "artifact", expired: item.expired, expiresAt: item.expires_at }),
       sizeBytes: Number(item.size_in_bytes || 0),
       createdAt: item.created_at,
+      expiresAt: item.expires_at,
+      lineage: { workflowRunId: item.workflow_run?.id, repository },
       labels: {},
       reason: item.expired ? "已过期的 GitHub Actions artifact" : "有效的 GitHub Actions artifact",
     })),
@@ -507,9 +582,12 @@ function collectGithubSnapshot(sourceConfig) {
         classification,
         sizeBytes: Number(item.size_in_bytes || 0),
         createdAt: item.created_at,
+        expiresAt: new Date(Date.parse(item.last_accessed_at || item.created_at || 0) + 30 * 24 * 60 * 60_000).toISOString(),
+        lineage: { ref: item.ref, pullState, repository },
         labels: {},
         reason: closedPullRequest ? "已关闭 Pull Request 的 GitHub Actions cache"
           : classification === "reclaimable" ? "超过 30 天未访问的 GitHub Actions cache"
+            : classification === "expiring" ? "将在 7 天内达到 30 天未访问期限"
             : `仍在保留期内的 GitHub Actions cache · ${item.ref || "unknown ref"}`,
       };
     }),
@@ -574,7 +652,7 @@ export function awsDockerCleanupScript(allowlist) {
     name: item.name,
     sizeBytes: Number(item.sizeBytes || 0),
   }))), "utf8").toString("base64");
-  return String.raw`import base64, gzip, json, re, subprocess
+  return String.raw`import base64, datetime, gzip, json, re, subprocess
 
 items = json.loads(base64.b64decode("${payload}"))
 
@@ -602,6 +680,18 @@ def inspect(kind, identifier):
 def label(labels, name):
     return (labels or {}).get("com.codex.runtime." + name)
 
+def future_expiry(labels, created_at=None):
+    value = label(labels, "expires-at") or label(labels, "retention-until")
+    try: expires = datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00")) if value else None
+    except Exception: expires = None
+    if not expires:
+        try: ttl_days = float(label(labels, "ttl-days") or 0)
+        except Exception: ttl_days = 0
+        try: created = datetime.datetime.fromisoformat(str(created_at).replace("Z", "+00:00")) if created_at else None
+        except Exception: created = None
+        expires = created + datetime.timedelta(days=ttl_days) if created and ttl_days > 0 else None
+    return bool(expires and expires > datetime.datetime.now(datetime.timezone.utc))
+
 results = []
 for item in items:
     kind = item.get("type")
@@ -621,7 +711,7 @@ for item in items:
             digests = detail.get("RepoDigests") or []
             dangling = not tags and not digests
             protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
-            safe = code == 0 and not refs and not protected and (label(labels, "disposable") == "true" or dangling)
+            safe = code == 0 and not refs and not protected and not future_expiry(labels, detail.get("Created")) and (label(labels, "disposable") == "true" or dangling)
             reason = "未被任何容器引用的悬空/显式 disposable 镜像"
     elif kind == "volume":
         detail = inspect("volume", identifier)
@@ -630,7 +720,7 @@ for item in items:
             code, refs, _ = run(docker + ["ps", "-aq", "--filter", "volume=" + identifier])
             protected_name = re.search(r"postgres|mysql|maria|redis|valkey|upload|media|assets?|database|db[-_]?data|backup", identifier, re.I)
             protected = bool(protected_name) or label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
-            safe = code == 0 and not refs and not protected and label(labels, "disposable") == "true"
+            safe = code == 0 and not refs and not protected and not future_expiry(labels, detail.get("CreatedAt")) and label(labels, "disposable") == "true"
             reason = "未被任何容器挂载且明确 disposable 的卷"
     if not safe:
         results.append({**item, "status":"skipped", "reclaimedBytes":0, "reason":"执行前复核不再满足安全清理条件"})

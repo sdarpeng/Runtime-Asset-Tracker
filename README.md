@@ -4,7 +4,8 @@ Runtime Asset Tracker is a Codex plugin for inspecting and tracing runtime asset
 
 It provides:
 
-- A graphical dashboard for worktrees, Docker images, volumes, build cache, and lifecycle events.
+- A graphical dashboard for worktrees, Docker images, volumes, build cache, and lifecycle events, with separate retained, expiring, and safely reclaimable capacity.
+- A project-and-environment scoped, read-only deep lineage scan that explains ownership, consumers, revision/release, retention/expiry, recovery evidence, and missing evidence before cleanup.
 - Portable Docker and Compose labels.
 - An append-only JSONL event ledger.
 - Exact local cleanup previews that only include explicitly disposable assets.
@@ -12,7 +13,7 @@ It provides:
 - A non-secret connection identity panel for AWS Account ID, IAM principal, region, availability zone, instance ID, host, OS user, application path, and credential profile.
 - GitHub Actions cache, artifact, and workflow inventory, with safe cleanup limited to expired artifacts, closed-PR caches, and caches not accessed for more than 30 days.
 
-Every cleanup starts with an expiring exact-item preview and is revalidated immediately before execution. EC2 cleanup can remove exact unreferenced dangling or explicitly disposable image IDs, exact unreferenced explicitly disposable non-business volume names, and unused BuildKit cache. It never performs broad image/volume prune, forced deletion, container deletion, release deletion, or rollback deletion. Unknown volumes and assets without sufficient disposal evidence remain protected.
+Every cleanup starts with a short-lived exact-item preview and is revalidated immediately before execution. Assets approaching an explicit expiry are shown in orange but remain ineligible until the expiry passes and all other safety conditions succeed. EC2 cleanup can remove exact unreferenced dangling or explicitly disposable image IDs, exact unreferenced explicitly disposable non-business volume names, and unused BuildKit cache. It never performs broad image/volume prune, forced deletion, container deletion, release deletion, or rollback deletion. Unknown volumes and assets without sufficient disposal evidence remain protected.
 
 ![Runtime Asset Tracker dashboard](plugins/runtime-asset-tracker/assets/runtime-asset-dashboard.png)
 

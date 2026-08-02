@@ -15,6 +15,7 @@ try {
   const tools = await client.listTools();
   const names = tools.tools.map((tool) => tool.name).sort();
   assert.deepEqual(names, [
+    "deep_scan_runtime_lineage",
     "execute_cleanup",
     "open_runtime_dashboard",
     "preview_cleanup",

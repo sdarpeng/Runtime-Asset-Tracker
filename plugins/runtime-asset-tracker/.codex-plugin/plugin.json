@@ -1,6 +1,6 @@
 {
   "name": "runtime-asset-tracker",
-  "version": "0.1.0+codex.20260802220003",
+  "version": "0.1.0+codex.20260802222937",
   "description": "Track Docker images, containers, volumes, Compose operations, and deployments with portable labels and an append-only JSONL ledger.",
   "author": {
     "name": "SparklingPlay Engineering"
@@ -10,7 +10,7 @@
   "interface": {
     "displayName": "Runtime Asset Tracker",
     "shortDescription": "Label and trace Docker assets across projects.",
-    "longDescription": "A cross-project runtime asset console with an MCP Apps dashboard, project-bound EC2 identity metadata, disk-capacity KPIs, credential-profile references, portable Docker labels, append-only lifecycle ledger, exact image/volume/cache analysis, narrowly scoped safe cleanup for connected EC2 and GitHub sources, and Linux/Windows observers. It never stores private keys or cloud secrets and does not introduce release approval gates.",
+    "longDescription": "A cross-project runtime asset console with an MCP Apps dashboard, project-bound EC2 identity metadata, disk-capacity KPIs, credential-profile references, portable Docker labels, append-only lifecycle ledger, retained/expiring/reclaimable capacity classification, read-only deep lineage analysis, exact image/volume/cache analysis, narrowly scoped safe cleanup for connected EC2 and GitHub sources, and Linux/Windows observers. It never stores private keys or cloud secrets and does not introduce release approval gates.",
     "developerName": "SparklingPlay Engineering",
     "category": "Developer",
     "capabilities": [
@@ -24,7 +24,9 @@
       "EC2 and GitHub inventory",
       "Project-bound EC2 identity and disk capacity",
       "SSH and AWS credential profile references",
-      "Revalidated safe remote cleanup"
+      "Revalidated safe remote cleanup",
+      "Expiry-aware capacity classification",
+      "Read-only deep lineage scan"
     ],
     "brandColor": "#20B8EC",
     "screenshots": [

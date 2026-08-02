@@ -33763,6 +33763,7 @@ function emptyBars() {
     count: 0,
     activeBytes: 0,
     protectedBytes: 0,
+    expiringBytes: 0,
     retainedBytes: 0,
     reclaimableBytes: 0,
     unit: type === "worktree" ? "count" : "bytes"
@@ -33773,6 +33774,7 @@ function aggregate(type, assets, summary) {
   const sum = (classification2) => matching.filter((asset) => asset.classification === classification2).reduce((total, asset) => total + (type === "worktree" ? 1 : Number(asset.sizeBytes || 0)), 0);
   const activeBytes = sum("active");
   const protectedBytes = sum("protected");
+  const expiringBytes = sum("expiring");
   const reclaimableBytes = type === "cache" ? Math.max(sum("reclaimable"), Number(summary?.reclaimableBytes || 0)) : sum("reclaimable");
   const measured = matching.reduce((total, asset) => total + (type === "worktree" ? 1 : Number(asset.sizeBytes || 0)), 0);
   const totalBytes = type === "worktree" ? matching.length : Math.max(measured, Number(summary?.sizeBytes || 0));
@@ -33782,7 +33784,8 @@ function aggregate(type, assets, summary) {
     count: Number(summary?.totalCount ?? matching.length),
     activeBytes,
     protectedBytes,
-    retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - reclaimableBytes),
+    expiringBytes,
+    retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - expiringBytes - reclaimableBytes),
     reclaimableBytes,
     unit: type === "worktree" ? "count" : "bytes"
   };
@@ -33801,6 +33804,7 @@ function aggregateGithub(type, assets, unit) {
   const sum = (classification2) => matching.filter((asset) => asset.classification === classification2).reduce((total, asset) => total + measure(asset), 0);
   const activeBytes = sum("active");
   const protectedBytes = sum("protected");
+  const expiringBytes = sum("expiring");
   const reclaimableBytes = sum("reclaimable");
   const totalBytes = matching.reduce((total, asset) => total + measure(asset), 0);
   return {
@@ -33809,7 +33813,8 @@ function aggregateGithub(type, assets, unit) {
     count: matching.length,
     activeBytes,
     protectedBytes,
-    retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - reclaimableBytes),
+    expiringBytes,
+    retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - expiringBytes - reclaimableBytes),
     reclaimableBytes,
     unit
   };
@@ -33822,12 +33827,29 @@ function buildGithubBars(assets) {
     aggregateGithub("workflow_run", assets, "count")
   ];
 }
+function runtimeLabel(labels, name) {
+  return labels?.[`com.codex.runtime.${name}`];
+}
+function resolveExpiry({ labels = {}, createdAt, expiresAt } = {}) {
+  const explicit = expiresAt || runtimeLabel(labels, "expires-at") || runtimeLabel(labels, "retention-until");
+  if (explicit && Number.isFinite(Date.parse(explicit))) return new Date(explicit).toISOString();
+  const ttlDays = Number(runtimeLabel(labels, "ttl-days"));
+  const created = Date.parse(createdAt || "");
+  return ttlDays > 0 && Number.isFinite(created) ? new Date(created + ttlDays * 24 * 60 * 6e4).toISOString() : void 0;
+}
+function expiryClassification(expiresAt, now = Date.now(), windowDays = 7) {
+  const expiry = Date.parse(expiresAt || "");
+  if (!Number.isFinite(expiry)) return void 0;
+  if (expiry <= now) return "expired";
+  return expiry - now <= windowDays * 24 * 60 * 6e4 ? "expiring" : "retained";
+}
 function remoteSnapshotScript(sourceConfig = {}) {
   const context = Buffer.from(JSON.stringify({
     project: sourceConfig.projectId || "sparklingplaycms",
     environment: sourceConfig.id || "remote",
     releaseRoot: sourceConfig.releaseRoot ?? "/home/ec2-user/apps/sparkling-cms-releases",
-    activeLink: sourceConfig.activeLink ?? "/home/ec2-user/apps/sparkling-cms"
+    activeLink: sourceConfig.activeLink ?? "/home/ec2-user/apps/sparkling-cms",
+    expiryWindowDays: Number(sourceConfig.expiryWindowDays || 7)
   }), "utf8").toString("base64");
   return String.raw`
 import base64, datetime, gzip, json, os, re, shutil, socket, subprocess
@@ -33836,6 +33858,7 @@ PREFIX = "com.codex.runtime."
 CONTEXT = json.loads(base64.b64decode("${context}"))
 DEFAULT_PROJECT = CONTEXT.get("project") or "unknown"
 DEFAULT_ENVIRONMENT = CONTEXT.get("environment") or "remote"
+EXPIRY_WINDOW_DAYS = int(CONTEXT.get("expiryWindowDays") or 7)
 
 def run(args, timeout=30):
     try:
@@ -33875,13 +33898,38 @@ def safe_labels(labels):
 def label(labels, name):
     return (labels or {}).get(PREFIX + name)
 
+def parse_time(value):
+    if not value: return None
+    try: return datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception: return None
+
+def expiry_at(labels, created_at=None):
+    explicit = label(labels, "expires-at") or label(labels, "retention-until")
+    parsed = parse_time(explicit)
+    if parsed: return parsed
+    try: ttl_days = float(label(labels, "ttl-days") or 0)
+    except Exception: ttl_days = 0
+    created = parse_time(created_at)
+    return created + datetime.timedelta(days=ttl_days) if created and ttl_days > 0 else None
+
+def expiry_class(labels, created_at=None):
+    expires = expiry_at(labels, created_at)
+    if not expires: return None, None
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if expires <= now: return "expired", expires.isoformat()
+    if expires - now <= datetime.timedelta(days=EXPIRY_WINDOW_DAYS): return "expiring", expires.isoformat()
+    return "retained", expires.isoformat()
+
 def project(labels, fallback=None):
     fallback = fallback or DEFAULT_PROJECT
     return label(labels, "project") or (labels or {}).get("com.docker.compose.project") or fallback or "unknown"
 
-def classify(labels, active=False, protected=False, dangling=False):
+def classify(labels, active=False, protected=False, dangling=False, created_at=None):
     if active: return "active"
     if protected or label(labels, "retention") == "protected" or label(labels, "disposable") == "false": return "protected"
+    expiry, _ = expiry_class(labels, created_at)
+    if expiry == "expiring": return "expiring"
+    if expiry == "retained": return "retained"
     if label(labels, "disposable") == "true": return "reclaimable"
     if dangling: return "review"
     return "retained"
@@ -33900,6 +33948,15 @@ running_images = {item.get("Image") for item in container_details if (item.get("
 referenced_images = {item.get("Image") for item in container_details if item.get("Image")}
 all_mounted = {mount.get("Name") for item in container_details for mount in (item.get("Mounts") or []) if mount.get("Type") == "volume"}
 active_mounted = {mount.get("Name") for item in container_details if (item.get("State") or {}).get("Running") for mount in (item.get("Mounts") or []) if mount.get("Type") == "volume"}
+image_consumers = {}
+volume_consumers = {}
+for item in container_details:
+    name = str(item.get("Name") or "").lstrip("/")
+    state = (item.get("State") or {}).get("Status") or "unknown"
+    if item.get("Image"): image_consumers.setdefault(item.get("Image"), []).append({"id":item.get("Id"),"name":name,"state":state})
+    for mount in (item.get("Mounts") or []):
+        if mount.get("Type") == "volume" and mount.get("Name"):
+            volume_consumers.setdefault(mount.get("Name"), []).append({"id":item.get("Id"),"name":name,"state":state,"destination":mount.get("Destination")})
 
 df_verbose = docker(["system", "df", "-v"]) if docker_available else ""
 def section(text, start_marker, end_marker):
@@ -33926,9 +33983,9 @@ for item in container_details:
     assets.append({
         "id": item.get("Id"), "name": str(item.get("Name") or "").lstrip("/"), "type":"container",
         "project": project(labels), "environment": label(labels, "environment") or "remote",
-        "status": (item.get("State") or {}).get("Status") or "unknown", "classification": classify(labels, active=active),
+        "status": (item.get("State") or {}).get("Status") or "unknown", "classification": classify(labels, active=active, created_at=item.get("Created")),
         "sizeBytes": parse_bytes((container_row_map.get(item.get("Id")) or {}).get("Size")), "createdAt": item.get("Created"),
-        "labels": {}, "reason": "正在运行" if active else "已停止，等待归属确认"
+        "labels": labels, "lineage":{"imageId":item.get("Image"),"mounts":[{"type":mount.get("Type"),"name":mount.get("Name"),"destination":mount.get("Destination")} for mount in (item.get("Mounts") or [])]}, "reason": "正在运行" if active else "已停止，等待归属确认"
     })
 
 image_rows = json_lines(docker(["image", "ls", "--no-trunc", "--format", "{{json .}}"])) if docker_available else []
@@ -33957,13 +34014,15 @@ for image_id, entry in image_map.items():
     referenced = image_id in referenced_images
     protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
     disposable = label(labels, "disposable") == "true"
-    image_class = "active" if referenced else ("protected" if protected else ("reclaimable" if disposable or dangling else "retained"))
+    created_at = item.get("Created") or entry["row"].get("CreatedAt")
+    expiry_state, expires_at = expiry_class(labels, created_at)
+    image_class = "active" if referenced else ("protected" if protected else ("expiring" if expiry_state == "expiring" else ("retained" if expiry_state == "retained" else ("reclaimable" if disposable or dangling else "retained"))))
     unique_size = next((size for short_id, size in image_unique_sizes.items() if short_id in image_id), 0)
     assets.append({
         "id":image_id, "name":tags[0] if tags else image_id[:19], "type":"image", "project":project(labels, (tags[0].split(":")[0] if tags else "unknown")),
         "environment":label(labels, "environment") or "remote", "status":"in-use" if running else ("referenced-stopped" if referenced else ("dangling" if dangling else "unused")),
         "classification":image_class, "sizeBytes":unique_size,
-        "createdAt":item.get("Created") or entry["row"].get("CreatedAt"), "labels":{},
+        "createdAt":created_at, "expiresAt":expires_at, "labels":labels, "lineage":{"consumers":image_consumers.get(image_id, []),"tags":tags,"revision":labels.get("org.opencontainers.image.revision"),"source":labels.get("org.opencontainers.image.source")},
         "reason":"被运行容器引用" if running else ("仍被已停止容器引用" if referenced else ("保留策略明确保护" if protected else ("未引用且明确可丢弃" if disposable else ("未被任何容器引用的悬空镜像" if dangling else "未引用但没有可丢弃标签"))))
     })
 
@@ -33983,12 +34042,13 @@ for item in volume_details:
     protected = bool(protected_pattern.search(name))
     policy_protected = protected or label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
     disposable = label(labels, "disposable") == "true"
-    volume_class = "active" if mounted else ("protected" if policy_protected else ("reclaimable" if disposable else "review"))
+    expiry_state, expires_at = expiry_class(labels, item.get("CreatedAt"))
+    volume_class = "active" if mounted else ("protected" if policy_protected else ("expiring" if expiry_state == "expiring" else ("review" if expiry_state == "retained" else ("reclaimable" if disposable else "review"))))
     assets.append({
         "id":name, "name":name, "type":"volume", "project":project(labels, name.split("_")[0]),
         "environment":label(labels, "environment") or "remote", "status":"mounted-running" if active else ("mounted-stopped" if mounted else "unmounted"),
-        "classification":volume_class, "sizeBytes":volume_sizes.get(name, 0), "createdAt":item.get("CreatedAt"),
-        "labels":{}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
+        "classification":volume_class, "sizeBytes":volume_sizes.get(name, 0), "createdAt":item.get("CreatedAt"), "expiresAt":expires_at,
+        "labels":labels, "lineage":{"consumers":volume_consumers.get(name, []),"mountpoint":item.get("Mountpoint")}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
     })
 
 for row in json_lines(docker(["system", "df", "--format", "{{json .}}"])) if docker_available else []:
@@ -34125,11 +34185,19 @@ function collectSshSnapshot(sourceConfig) {
   ], { timeout: 15e4, maxBuffer: 32 * 1024 * 1024 });
   return decodeSnapshot(output);
 }
-function classifyGithubAsset({ kind, expired = false, lastAccessedAt, ref, pullState, now = Date.now() }) {
-  if (kind === "artifact") return expired ? "reclaimable" : "retained";
-  const stale = now - new Date(lastAccessedAt || 0).getTime() > 30 * 24 * 60 * 6e4;
+function classifyGithubAsset({ kind, expired = false, expiresAt, lastAccessedAt, ref, pullState, now = Date.now(), expiryWindowDays = 7 }) {
+  if (kind === "artifact") {
+    const expiry = Date.parse(expiresAt || "");
+    if (expired || Number.isFinite(expiry) && expiry <= now) return "reclaimable";
+    if (Number.isFinite(expiry) && expiry - now <= expiryWindowDays * 24 * 60 * 6e4) return "expiring";
+    return "retained";
+  }
+  const lastAccessed = new Date(lastAccessedAt || 0).getTime();
+  const staleAt = lastAccessed + 30 * 24 * 60 * 6e4;
+  const stale = now >= staleAt;
   const closedPullRequest = /^refs\/pull\/\d+\/merge$/.test(String(ref || "")) && pullState === "closed";
-  return stale || closedPullRequest ? "reclaimable" : "retained";
+  if (stale || closedPullRequest) return "reclaimable";
+  return staleAt - now <= expiryWindowDays * 24 * 60 * 6e4 ? "expiring" : "retained";
 }
 function collectGithubSnapshot(sourceConfig) {
   const repository = sourceConfig?.repository;
@@ -34172,9 +34240,11 @@ function collectGithubSnapshot(sourceConfig) {
       project: repository,
       environment: "github",
       status: item.expired ? "expired-artifact" : "artifact",
-      classification: classifyGithubAsset({ kind: "artifact", expired: item.expired }),
+      classification: classifyGithubAsset({ kind: "artifact", expired: item.expired, expiresAt: item.expires_at }),
       sizeBytes: Number(item.size_in_bytes || 0),
       createdAt: item.created_at,
+      expiresAt: item.expires_at,
+      lineage: { workflowRunId: item.workflow_run?.id, repository },
       labels: {},
       reason: item.expired ? "\u5DF2\u8FC7\u671F\u7684 GitHub Actions artifact" : "\u6709\u6548\u7684 GitHub Actions artifact"
     })),
@@ -34200,8 +34270,10 @@ function collectGithubSnapshot(sourceConfig) {
         classification: classification2,
         sizeBytes: Number(item.size_in_bytes || 0),
         createdAt: item.created_at,
+        expiresAt: new Date(Date.parse(item.last_accessed_at || item.created_at || 0) + 30 * 24 * 60 * 6e4).toISOString(),
+        lineage: { ref: item.ref, pullState, repository },
         labels: {},
-        reason: closedPullRequest ? "\u5DF2\u5173\u95ED Pull Request \u7684 GitHub Actions cache" : classification2 === "reclaimable" ? "\u8D85\u8FC7 30 \u5929\u672A\u8BBF\u95EE\u7684 GitHub Actions cache" : `\u4ECD\u5728\u4FDD\u7559\u671F\u5185\u7684 GitHub Actions cache \xB7 ${item.ref || "unknown ref"}`
+        reason: closedPullRequest ? "\u5DF2\u5173\u95ED Pull Request \u7684 GitHub Actions cache" : classification2 === "reclaimable" ? "\u8D85\u8FC7 30 \u5929\u672A\u8BBF\u95EE\u7684 GitHub Actions cache" : classification2 === "expiring" ? "\u5C06\u5728 7 \u5929\u5185\u8FBE\u5230 30 \u5929\u672A\u8BBF\u95EE\u671F\u9650" : `\u4ECD\u5728\u4FDD\u7559\u671F\u5185\u7684 GitHub Actions cache \xB7 ${item.ref || "unknown ref"}`
       };
     }),
     ...(runs.workflow_runs || []).map((run2) => {
@@ -34252,7 +34324,7 @@ function awsDockerCleanupScript(allowlist) {
     name: item.name,
     sizeBytes: Number(item.sizeBytes || 0)
   }))), "utf8").toString("base64");
-  return String.raw`import base64, gzip, json, re, subprocess
+  return String.raw`import base64, datetime, gzip, json, re, subprocess
 
 items = json.loads(base64.b64decode("${payload}"))
 
@@ -34280,6 +34352,18 @@ def inspect(kind, identifier):
 def label(labels, name):
     return (labels or {}).get("com.codex.runtime." + name)
 
+def future_expiry(labels, created_at=None):
+    value = label(labels, "expires-at") or label(labels, "retention-until")
+    try: expires = datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00")) if value else None
+    except Exception: expires = None
+    if not expires:
+        try: ttl_days = float(label(labels, "ttl-days") or 0)
+        except Exception: ttl_days = 0
+        try: created = datetime.datetime.fromisoformat(str(created_at).replace("Z", "+00:00")) if created_at else None
+        except Exception: created = None
+        expires = created + datetime.timedelta(days=ttl_days) if created and ttl_days > 0 else None
+    return bool(expires and expires > datetime.datetime.now(datetime.timezone.utc))
+
 results = []
 for item in items:
     kind = item.get("type")
@@ -34299,7 +34383,7 @@ for item in items:
             digests = detail.get("RepoDigests") or []
             dangling = not tags and not digests
             protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
-            safe = code == 0 and not refs and not protected and (label(labels, "disposable") == "true" or dangling)
+            safe = code == 0 and not refs and not protected and not future_expiry(labels, detail.get("Created")) and (label(labels, "disposable") == "true" or dangling)
             reason = "未被任何容器引用的悬空/显式 disposable 镜像"
     elif kind == "volume":
         detail = inspect("volume", identifier)
@@ -34308,7 +34392,7 @@ for item in items:
             code, refs, _ = run(docker + ["ps", "-aq", "--filter", "volume=" + identifier])
             protected_name = re.search(r"postgres|mysql|maria|redis|valkey|upload|media|assets?|database|db[-_]?data|backup", identifier, re.I)
             protected = bool(protected_name) or label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
-            safe = code == 0 and not refs and not protected and label(labels, "disposable") == "true"
+            safe = code == 0 and not refs and not protected and not future_expiry(labels, detail.get("CreatedAt")) and label(labels, "disposable") == "true"
             reason = "未被任何容器挂载且明确 disposable 的卷"
     if not safe:
         results.append({**item, "status":"skipped", "reclaimedBytes":0, "reason":"执行前复核不再满足安全清理条件"})
@@ -34612,9 +34696,12 @@ function safeLabels(labels) {
 function labelValue(labels, key) {
   return labels?.[`${RUNTIME_PREFIX}${key}`];
 }
-function classification({ labels = {}, active = false, dangling = false, knownProtected = false, assetType = "generic" }) {
+function classification({ labels = {}, active = false, dangling = false, knownProtected = false, assetType = "generic", createdAt, expiresAt, now = Date.now() }) {
   if (active) return "active";
   if (knownProtected || labelValue(labels, "retention") === "protected" || labelValue(labels, "disposable") === "false") return "protected";
+  const expiry = expiryClassification(resolveExpiry({ labels, createdAt, expiresAt }), now);
+  if (expiry === "expiring") return "expiring";
+  if (expiry === "retained") return assetType === "volume" ? "review" : "retained";
   if (labelValue(labels, "disposable") === "true") return "reclaimable";
   if (assetType === "image" && dangling) return "reclaimable";
   if (assetType === "volume") return "review";
@@ -34663,6 +34750,16 @@ function dockerInventory() {
   const referencedImageIds = new Set(containerDetails.map((item) => item.Image).filter(Boolean));
   const allMountedVolumes = new Set(containerDetails.flatMap((item) => (item.Mounts || []).filter((mount) => mount.Type === "volume").map((mount) => mount.Name)));
   const activeMountedVolumes = new Set(containerDetails.filter((item) => item.State?.Running).flatMap((item) => (item.Mounts || []).filter((mount) => mount.Type === "volume").map((mount) => mount.Name)));
+  const imageConsumers = /* @__PURE__ */ new Map();
+  const volumeConsumers = /* @__PURE__ */ new Map();
+  for (const item of containerDetails) {
+    const consumer = { id: item.Id, name: String(item.Name || "").replace(/^\//, ""), state: item.State?.Status || "unknown" };
+    if (item.Image) imageConsumers.set(item.Image, [...imageConsumers.get(item.Image) || [], consumer]);
+    for (const mount of item.Mounts || []) {
+      if (mount.Type !== "volume" || !mount.Name) continue;
+      volumeConsumers.set(mount.Name, [...volumeConsumers.get(mount.Name) || [], { ...consumer, destination: mount.Destination }]);
+    }
+  }
   const containers = containerDetails.map((item) => {
     const labels = safeLabels(item.Config?.Labels);
     const active = Boolean(item.State?.Running);
@@ -34673,10 +34770,15 @@ function dockerInventory() {
       project: projectFrom(labels),
       environment: environmentFrom(labels),
       status: item.State?.Status || "unknown",
-      classification: classification({ labels, active }),
+      classification: classification({ labels, active, createdAt: item.Created }),
       sizeBytes: parseBytes(containerRows.find((row) => row.ID === item.Id)?.Size),
       createdAt: item.Created,
+      expiresAt: resolveExpiry({ labels, createdAt: item.Created }),
       labels,
+      lineage: {
+        imageId: item.Image,
+        mounts: (item.Mounts || []).map((mount) => ({ type: mount.Type, name: mount.Name, destination: mount.Destination }))
+      },
       reason: active ? "\u6B63\u5728\u8FD0\u884C" : labelValue(labels, "disposable") === "true" ? "\u5DF2\u505C\u6B62\u4E14\u660E\u786E\u53EF\u4E22\u5F03" : "\u5DF2\u505C\u6B62\uFF0C\u7B49\u5F85\u5F52\u5C5E\u786E\u8BA4"
     };
   });
@@ -34704,10 +34806,17 @@ function dockerInventory() {
       project: projectFrom(labels, tags[0]?.split(/[/:]/)[0]),
       environment: environmentFrom(labels),
       status: running ? "in-use" : referenced ? "referenced-stopped" : dangling ? "dangling" : "unused",
-      classification: classification({ labels, active: referenced, dangling, assetType: "image" }),
+      classification: classification({ labels, active: referenced, dangling, assetType: "image", createdAt: item?.Created || row.CreatedAt }),
       sizeBytes: [...verboseSizes.imageUniqueSizes.entries()].find(([shortId]) => String(row.ID).includes(shortId))?.[1] || 0,
       createdAt: item?.Created || row.CreatedAt,
+      expiresAt: resolveExpiry({ labels, createdAt: item?.Created || row.CreatedAt }),
       labels,
+      lineage: {
+        consumers: imageConsumers.get(row.ID) || [],
+        tags,
+        revision: labels["org.opencontainers.image.revision"],
+        source: labels["org.opencontainers.image.source"]
+      },
       reason: running ? "\u88AB\u8FD0\u884C\u5BB9\u5668\u5F15\u7528" : referenced ? "\u4ECD\u88AB\u5DF2\u505C\u6B62\u5BB9\u5668\u5F15\u7528" : policyProtected ? "\u4FDD\u7559\u7B56\u7565\u660E\u786E\u4FDD\u62A4" : labelValue(labels, "disposable") === "true" ? "\u672A\u88AB\u4EFB\u4F55\u5BB9\u5668\u5F15\u7528\u4E14\u660E\u786E\u53EF\u4E22\u5F03" : dangling ? "\u672A\u88AB\u4EFB\u4F55\u5BB9\u5668\u5F15\u7528\u7684\u60AC\u7A7A\u955C\u50CF" : "\u672A\u5F15\u7528\u4F46\u6CA1\u6709\u53EF\u4E22\u5F03\u6807\u7B7E"
     };
   });
@@ -34728,10 +34837,12 @@ function dockerInventory() {
       project: projectFrom(labels, item.Labels?.["com.docker.compose.project"]),
       environment: environmentFrom(labels),
       status: active ? "mounted-running" : mounted ? "mounted-stopped" : "unmounted",
-      classification: classification({ labels, active: mounted, knownProtected, assetType: "volume" }),
+      classification: classification({ labels, active: mounted, knownProtected, assetType: "volume", createdAt: item.CreatedAt }),
       sizeBytes: volumeSizes.get(item.Name) || 0,
       createdAt: item.CreatedAt,
+      expiresAt: resolveExpiry({ labels, createdAt: item.CreatedAt }),
       labels,
+      lineage: { consumers: volumeConsumers.get(item.Name) || [], mountpoint: item.Mountpoint },
       reason: active ? "\u88AB\u8FD0\u884C\u5BB9\u5668\u6302\u8F7D" : mounted ? "\u4ECD\u88AB\u5DF2\u505C\u6B62\u5BB9\u5668\u6302\u8F7D" : policyProtected ? "\u540D\u79F0\u6216\u4FDD\u7559\u7B56\u7565\u8868\u660E\u53EF\u80FD\u5305\u542B\u4E1A\u52A1\u6570\u636E" : labelValue(labels, "disposable") === "true" ? "\u672A\u88AB\u4EFB\u4F55\u5BB9\u5668\u6302\u8F7D\u4E14\u660E\u786E\u53EF\u4E22\u5F03" : "\u672A\u8BC1\u660E\u53EF\u4E22\u5F03\uFF0C\u7B49\u5F85\u786E\u8BA4"
     };
   });
@@ -34843,7 +34954,7 @@ function worktreeInventory(config2, projects) {
       if (pathLine) blocksByPath.set(pathLine.slice("worktree ".length).toLowerCase(), block);
     }
   }
-  return [...blocksByPath.values()].map((block) => {
+  return [...blocksByPath.values()].map((block, index) => {
     const fields = Object.fromEntries(block.split(/\r?\n/).map((line) => {
       const space = line.indexOf(" ");
       return space > 0 ? [line.slice(0, space), line.slice(space + 1)] : [line, true];
@@ -34866,6 +34977,7 @@ function worktreeInventory(config2, projects) {
       unit: "count",
       gitSha: fields.HEAD,
       branch: typeof fields.branch === "string" ? fields.branch.replace("refs/heads/", "") : "detached",
+      lineage: { primary: index === 0, dirty, detached: Boolean(fields.detached), gitSha: fields.HEAD, branch: typeof fields.branch === "string" ? fields.branch.replace("refs/heads/", "") : "detached", remote },
       reason: dirty ? "\u5305\u542B\u672A\u63D0\u4EA4\u5185\u5BB9" : fields.detached ? "\u5E72\u51C0 detached worktree\uFF0C\u53EF\u5BA1\u67E5" : "\u5E72\u51C0\u5206\u652F worktree\uFF0C\u672A\u8BC1\u660E\u53EF\u5220\u9664"
     };
   });
@@ -34933,6 +35045,7 @@ function aggregate2(type, assets, fallback = {}) {
   const total = type === "worktree" ? measured : Math.max(measured, Number(fallback.sizeBytes || 0));
   const activeBytes = sum("active");
   const protectedBytes = sum("protected");
+  const expiringBytes = sum("expiring");
   const reclaimableBytes = sum("reclaimable");
   return {
     type,
@@ -34940,7 +35053,8 @@ function aggregate2(type, assets, fallback = {}) {
     count: Number(fallback.totalCount ?? matching.length),
     activeBytes,
     protectedBytes,
-    retainedBytes: Math.max(0, total - activeBytes - protectedBytes - reclaimableBytes),
+    expiringBytes,
+    retainedBytes: Math.max(0, total - activeBytes - protectedBytes - expiringBytes - reclaimableBytes),
     reclaimableBytes,
     unit: type === "worktree" ? "count" : "bytes"
   };
@@ -34980,6 +35094,7 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
       count: 0,
       activeBytes: 0,
       protectedBytes: 0,
+      expiringBytes: 0,
       retainedBytes: 0,
       reclaimableBytes: 0,
       unit: "bytes"
@@ -35003,6 +35118,132 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
   };
   dashboardCache.set(cacheKey2, { createdAt: Date.now(), value: dashboard });
   return dashboard;
+}
+function rebuildAnalyzedBars(bars, assets) {
+  return (bars || []).map((bar) => {
+    const matching = assets.filter((asset) => asset.type === bar.type);
+    const measure = (asset) => bar.unit === "count" ? 1 : Number(asset.sizeBytes || 0);
+    const sum = (classification2) => matching.filter((asset) => asset.classification === classification2).reduce((total, asset) => total + measure(asset), 0);
+    const activeBytes = sum("active");
+    const protectedBytes = sum("protected");
+    const expiringBytes = sum("expiring");
+    const reclaimableBytes = Math.max(sum("reclaimable"), bar.type === "cache" ? Number(bar.reclaimableBytes || 0) : 0);
+    const totalBytes = Math.max(Number(bar.totalBytes || 0), matching.reduce((total, asset) => total + measure(asset), 0));
+    return {
+      ...bar,
+      activeBytes,
+      protectedBytes,
+      expiringBytes,
+      retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - expiringBytes - reclaimableBytes),
+      reclaimableBytes
+    };
+  });
+}
+function lineageFinding(asset, dashboard) {
+  const labels = asset.labels || {};
+  const lineage = asset.lineage || {};
+  const consumers = Array.isArray(lineage.consumers) ? lineage.consumers : [];
+  const owner = labelValue(labels, "owner");
+  const recoverySource = labelValue(labels, "recovery-source") || lineage.source || lineage.remote || (asset.type === "cache" ? "\u53EF\u7531\u6784\u5EFA\u91CD\u65B0\u751F\u6210" : void 0);
+  const revision = labelValue(labels, "git-sha") || lineage.revision || asset.gitSha;
+  const release = labelValue(labels, "release");
+  const retention = labelValue(labels, "retention");
+  const matchingEvents = (dashboard.events || []).filter((event) => String(event.assetId || "") === String(asset.id || ""));
+  const evidence = [
+    owner && `\u5F52\u5C5E\uFF1A${owner}`,
+    consumers.length > 0 ? `\u6D88\u8D39\u8005\uFF1A${consumers.length} \u4E2A` : lineage.consumers ? "\u6D88\u8D39\u8005\uFF1A0 \u4E2A" : void 0,
+    revision && `\u7248\u672C\uFF1A${String(revision).slice(0, 12)}`,
+    release && `Release\uFF1A${release}`,
+    retention && `\u4FDD\u7559\u7B56\u7565\uFF1A${retention}`,
+    asset.expiresAt && `\u5230\u671F\uFF1A${asset.expiresAt}`,
+    recoverySource && `\u6062\u590D\u6765\u6E90\uFF1A${recoverySource}`,
+    matchingEvents.length > 0 && `\u4E8B\u4EF6\u8D26\u672C\uFF1A${matchingEvents.length} \u6761`
+  ].filter(Boolean);
+  const missing = [];
+  if (!owner && !["pull_request", "artifact", "actions_cache", "workflow_run", "cache", "worktree"].includes(asset.type)) missing.push("owner");
+  if (!recoverySource && !["container", "pull_request", "workflow_run"].includes(asset.type)) missing.push("\u6062\u590D\u6765\u6E90");
+  if (!["active", "protected", "reclaimable"].includes(asset.classification) && !asset.expiresAt) missing.push("\u5230\u671F\u65F6\u95F4/TTL");
+  if (["image", "volume"].includes(asset.type) && !Array.isArray(lineage.consumers)) missing.push("\u6D88\u8D39\u8005\u5173\u7CFB");
+  const suggestedLabels = [];
+  if (missing.includes("owner")) suggestedLabels.push("com.codex.runtime.owner");
+  if (missing.includes("\u6062\u590D\u6765\u6E90")) suggestedLabels.push("com.codex.runtime.recovery-source");
+  if (missing.includes("\u5230\u671F\u65F6\u95F4/TTL")) suggestedLabels.push("com.codex.runtime.expires-at \u6216 ttl-days");
+  return {
+    id: asset.id,
+    name: asset.name,
+    type: asset.type,
+    classification: asset.classification,
+    sizeBytes: Number(asset.sizeBytes || 0),
+    expiresAt: asset.expiresAt,
+    reason: asset.reason,
+    consumerCount: consumers.length,
+    evidence,
+    missing,
+    suggestedLabels
+  };
+}
+function runDeepScan({ source = "local", project = "all" } = {}) {
+  const dashboard = collectDashboard({ source, project });
+  if (dashboard.selectedSource !== "local" && !dashboard.remoteSnapshotAvailable) {
+    throw new Error(dashboard.remoteError || `${dashboard.selectedSource} \u5FEB\u7167\u4E0D\u53EF\u7528`);
+  }
+  const sourceAssets = [...dashboard.assets];
+  const cacheBar = dashboard.bars.find((item) => item.type === "cache");
+  if (Number(cacheBar?.reclaimableBytes || 0) > 0 && !sourceAssets.some((asset) => asset.type === "cache" && asset.id === "docker-build-cache")) {
+    sourceAssets.push({
+      id: "docker-build-cache",
+      name: "Docker Build Cache",
+      type: "cache",
+      project: dashboard.selectedProject,
+      environment: dashboard.selectedSource,
+      status: "unused-build-cache",
+      classification: "reclaimable",
+      sizeBytes: Number(cacheBar.reclaimableBytes),
+      labels: {},
+      lineage: { consumers: [], recoverySource: "\u53EF\u7531\u6784\u5EFA\u91CD\u65B0\u751F\u6210" },
+      reason: "Docker \u660E\u786E\u8BA4\u5B9A\u4E3A\u672A\u4F7F\u7528\u4E14\u53EF\u56DE\u6536\u7684 Build Cache"
+    });
+  }
+  const before = new Map(sourceAssets.map((asset) => [`${asset.type}:${asset.id}`, asset.classification]));
+  const assets = sourceAssets.map((asset) => {
+    const expiry = expiryClassification(asset.expiresAt);
+    const disposable = labelValue(asset.labels || {}, "disposable") === "true";
+    const noConsumers = Array.isArray(asset.lineage?.consumers) && asset.lineage.consumers.length === 0;
+    let classification2 = asset.classification;
+    if (!["active", "protected"].includes(classification2) && expiry === "expiring") classification2 = "expiring";
+    if (!["active", "protected"].includes(classification2) && expiry === "expired" && disposable && noConsumers && ["image", "volume"].includes(asset.type)) classification2 = "reclaimable";
+    return { ...asset, classification: classification2 };
+  });
+  const findings = assets.map((asset) => lineageFinding(asset, dashboard));
+  const sum = (classification2) => findings.filter((item) => item.classification === classification2).reduce((total, item) => total + Number(item.sizeBytes || 0), 0);
+  const newlyReclaimable = findings.filter((item) => item.classification === "reclaimable" && before.get(`${item.type}:${item.id}`) !== "reclaimable");
+  const report = {
+    generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    project: dashboard.selectedProject,
+    source: dashboard.selectedSource,
+    host: dashboard.host,
+    readOnly: true,
+    scannedCount: findings.length,
+    reclaimableBytes: sum("reclaimable"),
+    expiringBytes: sum("expiring"),
+    reviewBytes: findings.filter((item) => ["review", "retained"].includes(item.classification)).reduce((total, item) => total + Number(item.sizeBytes || 0), 0),
+    protectedBytes: sum("protected") + sum("active"),
+    newlyReclaimableBytes: newlyReclaimable.reduce((total, item) => total + Number(item.sizeBytes || 0), 0),
+    newlyReclaimableCount: newlyReclaimable.length,
+    expiringCount: findings.filter((item) => item.classification === "expiring").length,
+    unresolvedCount: findings.filter((item) => item.missing.length > 0).length,
+    findings: findings.filter((item) => item.classification === "expiring" || item.classification === "reclaimable" || item.missing.length > 0).sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 80)
+  };
+  return {
+    report,
+    dashboard: {
+      ...dashboard,
+      generatedAt: report.generatedAt,
+      assets,
+      bars: rebuildAnalyzedBars(dashboard.bars, assets),
+      lineageScan: { generatedAt: report.generatedAt, scannedCount: report.scannedCount, unresolvedCount: report.unresolvedCount }
+    }
+  };
 }
 function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"] } = {}) {
   const dashboard = collectDashboard({ source, project });
@@ -35176,6 +35417,23 @@ function createRuntimeAssetServer() {
     const preview = createCleanupPreview(input);
     return toolResult({ preview }, `Cleanup preview contains ${preview.allowlist.length} explicitly disposable assets.`);
   });
+  K3(server, "deep_scan_runtime_lineage", {
+    title: "Deep scan runtime asset lineage",
+    description: "Read-only analysis of ownership, consumers, retention, expiry, source revision, and recovery evidence for the selected project and environment. It never deletes or relabels assets.",
+    inputSchema: {
+      source: external_exports.enum(["local", "production", "staging", "github"]).optional(),
+      project: external_exports.string().max(128).optional()
+    },
+    outputSchema: {
+      lineage: external_exports.record(external_exports.string(), external_exports.unknown()),
+      dashboard: external_exports.record(external_exports.string(), external_exports.unknown())
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } }
+  }, async (input) => {
+    const { report, dashboard } = runDeepScan(input);
+    return toolResult({ lineage: report, dashboard }, `Read-only lineage scan inspected ${report.scannedCount} assets and found ${report.expiringCount} expiring assets.`);
+  });
   K3(server, "execute_cleanup", {
     title: "Execute exact runtime asset cleanup",
     description: "Delete only the exact assets from a non-expired preview after the user confirms that allowlist.",
@@ -35239,6 +35497,11 @@ async function startHttp() {
       }
       if (request.method === "POST" && url2.pathname === "/api/cleanup-preview") {
         sendJson(response, 200, { preview: createCleanupPreview(await readBody(request)) });
+        return;
+      }
+      if (request.method === "POST" && url2.pathname === "/api/deep-scan") {
+        const { report, dashboard } = runDeepScan(await readBody(request));
+        sendJson(response, 200, { lineage: report, dashboard });
         return;
       }
       if (request.method === "POST" && url2.pathname === "/api/cleanup-execute") {

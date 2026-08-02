@@ -7,7 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
-import { collectDashboard, createCleanupPreview, executeCleanup, saveSchedule } from "./inventory.mjs";
+import { collectDashboard, createCleanupPreview, executeCleanup, runDeepScan, saveSchedule } from "./inventory.mjs";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
@@ -67,6 +67,24 @@ export function createRuntimeAssetServer() {
   }, async (input) => {
     const preview = createCleanupPreview(input);
     return toolResult({ preview }, `Cleanup preview contains ${preview.allowlist.length} explicitly disposable assets.`);
+  });
+
+  registerAppTool(server, "deep_scan_runtime_lineage", {
+    title: "Deep scan runtime asset lineage",
+    description: "Read-only analysis of ownership, consumers, retention, expiry, source revision, and recovery evidence for the selected project and environment. It never deletes or relabels assets.",
+    inputSchema: {
+      source: z.enum(["local", "production", "staging", "github"]).optional(),
+      project: z.string().max(128).optional(),
+    },
+    outputSchema: {
+      lineage: z.record(z.string(), z.unknown()),
+      dashboard: z.record(z.string(), z.unknown()),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } },
+  }, async (input) => {
+    const { report, dashboard } = runDeepScan(input);
+    return toolResult({ lineage: report, dashboard }, `Read-only lineage scan inspected ${report.scannedCount} assets and found ${report.expiringCount} expiring assets.`);
   });
 
   registerAppTool(server, "execute_cleanup", {
@@ -137,6 +155,11 @@ async function startHttp() {
       }
       if (request.method === "POST" && url.pathname === "/api/cleanup-preview") {
         sendJson(response, 200, { preview: createCleanupPreview(await readBody(request)) });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/deep-scan") {
+        const { report, dashboard } = runDeepScan(await readBody(request));
+        sendJson(response, 200, { lineage: report, dashboard });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/cleanup-execute") {

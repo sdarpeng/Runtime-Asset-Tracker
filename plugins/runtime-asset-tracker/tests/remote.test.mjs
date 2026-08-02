@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, remoteSnapshotScript } from "../mcp/remote.mjs";
+import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, remoteSnapshotScript, resolveExpiry } from "../mcp/remote.mjs";
 
 describe("remote read-only adapters", () => {
   it("keeps the EC2 collector free of cleanup and service mutation commands", () => {
@@ -62,6 +62,18 @@ describe("remote read-only adapters", () => {
     assert.equal(classifyDockerVolume({}), "review");
   });
 
+  it("separates near-expiry capacity without making it cleanup eligible", () => {
+    const now = Date.parse("2026-08-02T12:00:00Z");
+    const labels = {
+      "com.codex.runtime.disposable": "true",
+      "com.codex.runtime.expires-at": "2026-08-05T12:00:00Z",
+    };
+    assert.equal(classifyDockerImage({ labels, now }), "expiring");
+    assert.equal(classifyDockerVolume({ labels, now }), "expiring");
+    assert.equal(resolveExpiry({ labels }), "2026-08-05T12:00:00.000Z");
+    assert.equal(classifyDockerVolume({ labels: { ...labels, "com.codex.runtime.disposable": "false" }, now }), "protected");
+  });
+
   it("maps exact safe image unique bytes and volume bytes into their chart segments", () => {
     const bars = buildBars([
       { type: "image", classification: "reclaimable", sizeBytes: 125 },
@@ -74,6 +86,18 @@ describe("remote read-only adapters", () => {
     });
     assert.equal(bars.find((item) => item.type === "image").reclaimableBytes, 125);
     assert.equal(bars.find((item) => item.type === "volume").reclaimableBytes, 40);
+  });
+
+  it("reports expiring bytes independently from retained and reclaimable bytes", () => {
+    const bars = buildBars([
+      { type: "image", classification: "expiring", sizeBytes: 50 },
+      { type: "image", classification: "retained", sizeBytes: 75 },
+      { type: "image", classification: "reclaimable", sizeBytes: 25 },
+    ], { Images: { totalCount: 3, sizeBytes: 150, reclaimableBytes: 25 } });
+    const images = bars.find((item) => item.type === "image");
+    assert.equal(images.expiringBytes, 50);
+    assert.equal(images.retainedBytes, 75);
+    assert.equal(images.reclaimableBytes, 25);
   });
 
   it("limits EC2 cleanup to unused Build Cache", () => {
@@ -102,6 +126,8 @@ describe("remote read-only adapters", () => {
     assert.equal(classifyGithubAsset({ kind: "actions-cache", ref: "refs/pull/74/merge", pullState: "closed", lastAccessedAt: "2026-08-02T11:00:00Z", now }), "reclaimable");
     assert.equal(classifyGithubAsset({ kind: "actions-cache", ref: "refs/pull/75/merge", pullState: "open", lastAccessedAt: "2026-08-02T11:00:00Z", now }), "retained");
     assert.equal(classifyGithubAsset({ kind: "actions-cache", ref: "refs/heads/master", lastAccessedAt: "2026-06-01T00:00:00Z", now }), "reclaimable");
+    assert.equal(classifyGithubAsset({ kind: "artifact", expired: false, expiresAt: "2026-08-05T12:00:00Z", now }), "expiring");
+    assert.equal(classifyGithubAsset({ kind: "actions-cache", ref: "refs/heads/master", lastAccessedAt: "2026-07-08T00:00:00Z", now }), "expiring");
   });
 
   it("uses GitHub-native categories instead of Docker categories", () => {
@@ -143,7 +169,16 @@ describe("remote read-only adapters", () => {
     const source = readFileSync(new URL("../ui/src/App.jsx", import.meta.url), "utf8");
     assert.match(source, /preview_cleanup", \{ source, project: effectiveProject, types:/);
     assert.doesNotMatch(source, /disabled=\{source !== "local"\} onClick=\{requestPreview\}/);
-    assert.match(source, /disabled=\{!snapshotOnline \|\| loading\} onClick=\{requestPreview\}/);
+    assert.match(source, /disabled=\{!snapshotOnline \|\| loading \|\| deepScanning\} onClick=\{requestPreview\}/);
+  });
+
+  it("renders expiring capacity and a read-only deep scan before cleanup actions", () => {
+    const source = readFileSync(new URL("../ui/src/App.jsx", import.meta.url), "utf8");
+    assert.match(source, /expiring: \{ label: "即将到期"/);
+    assert.match(source, /deep_scan_runtime_lineage/);
+    assert.match(source, /即将到期仍不会进入清理清单/);
+    assert.ok(source.indexOf(">深度检索<") < source.indexOf(">定时清理<"));
+    assert.ok(source.indexOf(">定时清理<") < source.indexOf(">立即清理<"));
   });
 
   it("uses one global project selector and renders GitHub delivery categories", () => {

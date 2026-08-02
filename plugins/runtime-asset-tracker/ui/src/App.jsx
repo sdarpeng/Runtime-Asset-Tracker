@@ -20,6 +20,7 @@ import {
   Package,
   ShieldCheck,
   Stack,
+  TreeStructure,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
@@ -28,6 +29,7 @@ const classifications = {
   active: { label: "使用中", color: "var(--active)" },
   protected: { label: "受保护", color: "var(--protected)" },
   retained: { label: "保留/待确认", color: "var(--retained)" },
+  expiring: { label: "即将到期", color: "var(--expiring)" },
   reclaimable: { label: "可安全清理", color: "var(--reclaimable)" },
 };
 
@@ -118,6 +120,7 @@ async function callTool(name, args = {}) {
   const routes = {
     open_runtime_dashboard: ["GET", `/api/dashboard?scope=${encodeURIComponent(args.scope || "project")}&source=${encodeURIComponent(args.source || "local")}&project=${encodeURIComponent(args.project || "all")}`],
     preview_cleanup: ["POST", "/api/cleanup-preview"],
+    deep_scan_runtime_lineage: ["POST", "/api/deep-scan"],
     execute_cleanup: ["POST", "/api/cleanup-execute"],
     save_cleanup_schedule: ["POST", "/api/schedule"],
   };
@@ -145,6 +148,7 @@ function SegmentBar({ bar, selected, onSelect }) {
     ["active", bar.activeBytes],
     ["protected", bar.protectedBytes],
     ["retained", bar.retainedBytes],
+    ["expiring", bar.expiringBytes],
     ["reclaimable", bar.reclaimableBytes],
   ];
   const total = Math.max(1, segments.reduce((sum, [, value]) => sum + Number(value || 0), 0));
@@ -164,6 +168,7 @@ function SegmentBar({ bar, selected, onSelect }) {
           <span><i className="dot dot-active" />使用中 {formatMetric(bar, bar.activeBytes)}</span>
           <span><i className="dot dot-protected" />受保护 {formatMetric(bar, bar.protectedBytes)}</span>
           <span><i className="dot dot-retained" />待确认 {formatMetric(bar, bar.retainedBytes)}</span>
+          <span className="expiring"><i className="dot dot-expiring" />即将到期 {formatMetric(bar, bar.expiringBytes)}</span>
           <span className="safe"><i className="dot dot-reclaimable" />可清理 {formatMetric(bar, bar.reclaimableBytes)}</span>
         </span>
       </span>
@@ -214,6 +219,36 @@ function ScheduleModal({ schedule, onClose, onSave }) {
   );
 }
 
+function DeepScanModal({ report, onClose }) {
+  if (!report) return null;
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="modal lineage-modal" role="dialog" aria-modal="true" aria-labelledby="lineage-title">
+        <button className="icon-button modal-close" type="button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
+        <div className="modal-kicker lineage-kicker"><TreeStructure size={22} weight="duotone" />只读血统检索</div>
+        <h2 id="lineage-title">当前项目与环境已梳理</h2>
+        <p>{report.project} · {report.source} · 扫描 {report.scannedCount} 项资产。检索只补充证据和分类，不会删除资产或更改远程标签。</p>
+        <div className="lineage-summary">
+          <span><small>明确可清理</small><strong>{formatBytes(report.reclaimableBytes)}</strong></span>
+          <span className="expiring"><small>即将到期</small><strong>{formatBytes(report.expiringBytes)}</strong></span>
+          <span><small>本次新增可清理</small><strong>{formatBytes(report.newlyReclaimableBytes)}</strong></span>
+          <span><small>缺少证据</small><strong>{report.unresolvedCount} 项</strong></span>
+        </div>
+        <div className="lineage-list">
+          {report.findings.length === 0 ? <div className="preview-empty"><ShieldCheck size={26} />当前资产证据完整，没有待处理发现</div> : report.findings.map((item) => (
+            <article className="lineage-row" key={`${item.type}-${item.id}`}>
+              <header><span><strong>{item.name}</strong><small>{item.type} · {item.reason || "按现有证据分类"}</small></span><span className={`lineage-class lineage-class-${item.classification}`}>{classifications[item.classification]?.label || item.classification}</span></header>
+              <div className="lineage-evidence">{item.evidence.length > 0 ? item.evidence.map((entry) => <span key={entry}>{entry}</span>) : <span>尚无足够血统证据</span>}</div>
+              {item.missing.length > 0 && <p className="lineage-missing">缺少：{item.missing.join("、")}{item.suggestedLabels.length > 0 ? `；建议补充 ${item.suggestedLabels.join("、")}` : ""}</p>}
+            </article>
+          ))}
+        </div>
+        <div className="modal-actions"><span className="lineage-note"><ShieldCheck size={15} />即将到期仍不会进入清理清单</span><button className="button primary" type="button" onClick={onClose}>完成</button></div>
+      </section>
+    </div>
+  );
+}
+
 export function App() {
   const [dashboard, setDashboard] = useState(null);
   const [source, setSource] = useState("local");
@@ -224,6 +259,8 @@ export function App() {
   const [notice, setNotice] = useState("");
   const [preview, setPreview] = useState(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [lineage, setLineage] = useState(null);
+  const [deepScanning, setDeepScanning] = useState(false);
 
   const acceptResult = useCallback((result) => {
     const content = result?.structuredContent || result;
@@ -233,6 +270,7 @@ export function App() {
       if (content.dashboard.selectedProject) setProject(content.dashboard.selectedProject);
     }
     if (content?.preview) setPreview(content.preview);
+    if (content?.lineage) setLineage(content.lineage);
     if (content?.schedule) setDashboard((current) => current ? { ...current, schedule: content.schedule } : current);
     if (content?.cleanup) {
       const removed = content.cleanup.results.filter((item) => item.status === "removed").length;
@@ -256,6 +294,7 @@ export function App() {
   useEffect(() => bridge?.onResult(acceptResult), [acceptResult]);
 
   const selectSource = (next) => {
+    setLineage(null);
     setSource(next);
     setSelectedType(next === "github" ? "pull_request" : "image");
     if (next !== "local") {
@@ -273,6 +312,7 @@ export function App() {
     refresh({ source: next, project });
   };
   const selectProject = (next) => {
+    setLineage(null);
     const nextProject = (dashboard?.projectOptions || []).find((item) => item.id === next);
     setProject(next);
     setSource("local");
@@ -315,6 +355,14 @@ export function App() {
     try { acceptResult(await callTool("preview_cleanup", { source, project: effectiveProject, types: ["container", "image", "volume", "cache", "artifact", "actions_cache"] })); }
     catch (error) { setNotice(`预览失败：${error.message || error}`); }
     finally { setLoading(false); }
+  };
+  const requestDeepScan = async () => {
+    setDeepScanning(true);
+    try {
+      acceptResult(await callTool("deep_scan_runtime_lineage", { source, project: effectiveProject }));
+    } catch (error) {
+      setNotice(`深度检索失败：${error.message || error}`);
+    } finally { setDeepScanning(false); }
   };
   const confirmCleanup = async () => {
     setLoading(true);
@@ -397,10 +445,11 @@ export function App() {
           </article>
         </section>
 
-        <footer className="action-dock"><div><span className="dock-icon"><WarningCircle size={21} weight="duotone" /></span><span><strong>安全清理始终绑定当前预览</strong><small>{source === "github" ? "只删除失效缓存和过期制品。" : source === "local" ? "分析镜像引用和卷挂载；未知卷不会自动删除。" : "EC2 精确复核镜像引用和卷挂载，不碰容器、业务卷和 release。"}</small></span></div><div className="dock-actions"><button className="button secondary" type="button" disabled={source !== "local"} onClick={() => setScheduleOpen(true)}><ClockCountdown size={19} />定时清理</button><button className="button primary" type="button" disabled={!snapshotOnline || loading} onClick={requestPreview}><Broom size={19} />立即清理</button></div></footer>
+        <footer className="action-dock"><div><span className="dock-icon"><WarningCircle size={21} weight="duotone" /></span><span><strong>安全清理始终绑定当前预览</strong><small>{source === "github" ? "只删除失效缓存和过期制品。" : source === "local" ? "分析镜像引用和卷挂载；未知卷不会自动删除。" : "EC2 精确复核镜像引用和卷挂载，不碰容器、业务卷和 release。"}</small></span></div><div className="dock-actions"><button className="button secondary deep-scan-button" type="button" disabled={!snapshotOnline || loading || deepScanning} onClick={requestDeepScan}><TreeStructure size={19} />{deepScanning ? "检索中…" : "深度检索"}</button><button className="button secondary" type="button" disabled={source !== "local"} onClick={() => setScheduleOpen(true)}><ClockCountdown size={19} />定时清理</button><button className="button primary" type="button" disabled={!snapshotOnline || loading || deepScanning} onClick={requestPreview}><Broom size={19} />立即清理</button></div></footer>
       </main>
       {notice && <button className="toast" type="button" onClick={() => setNotice("")}><CheckCircle size={18} />{notice}<X size={15} /></button>}
       <CleanupModal preview={preview} loading={loading} onClose={() => setPreview(null)} onConfirm={confirmCleanup} />
+      <DeepScanModal report={lineage} onClose={() => setLineage(null)} />
       {scheduleOpen && <ScheduleModal schedule={dashboard?.schedule || { enabled: false, cadence: "weekly", day: "sunday", time: "03:00" }} onClose={() => setScheduleOpen(false)} onSave={saveSchedule} />}
     </div>
   );

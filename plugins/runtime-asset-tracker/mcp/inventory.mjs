@@ -3,7 +3,7 @@ import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSyn
 import { homedir, hostname, platform } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { collectRemoteDashboard, executeRemoteCleanup } from "./remote.mjs";
+import { collectRemoteDashboard, executeRemoteCleanup, expiryClassification, resolveExpiry } from "./remote.mjs";
 
 const RUNTIME_PREFIX = "com.codex.runtime.";
 const previewStore = new Map();
@@ -67,9 +67,12 @@ function labelValue(labels, key) {
   return labels?.[`${RUNTIME_PREFIX}${key}`];
 }
 
-function classification({ labels = {}, active = false, dangling = false, knownProtected = false, assetType = "generic" }) {
+function classification({ labels = {}, active = false, dangling = false, knownProtected = false, assetType = "generic", createdAt, expiresAt, now = Date.now() }) {
   if (active) return "active";
   if (knownProtected || labelValue(labels, "retention") === "protected" || labelValue(labels, "disposable") === "false") return "protected";
+  const expiry = expiryClassification(resolveExpiry({ labels, createdAt, expiresAt }), now);
+  if (expiry === "expiring") return "expiring";
+  if (expiry === "retained") return assetType === "volume" ? "review" : "retained";
   if (labelValue(labels, "disposable") === "true") return "reclaimable";
   if (assetType === "image" && dangling) return "reclaimable";
   if (assetType === "volume") return "review";
@@ -126,6 +129,16 @@ function dockerInventory() {
   const allMountedVolumes = new Set(containerDetails.flatMap((item) => (item.Mounts || []).filter((mount) => mount.Type === "volume").map((mount) => mount.Name)));
   const activeMountedVolumes = new Set(containerDetails.filter((item) => item.State?.Running).flatMap((item) =>
     (item.Mounts || []).filter((mount) => mount.Type === "volume").map((mount) => mount.Name)));
+  const imageConsumers = new Map();
+  const volumeConsumers = new Map();
+  for (const item of containerDetails) {
+    const consumer = { id: item.Id, name: String(item.Name || "").replace(/^\//, ""), state: item.State?.Status || "unknown" };
+    if (item.Image) imageConsumers.set(item.Image, [...(imageConsumers.get(item.Image) || []), consumer]);
+    for (const mount of item.Mounts || []) {
+      if (mount.Type !== "volume" || !mount.Name) continue;
+      volumeConsumers.set(mount.Name, [...(volumeConsumers.get(mount.Name) || []), { ...consumer, destination: mount.Destination }]);
+    }
+  }
 
   const containers = containerDetails.map((item) => {
     const labels = safeLabels(item.Config?.Labels);
@@ -137,10 +150,15 @@ function dockerInventory() {
       project: projectFrom(labels),
       environment: environmentFrom(labels),
       status: item.State?.Status || "unknown",
-      classification: classification({ labels, active }),
+      classification: classification({ labels, active, createdAt: item.Created }),
       sizeBytes: parseBytes(containerRows.find((row) => row.ID === item.Id)?.Size),
       createdAt: item.Created,
+      expiresAt: resolveExpiry({ labels, createdAt: item.Created }),
       labels,
+      lineage: {
+        imageId: item.Image,
+        mounts: (item.Mounts || []).map((mount) => ({ type: mount.Type, name: mount.Name, destination: mount.Destination })),
+      },
       reason: active ? "正在运行" : labelValue(labels, "disposable") === "true" ? "已停止且明确可丢弃" : "已停止，等待归属确认",
     };
   });
@@ -169,10 +187,17 @@ function dockerInventory() {
       project: projectFrom(labels, tags[0]?.split(/[/:]/)[0]),
       environment: environmentFrom(labels),
       status: running ? "in-use" : referenced ? "referenced-stopped" : dangling ? "dangling" : "unused",
-      classification: classification({ labels, active: referenced, dangling, assetType: "image" }),
+      classification: classification({ labels, active: referenced, dangling, assetType: "image", createdAt: item?.Created || row.CreatedAt }),
       sizeBytes: [...verboseSizes.imageUniqueSizes.entries()].find(([shortId]) => String(row.ID).includes(shortId))?.[1] || 0,
       createdAt: item?.Created || row.CreatedAt,
+      expiresAt: resolveExpiry({ labels, createdAt: item?.Created || row.CreatedAt }),
       labels,
+      lineage: {
+        consumers: imageConsumers.get(row.ID) || [],
+        tags,
+        revision: labels["org.opencontainers.image.revision"],
+        source: labels["org.opencontainers.image.source"],
+      },
       reason: running ? "被运行容器引用" : referenced ? "仍被已停止容器引用" : policyProtected ? "保留策略明确保护" : labelValue(labels, "disposable") === "true" ? "未被任何容器引用且明确可丢弃" : dangling ? "未被任何容器引用的悬空镜像" : "未引用但没有可丢弃标签",
     };
   });
@@ -194,10 +219,12 @@ function dockerInventory() {
       project: projectFrom(labels, item.Labels?.["com.docker.compose.project"]),
       environment: environmentFrom(labels),
       status: active ? "mounted-running" : mounted ? "mounted-stopped" : "unmounted",
-      classification: classification({ labels, active: mounted, knownProtected, assetType: "volume" }),
+      classification: classification({ labels, active: mounted, knownProtected, assetType: "volume", createdAt: item.CreatedAt }),
       sizeBytes: volumeSizes.get(item.Name) || 0,
       createdAt: item.CreatedAt,
+      expiresAt: resolveExpiry({ labels, createdAt: item.CreatedAt }),
       labels,
+      lineage: { consumers: volumeConsumers.get(item.Name) || [], mountpoint: item.Mountpoint },
       reason: active ? "被运行容器挂载" : mounted ? "仍被已停止容器挂载" : policyProtected ? "名称或保留策略表明可能包含业务数据" : labelValue(labels, "disposable") === "true" ? "未被任何容器挂载且明确可丢弃" : "未证明可丢弃，等待确认",
     };
   });
@@ -326,7 +353,7 @@ function worktreeInventory(config, projects) {
       if (pathLine) blocksByPath.set(pathLine.slice("worktree ".length).toLowerCase(), block);
     }
   }
-  return [...blocksByPath.values()].map((block) => {
+  return [...blocksByPath.values()].map((block, index) => {
     const fields = Object.fromEntries(block.split(/\r?\n/).map((line) => {
       const space = line.indexOf(" ");
       return space > 0 ? [line.slice(0, space), line.slice(space + 1)] : [line, true];
@@ -349,6 +376,7 @@ function worktreeInventory(config, projects) {
       unit: "count",
       gitSha: fields.HEAD,
       branch: typeof fields.branch === "string" ? fields.branch.replace("refs/heads/", "") : "detached",
+      lineage: { primary: index === 0, dirty, detached: Boolean(fields.detached), gitSha: fields.HEAD, branch: typeof fields.branch === "string" ? fields.branch.replace("refs/heads/", "") : "detached", remote },
       reason: dirty ? "包含未提交内容" : fields.detached ? "干净 detached worktree，可审查" : "干净分支 worktree，未证明可删除",
     };
   });
@@ -413,6 +441,7 @@ function aggregate(type, assets, fallback = {}) {
   const total = type === "worktree" ? measured : Math.max(measured, Number(fallback.sizeBytes || 0));
   const activeBytes = sum("active");
   const protectedBytes = sum("protected");
+  const expiringBytes = sum("expiring");
   const reclaimableBytes = sum("reclaimable");
   return {
     type,
@@ -420,7 +449,8 @@ function aggregate(type, assets, fallback = {}) {
     count: Number(fallback.totalCount ?? matching.length),
     activeBytes,
     protectedBytes,
-    retainedBytes: Math.max(0, total - activeBytes - protectedBytes - reclaimableBytes),
+    expiringBytes,
+    retainedBytes: Math.max(0, total - activeBytes - protectedBytes - expiringBytes - reclaimableBytes),
     reclaimableBytes,
     unit: type === "worktree" ? "count" : "bytes",
   };
@@ -460,6 +490,7 @@ export function collectDashboard({ scope = "project", source = "local", project 
       count: 0,
       activeBytes: 0,
       protectedBytes: 0,
+      expiringBytes: 0,
       retainedBytes: 0,
       reclaimableBytes: 0,
       unit: "bytes",
@@ -483,6 +514,138 @@ export function collectDashboard({ scope = "project", source = "local", project 
   };
   dashboardCache.set(cacheKey, { createdAt: Date.now(), value: dashboard });
   return dashboard;
+}
+
+function rebuildAnalyzedBars(bars, assets) {
+  return (bars || []).map((bar) => {
+    const matching = assets.filter((asset) => asset.type === bar.type);
+    const measure = (asset) => bar.unit === "count" ? 1 : Number(asset.sizeBytes || 0);
+    const sum = (classification) => matching.filter((asset) => asset.classification === classification).reduce((total, asset) => total + measure(asset), 0);
+    const activeBytes = sum("active");
+    const protectedBytes = sum("protected");
+    const expiringBytes = sum("expiring");
+    const reclaimableBytes = Math.max(sum("reclaimable"), bar.type === "cache" ? Number(bar.reclaimableBytes || 0) : 0);
+    const totalBytes = Math.max(Number(bar.totalBytes || 0), matching.reduce((total, asset) => total + measure(asset), 0));
+    return {
+      ...bar,
+      activeBytes,
+      protectedBytes,
+      expiringBytes,
+      retainedBytes: Math.max(0, totalBytes - activeBytes - protectedBytes - expiringBytes - reclaimableBytes),
+      reclaimableBytes,
+    };
+  });
+}
+
+function lineageFinding(asset, dashboard) {
+  const labels = asset.labels || {};
+  const lineage = asset.lineage || {};
+  const consumers = Array.isArray(lineage.consumers) ? lineage.consumers : [];
+  const owner = labelValue(labels, "owner");
+  const recoverySource = labelValue(labels, "recovery-source") || lineage.source || lineage.remote || (asset.type === "cache" ? "可由构建重新生成" : undefined);
+  const revision = labelValue(labels, "git-sha") || lineage.revision || asset.gitSha;
+  const release = labelValue(labels, "release");
+  const retention = labelValue(labels, "retention");
+  const matchingEvents = (dashboard.events || []).filter((event) => String(event.assetId || "") === String(asset.id || ""));
+  const evidence = [
+    owner && `归属：${owner}`,
+    consumers.length > 0 ? `消费者：${consumers.length} 个` : lineage.consumers ? "消费者：0 个" : undefined,
+    revision && `版本：${String(revision).slice(0, 12)}`,
+    release && `Release：${release}`,
+    retention && `保留策略：${retention}`,
+    asset.expiresAt && `到期：${asset.expiresAt}`,
+    recoverySource && `恢复来源：${recoverySource}`,
+    matchingEvents.length > 0 && `事件账本：${matchingEvents.length} 条`,
+  ].filter(Boolean);
+  const missing = [];
+  if (!owner && !["pull_request", "artifact", "actions_cache", "workflow_run", "cache", "worktree"].includes(asset.type)) missing.push("owner");
+  if (!recoverySource && !["container", "pull_request", "workflow_run"].includes(asset.type)) missing.push("恢复来源");
+  if (!["active", "protected", "reclaimable"].includes(asset.classification) && !asset.expiresAt) missing.push("到期时间/TTL");
+  if (["image", "volume"].includes(asset.type) && !Array.isArray(lineage.consumers)) missing.push("消费者关系");
+  const suggestedLabels = [];
+  if (missing.includes("owner")) suggestedLabels.push("com.codex.runtime.owner");
+  if (missing.includes("恢复来源")) suggestedLabels.push("com.codex.runtime.recovery-source");
+  if (missing.includes("到期时间/TTL")) suggestedLabels.push("com.codex.runtime.expires-at 或 ttl-days");
+  return {
+    id: asset.id,
+    name: asset.name,
+    type: asset.type,
+    classification: asset.classification,
+    sizeBytes: Number(asset.sizeBytes || 0),
+    expiresAt: asset.expiresAt,
+    reason: asset.reason,
+    consumerCount: consumers.length,
+    evidence,
+    missing,
+    suggestedLabels,
+  };
+}
+
+export function runDeepScan({ source = "local", project = "all" } = {}) {
+  const dashboard = collectDashboard({ source, project });
+  if (dashboard.selectedSource !== "local" && !dashboard.remoteSnapshotAvailable) {
+    throw new Error(dashboard.remoteError || `${dashboard.selectedSource} 快照不可用`);
+  }
+  const sourceAssets = [...dashboard.assets];
+  const cacheBar = dashboard.bars.find((item) => item.type === "cache");
+  if (Number(cacheBar?.reclaimableBytes || 0) > 0 && !sourceAssets.some((asset) => asset.type === "cache" && asset.id === "docker-build-cache")) {
+    sourceAssets.push({
+      id: "docker-build-cache",
+      name: "Docker Build Cache",
+      type: "cache",
+      project: dashboard.selectedProject,
+      environment: dashboard.selectedSource,
+      status: "unused-build-cache",
+      classification: "reclaimable",
+      sizeBytes: Number(cacheBar.reclaimableBytes),
+      labels: {},
+      lineage: { consumers: [], recoverySource: "可由构建重新生成" },
+      reason: "Docker 明确认定为未使用且可回收的 Build Cache",
+    });
+  }
+  const before = new Map(sourceAssets.map((asset) => [`${asset.type}:${asset.id}`, asset.classification]));
+  const assets = sourceAssets.map((asset) => {
+    const expiry = expiryClassification(asset.expiresAt);
+    const disposable = labelValue(asset.labels || {}, "disposable") === "true";
+    const noConsumers = Array.isArray(asset.lineage?.consumers) && asset.lineage.consumers.length === 0;
+    let classification = asset.classification;
+    if (!["active", "protected"].includes(classification) && expiry === "expiring") classification = "expiring";
+    if (!["active", "protected"].includes(classification) && expiry === "expired" && disposable && noConsumers && ["image", "volume"].includes(asset.type)) classification = "reclaimable";
+    return { ...asset, classification };
+  });
+  const findings = assets.map((asset) => lineageFinding(asset, dashboard));
+  const sum = (classification) => findings.filter((item) => item.classification === classification).reduce((total, item) => total + Number(item.sizeBytes || 0), 0);
+  const newlyReclaimable = findings.filter((item) => item.classification === "reclaimable" && before.get(`${item.type}:${item.id}`) !== "reclaimable");
+  const report = {
+    generatedAt: new Date().toISOString(),
+    project: dashboard.selectedProject,
+    source: dashboard.selectedSource,
+    host: dashboard.host,
+    readOnly: true,
+    scannedCount: findings.length,
+    reclaimableBytes: sum("reclaimable"),
+    expiringBytes: sum("expiring"),
+    reviewBytes: findings.filter((item) => ["review", "retained"].includes(item.classification)).reduce((total, item) => total + Number(item.sizeBytes || 0), 0),
+    protectedBytes: sum("protected") + sum("active"),
+    newlyReclaimableBytes: newlyReclaimable.reduce((total, item) => total + Number(item.sizeBytes || 0), 0),
+    newlyReclaimableCount: newlyReclaimable.length,
+    expiringCount: findings.filter((item) => item.classification === "expiring").length,
+    unresolvedCount: findings.filter((item) => item.missing.length > 0).length,
+    findings: findings
+      .filter((item) => item.classification === "expiring" || item.classification === "reclaimable" || item.missing.length > 0)
+      .sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0))
+      .slice(0, 80),
+  };
+  return {
+    report,
+    dashboard: {
+      ...dashboard,
+      generatedAt: report.generatedAt,
+      assets,
+      bars: rebuildAnalyzedBars(dashboard.bars, assets),
+      lineageScan: { generatedAt: report.generatedAt, scannedCount: report.scannedCount, unresolvedCount: report.unresolvedCount },
+    },
+  };
 }
 
 export function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"] } = {}) {

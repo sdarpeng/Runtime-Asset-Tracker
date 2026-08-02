@@ -1,4 +1,4 @@
-# Prototype Instructions
+# Runtime Asset Tracker UI Instructions
 
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
@@ -13,3 +13,7 @@ Registered projects are authoritative GitHub repositories. The global project se
 Derive Local, EC2, and GitHub sources from the selected project. Never show, query, preview cleanup for, or mutate an EC2 environment owned by another project. A project without a registered EC2 environment shows only its registered Local and GitHub sources.
 
 The GitHub source is a delivery view, not a Docker host. Its four persistent categories are Pull Requests, Actions Artifacts, Actions Cache, and Workflow Runs. Show PR lifecycle state and never reuse Docker Images or Docker Volumes labels on this source.
+
+Use five visible capacity states: active, protected, retained/review, expiring, and safely reclaimable. Yellow means retained or evidence is incomplete; orange means an explicit or source-native expiry falls inside the configured warning window; cyan alone means the asset is currently eligible for the exact cleanup preview. Expiring assets must never become cleanup candidates before their expiry and all other safety conditions pass.
+
+Keep the bottom actions in this order: Deep Scan, Scheduled Cleanup, Immediate Cleanup. Deep Scan is always scoped to the globally selected project and selected source. It is read-only: it may refresh lineage evidence and classification in the current view, but it must not delete, relabel, stop, restart, or otherwise mutate assets. Show a result report with ownership, consumers, revision/release, retention/expiry, recovery evidence, missing evidence, and any newly established reclaimable capacity.
