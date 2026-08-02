@@ -129,7 +129,9 @@ describe("remote read-only adapters", () => {
     assert.match(source, /workflow_run: \{ label: "Workflow Runs"/);
     assert.match(source, /next === "github" \? "pull_request" : "image"/);
     assert.match(source, /Open \/ Draft PR/);
-    assert.match(source, /className="repository-select"/);
+    assert.match(source, /className="repository-toolbar card"/);
+    assert.match(source, /className="repository-picker"/);
+    assert.doesNotMatch(source, /repository-metric/);
     assert.match(source, />注册项目</);
     assert.match(source, /projectOptions\.map/);
   });
