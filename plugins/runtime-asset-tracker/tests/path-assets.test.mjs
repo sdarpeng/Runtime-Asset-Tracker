@@ -84,6 +84,44 @@ describe("worktree and host artifact lifecycle", () => {
     }
   });
 
+  it("never exposes Git object files as independently removable host artifacts", () => {
+    const root = temporaryDirectory("tracker-git-object-safety");
+    try {
+      const objectDirectory = join(root, ".git", "objects", "aa");
+      mkdirSync(objectDirectory, { recursive: true });
+      writeFileSync(join(objectDirectory, "large-object"), Buffer.alloc(1024));
+      const scan = scanPathUsage(root, { largeFileBytes: 512 });
+      assert.equal(scan.artifacts.length, 0);
+      assert.equal(scan.sizeBytes, 1024);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("assigns sibling residuals to the longest repository path prefix", () => {
+    const sandbox = temporaryDirectory("tracker-project-owner");
+    const codexHome = join(sandbox, ".codex");
+    const finportex = join(sandbox, "FinPortEx-Quarantine");
+    const sparkling = join(sandbox, "SparklingPlayCMS-evidence");
+    mkdirSync(join(codexHome, "worktrees"), { recursive: true });
+    mkdirSync(finportex, { recursive: true });
+    mkdirSync(sparkling, { recursive: true });
+    const priorCodex = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = codexHome;
+    try {
+      const projects = [
+        { id: "owner/SparklingCMS", gitRoots: [join(sandbox, "SparklingPlayCMS")] },
+        { id: "owner/FinPortEx", gitRoots: [join(sandbox, "FinPortEx")] },
+      ];
+      const assets = discoverWorktreeAssets({ worktreeRoots: [sandbox] }, projects, []);
+      assert.equal(assets.find((asset) => asset.path.toLowerCase() === finportex.toLowerCase())?.project, "owner/FinPortEx");
+      assert.equal(assets.find((asset) => asset.path.toLowerCase() === sparkling.toLowerCase())?.project, "owner/SparklingCMS");
+    } finally {
+      if (priorCodex === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = priorCodex;
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
   it("does not follow directory junctions while scanning or deleting a residual", () => {
     const sandbox = temporaryDirectory("tracker-no-follow");
     const outside = join(sandbox, "outside");

@@ -1,6 +1,6 @@
 {
   "name": "runtime-asset-tracker",
-  "version": "0.3.2+codex.20260814-artifact-subtree-dedup",
+  "version": "0.3.3+codex.20260814-path-scan-project-safety",
   "description": "Track Docker assets, Git worktrees, residual directories, and host artifacts with portable labels and an append-only JSONL ledger.",
   "author": {
     "name": "SparklingPlay Engineering"
