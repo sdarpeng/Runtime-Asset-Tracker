@@ -81,13 +81,14 @@ export function scanPathUsage(rootPath, { maxEntries = 400_000, largeFileBytes =
     }
 
     const entries = safeEntries(path);
-    const isArtifactRoot = captureArtifact && (ARTIFACT_DIR.test(basename(path)) || entries.some((entry) => /^part-\d+(?:\.|$)/i.test(entry.name)));
+    const artifactDiscoveryAllowed = captureArtifact && basename(path).toLowerCase() !== ".git";
+    const isArtifactRoot = artifactDiscoveryAllowed && (ARTIFACT_DIR.test(basename(path)) || entries.some((entry) => /^part-\d+(?:\.|$)/i.test(entry.name)));
     let bytes = 0;
     let count = 1;
     for (const entry of entries) {
       if (entryCount >= maxEntries) { truncated = true; break; }
       const child = join(path, entry.name);
-      const result = scan(child, rel ? join(rel, entry.name) : entry.name, captureArtifact && !isArtifactRoot);
+      const result = scan(child, rel ? join(rel, entry.name) : entry.name, artifactDiscoveryAllowed && !isArtifactRoot);
       bytes += result.bytes;
       count += result.count;
       hash.update(`${entry.name}\0${result.bytes}\0${result.count}\0${result.fingerprint || "truncated"}\n`);
@@ -253,8 +254,15 @@ export function discoverWorktreeAssets(config = {}, projects = [], events = []) 
     const dirty = Boolean(status);
     const type = registration ? "worktree" : "worktree_residual";
     const artifactBytes = scan.artifacts.reduce((sum, item) => sum + item.sizeBytes, 0);
-    const rootProject = projects.find((project) => (project.gitRoots || []).some((root) => keyPath(path).startsWith(keyPath(dirname(root)))));
-    const project = rootProject?.id || remote || "unknown";
+    const rootProject = projects.flatMap((project) => (project.gitRoots || []).map((root) => ({
+      project,
+      root: resolve(root),
+      prefix: basename(resolve(root)).toLowerCase(),
+    }))).filter((candidate) => {
+      const name = basename(path).toLowerCase();
+      return keyPath(path) === keyPath(candidate.root) || name === candidate.prefix || name.startsWith(`${candidate.prefix}-`);
+    }).sort((left, right) => right.prefix.length - left.prefix.length)[0]?.project;
+    const project = remote || rootProject?.id || "unknown";
     let asset = {
       id: pathAssetId(type, path),
       name: basename(path),

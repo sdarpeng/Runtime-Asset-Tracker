@@ -35083,7 +35083,8 @@ function scanPathUsage(rootPath, { maxEntries = 4e5, largeFileBytes = 100 * 1024
       return { bytes: bytes2, count: 1, fingerprint: `sha256:${hash2.digest("hex")}` };
     }
     const entries = safeEntries(path);
-    const isArtifactRoot = captureArtifact && (ARTIFACT_DIR.test(basename(path)) || entries.some((entry) => /^part-\d+(?:\.|$)/i.test(entry.name)));
+    const artifactDiscoveryAllowed = captureArtifact && basename(path).toLowerCase() !== ".git";
+    const isArtifactRoot = artifactDiscoveryAllowed && (ARTIFACT_DIR.test(basename(path)) || entries.some((entry) => /^part-\d+(?:\.|$)/i.test(entry.name)));
     let bytes = 0;
     let count = 1;
     for (const entry of entries) {
@@ -35092,7 +35093,7 @@ function scanPathUsage(rootPath, { maxEntries = 4e5, largeFileBytes = 100 * 1024
         break;
       }
       const child = join2(path, entry.name);
-      const result2 = scan(child, rel ? join2(rel, entry.name) : entry.name, captureArtifact && !isArtifactRoot);
+      const result2 = scan(child, rel ? join2(rel, entry.name) : entry.name, artifactDiscoveryAllowed && !isArtifactRoot);
       bytes += result2.bytes;
       count += result2.count;
       hash2.update(`${entry.name}\0${result2.bytes}\0${result2.count}\0${result2.fingerprint || "truncated"}
@@ -35248,8 +35249,15 @@ function discoverWorktreeAssets(config2 = {}, projects = [], events = []) {
     const dirty = Boolean(status);
     const type = registration ? "worktree" : "worktree_residual";
     const artifactBytes = scan.artifacts.reduce((sum, item) => sum + item.sizeBytes, 0);
-    const rootProject = projects.find((project2) => (project2.gitRoots || []).some((root) => keyPath(path).startsWith(keyPath(dirname2(root)))));
-    const project = rootProject?.id || remote || "unknown";
+    const rootProject = projects.flatMap((project2) => (project2.gitRoots || []).map((root) => ({
+      project: project2,
+      root: resolve2(root),
+      prefix: basename(resolve2(root)).toLowerCase()
+    }))).filter((candidate) => {
+      const name = basename(path).toLowerCase();
+      return keyPath(path) === keyPath(candidate.root) || name === candidate.prefix || name.startsWith(`${candidate.prefix}-`);
+    }).sort((left, right) => right.prefix.length - left.prefix.length)[0]?.project;
+    const project = remote || rootProject?.id || "unknown";
     let asset = {
       id: pathAssetId(type, path),
       name: basename(path),
@@ -36441,7 +36449,7 @@ function toolResult(structuredContent, text) {
 }
 function createRuntimeAssetServer() {
   const server = new McpServer(
-    { name: "runtime-asset-tracker", version: "0.3.2" },
+    { name: "runtime-asset-tracker", version: "0.3.3" },
     { instructions: "Use open_runtime_dashboard for a visual inventory. Always call preview_cleanup before execute_cleanup. Never infer that an unlabeled volume is disposable." }
   );
   N3(server, "Runtime Asset Dashboard", DASHBOARD_URI, {
