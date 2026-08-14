@@ -87,7 +87,7 @@ export function scanPathUsage(rootPath, { maxEntries = 400_000, largeFileBytes =
     for (const entry of entries) {
       if (entryCount >= maxEntries) { truncated = true; break; }
       const child = join(path, entry.name);
-      const result = scan(child, rel ? join(rel, entry.name) : entry.name, !isArtifactRoot);
+      const result = scan(child, rel ? join(rel, entry.name) : entry.name, captureArtifact && !isArtifactRoot);
       bytes += result.bytes;
       count += result.count;
       hash.update(`${entry.name}\0${result.bytes}\0${result.count}\0${result.fingerprint || "truncated"}\n`);

@@ -35092,7 +35092,7 @@ function scanPathUsage(rootPath, { maxEntries = 4e5, largeFileBytes = 100 * 1024
         break;
       }
       const child = join2(path, entry.name);
-      const result2 = scan(child, rel ? join2(rel, entry.name) : entry.name, !isArtifactRoot);
+      const result2 = scan(child, rel ? join2(rel, entry.name) : entry.name, captureArtifact && !isArtifactRoot);
       bytes += result2.bytes;
       count += result2.count;
       hash2.update(`${entry.name}\0${result2.bytes}\0${result2.count}\0${result2.fingerprint || "truncated"}
@@ -36441,7 +36441,7 @@ function toolResult(structuredContent, text) {
 }
 function createRuntimeAssetServer() {
   const server = new McpServer(
-    { name: "runtime-asset-tracker", version: "0.3.1" },
+    { name: "runtime-asset-tracker", version: "0.3.2" },
     { instructions: "Use open_runtime_dashboard for a visual inventory. Always call preview_cleanup before execute_cleanup. Never infer that an unlabeled volume is disposable." }
   );
   N3(server, "Runtime Asset Dashboard", DASHBOARD_URI, {
