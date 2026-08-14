@@ -17,6 +17,7 @@ try {
   assert.deepEqual(names, [
     "deep_scan_runtime_lineage",
     "execute_cleanup",
+    "import_retirement_reconciliation",
     "open_runtime_dashboard",
     "preview_cleanup",
     "save_cleanup_schedule",

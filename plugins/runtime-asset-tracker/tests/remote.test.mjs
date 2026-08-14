@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { gzipSync } from "node:zlib";
-import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, remoteSnapshotScript, resolveExpiry } from "../mcp/remote.mjs";
+import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, remoteSnapshotScript, resolveExpiry, ssmMutationCommand } from "../mcp/remote.mjs";
 
 describe("remote read-only adapters", () => {
   it("keeps the EC2 collector free of cleanup and service mutation commands", () => {
@@ -133,15 +133,51 @@ describe("remote read-only adapters", () => {
 
   it("uses exact non-force image and volume removal with a second reference check", () => {
     const script = awsDockerCleanupScript([
-      { type: "image", id: "sha256:abc", name: "dangling", sizeBytes: 12 },
+      {
+        type: "image", id: "sha256:abc", name: "retired", sizeBytes: 12,
+        tags: ["example/api:retired"], revision: "a".repeat(40),
+        retirementEvidence: {
+          reportSha256: "b".repeat(64), group: "closed-line",
+          approvedTags: ["example/api:retired"], revision: "a".repeat(40),
+        },
+      },
       { type: "volume", id: "temporary_cache", name: "temporary_cache", sizeBytes: 34 },
     ]);
     assert.match(script, /ancestor=/);
     assert.match(script, /volume=/);
-    assert.match(script, /\["image", "rm", identifier\]/);
+    assert.match(script, /\["image", "rm"\].+requested_tags/);
     assert.match(script, /\["volume", "rm", identifier\]/);
+    assert.match(script, /inspect\("image", identifier\) is None/);
     assert.match(script, /com\.codex\.runtime\./);
     assert.doesNotMatch(script, /system.+prune|image.+prune|volume.+prune|\["image", "rm", "--force"|\["volume", "rm", "--force"/i);
+    const encodedPayload = script.match(/items = json\.loads\(base64\.b64decode\("([A-Za-z0-9+/=]+)"\)\)/)?.[1];
+    assert.ok(encodedPayload);
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64").toString("utf8"));
+    assert.deepEqual(payload[0].tags, ["example/api:retired"]);
+    assert.equal(payload[0].retirementEvidence.reportSha256, "b".repeat(64));
+    assert.deepEqual(payload[0].retirementEvidence.approvedTags, ["example/api:retired"]);
+    assert.equal(payload[0].retirementEvidence.revision, "a".repeat(40));
+  });
+
+  it("gzip-bounds a 29-image retirement command below the SSM command safety limit", () => {
+    const allowlist = Array.from({ length: 29 }, (_, index) => ({
+      type: "image",
+      id: `sha256:${String((index % 10)).repeat(64)}`,
+      name: `retired-${index}`,
+      sizeBytes: 7_990_000_000,
+      tags: [`example/api:candidate-${index}-20260814T120000Z`],
+      revision: String((index + 1) % 10).repeat(40),
+      retirementEvidence: {
+        reportSha256: "e".repeat(64),
+        group: index < 14 ? "closed-bulk-upload" : "superseded-transcode-chain",
+        approvedTags: [`example/api:candidate-${index}-20260814T120000Z`],
+        revision: String((index + 1) % 10).repeat(40),
+      },
+    }));
+    const python = awsDockerCleanupScript(allowlist);
+    const inner = ssmMutationCommand(`echo '${Buffer.from(python).toString("base64")}' | base64 -d | python3`);
+    assert.ok(Buffer.byteLength(inner, "utf8") < 20_000, `compressed command was ${Buffer.byteLength(inner, "utf8")} bytes`);
+    assert.match(inner, /gzip -d \| bash$/);
   });
 
   it("only classifies expired artifacts, closed PR caches, and 30-day stale caches as safe", () => {

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 
 const remoteCache = new Map();
 const CACHE_TTL_MS = 60_000;
@@ -165,6 +165,58 @@ export function classifyDockerVolume({ labels = {}, referenced = false, protecte
   if (expiry === "retained") return "review";
   if (runtimeLabel(labels, "disposable") === "true") return "reclaimable";
   return "review";
+}
+
+function normalizedTags(tags) {
+  return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.startsWith("<none>")))].sort();
+}
+
+export function validateRemoteRetirementApproval(requested, current, sourceConfig = {}) {
+  if (!requested || !current || requested.type !== "image" || current.type !== "image" || requested.id !== current.id) return false;
+  if (String(requested.project || "") !== String(sourceConfig.projectId || requested.project || "")) return false;
+  if ((current.lineage?.consumers || []).length > 0) return false;
+  const evidence = requested.retirementEvidence;
+  if (!/^[0-9a-f]{64}$/i.test(String(evidence?.reportSha256 || ""))) return false;
+  if (!/^[0-9a-f]{40}$/i.test(String(evidence?.revision || ""))) return false;
+  if (String(current.lineage?.revision || "").toLowerCase() !== String(evidence.revision).toLowerCase()) return false;
+  const liveTags = normalizedTags(current.lineage?.tags);
+  const approvedTags = normalizedTags(evidence.approvedTags);
+  const previewTags = normalizedTags(requested.tags);
+  return liveTags.length > 0
+    && liveTags.length === approvedTags.length
+    && liveTags.every((tag, index) => tag === approvedTags[index])
+    && liveTags.length === previewTags.length
+    && liveTags.every((tag, index) => tag === previewTags[index]);
+}
+
+export function remoteImageRemovalArgs(item) {
+  const tags = normalizedTags(item?.tags || item?.retirementEvidence?.approvedTags);
+  return ["image", "rm", ...(tags.length ? tags : [String(item?.id || "")])];
+}
+
+export function buildPostCleanupVerification(before, after, results = []) {
+  const activeContainers = (snapshot) => new Map((snapshot?.assets || [])
+    .filter((asset) => asset.type === "container" && asset.classification === "active")
+    .map((asset) => [asset.id, asset.name]));
+  const beforeActive = activeContainers(before);
+  const afterActive = activeContainers(after);
+  const missingActiveContainers = [...beforeActive].filter(([id]) => !afterActive.has(id)).map(([id, name]) => ({ id, name }));
+  const remainingImageIds = new Set((after?.assets || []).filter((asset) => asset.type === "image").map((asset) => asset.id));
+  const removedIds = results.filter((item) => item.status === "removed" && item.type === "image").map((item) => item.id);
+  const removedImagesStillPresent = removedIds.filter((id) => remainingImageIds.has(id));
+  const freeBytesBefore = Number(before?.disk?.freeBytes || 0);
+  const freeBytesAfter = Number(after?.disk?.freeBytes || 0);
+  return {
+    status: missingActiveContainers.length === 0 && removedImagesStillPresent.length === 0 ? "pass" : "fail",
+    checkedAt: new Date().toISOString(),
+    activeContainerCountBefore: beforeActive.size,
+    activeContainerCountAfter: afterActive.size,
+    missingActiveContainers,
+    removedImagesStillPresent,
+    freeBytesBefore,
+    freeBytesAfter,
+    freeBytesDelta: freeBytesAfter - freeBytesBefore,
+  };
 }
 
 export function remoteSnapshotScript(sourceConfig = {}) {
@@ -712,6 +764,14 @@ export function awsDockerCleanupScript(allowlist) {
     id: item.id,
     name: item.name,
     sizeBytes: Number(item.sizeBytes || 0),
+    tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
+    revision: item.revision ? String(item.revision) : undefined,
+    retirementEvidence: item.retirementEvidence ? {
+      reportSha256: String(item.retirementEvidence.reportSha256 || ""),
+      group: String(item.retirementEvidence.group || ""),
+      approvedTags: Array.isArray(item.retirementEvidence.approvedTags) ? item.retirementEvidence.approvedTags.map(String) : [],
+      revision: String(item.retirementEvidence.revision || ""),
+    } : undefined,
   }))), "utf8").toString("base64");
   return String.raw`import base64, datetime, gzip, json, re, subprocess
 
@@ -768,11 +828,22 @@ for item in items:
         if detail:
             labels = (detail.get("Config") or {}).get("Labels") or {}
             code, refs, _ = run(docker + ["ps", "-aq", "--filter", "ancestor=" + identifier])
-            tags = detail.get("RepoTags") or []
+            tags = sorted(detail.get("RepoTags") or [])
             digests = detail.get("RepoDigests") or []
             dangling = not tags and not digests
             protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
-            safe = code == 0 and not refs and not protected and not future_expiry(labels, detail.get("Created")) and (label(labels, "disposable") == "true" or dangling)
+            evidence = item.get("retirementEvidence") or {}
+            approved_tags = sorted(set(str(tag) for tag in (evidence.get("approvedTags") or []) if tag and not str(tag).startswith("<none>")))
+            requested_tags = sorted(set(str(tag) for tag in (item.get("tags") or []) if tag and not str(tag).startswith("<none>")))
+            revision = str(labels.get("org.opencontainers.image.revision") or label(labels, "git-sha") or "").lower()
+            attested = bool(
+                re.match(r"^[0-9a-f]{64}$", str(evidence.get("reportSha256") or ""), re.I)
+                and re.match(r"^[0-9a-f]{40}$", str(evidence.get("revision") or ""), re.I)
+                and revision == str(evidence.get("revision") or "").lower()
+                and tags == approved_tags
+                and tags == requested_tags
+            )
+            safe = code == 0 and not refs and not future_expiry(labels, detail.get("Created")) and ((not protected and (label(labels, "disposable") == "true" or dangling)) or attested)
             reason = "未被任何容器引用的悬空/显式 disposable 镜像"
     elif kind == "volume":
         detail = inspect("volume", identifier)
@@ -786,12 +857,18 @@ for item in items:
     if not safe:
         results.append({**item, "status":"skipped", "reclaimedBytes":0, "reason":"执行前复核不再满足安全清理条件"})
         continue
-    command = docker + (["image", "rm", identifier] if kind == "image" else ["volume", "rm", identifier])
+    command = docker + (["image", "rm"] + (requested_tags if kind == "image" and requested_tags else [identifier]) if kind == "image" else ["volume", "rm", identifier])
     code, _, error = run(command)
-    results.append({**item, "status":"removed" if code == 0 else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if code == 0 else 0, "reason":reason if code == 0 else error[-300:]})
+    removed = code == 0 and (kind != "image" or inspect("image", identifier) is None)
+    results.append({**item, "status":"removed" if removed else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if removed else 0, "removedReferences":requested_tags if kind == "image" else None, "reason":reason if removed else (error[-300:] or "image still exists after exact tag removal")})
 
 encoded = base64.b64encode(gzip.compress(json.dumps({"results":results}, separators=(",",":"), ensure_ascii=False).encode("utf-8"))).decode("ascii")
 print("RATCLEAN1:" + encoded)`;
+}
+
+export function ssmMutationCommand(script) {
+  const encoded = gzipSync(Buffer.from(String(script), "utf8"), { level: 9 }).toString("base64");
+  return `echo '${encoded}' | base64 -d | gzip -d | bash`;
 }
 
 function runSsmMutation(sourceConfig, script, comment) {
@@ -807,8 +884,7 @@ function runSsmMutation(sourceConfig, script, comment) {
   const instance = managed.InstanceInformationList?.find((item) => item.InstanceId === instanceId);
   if (!instance || instance.PingStatus !== "Online") throw new Error(`EC2 ${instanceId} 未通过 Systems Manager 在线`);
 
-  const encoded = Buffer.from(script, "utf8").toString("base64");
-  const command = `echo '${encoded}' | base64 -d | bash`;
+  const command = ssmMutationCommand(script);
   const sent = runJson("aws", [
     ...regionArgs,
     "ssm", "send-command",
@@ -847,23 +923,26 @@ function runSsmMutation(sourceConfig, script, comment) {
 
 function executeAwsDockerCleanup(sourceConfig, allowlist) {
   const snapshot = collectAwsSnapshot(sourceConfig);
-  const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
   const approved = [];
   for (const requested of allowlist) {
-    const current = safeAssets.get(`${requested.type}:${requested.id}`);
-    if (!current) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前快照复核不再满足安全清理条件" });
+    const current = currentAssets.get(`${requested.type}:${requested.id}`);
+    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, sourceConfig);
+    if (!current || !safe) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前快照复核不再满足安全清理条件" });
     else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
   if (!approved.length) return { completedAt: new Date().toISOString(), results: skipped };
   const script = awsDockerCleanupScript(approved);
-  const encoded = Buffer.from(script, "utf8").toString("base64");
-  const invocation = runSsmMutation(sourceConfig, `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`, "Runtime Asset Tracker exact safe Docker cleanup");
+  const encoded = gzipSync(Buffer.from(script, "utf8"), { level: 9 }).toString("base64");
+  const invocation = runSsmMutation(sourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, "Runtime Asset Tracker exact safe Docker cleanup");
   const match = invocation.output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
   if (!match) throw new Error("远程清理没有返回可验证结果");
   const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
   remoteCache.clear();
-  return { completedAt: new Date().toISOString(), commandId: invocation.commandId, results: [...skipped, ...(payload.results || [])] };
+  const results = [...skipped, ...(payload.results || [])];
+  const after = collectAwsSnapshot(sourceConfig);
+  return { completedAt: new Date().toISOString(), commandId: invocation.commandId, results, verification: buildPostCleanupVerification(snapshot, after, results) };
 }
 
 function runSshMutation(sourceConfig, script) {
@@ -882,12 +961,13 @@ function runSshMutation(sourceConfig, script) {
 
 function executeSshDockerCleanup(sourceConfig, allowlist) {
   const snapshot = collectSshSnapshot(sourceConfig);
-  const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
   const approved = [];
   for (const requested of allowlist) {
-    const current = safeAssets.get(`${requested.type}:${requested.id}`);
-    if (!current) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前快照复核不再满足安全清理条件" });
+    const current = currentAssets.get(`${requested.type}:${requested.id}`);
+    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, sourceConfig);
+    if (!current || !safe) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前快照复核不再满足安全清理条件" });
     else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
   if (!approved.length) return { completedAt: new Date().toISOString(), results: skipped };
@@ -896,7 +976,9 @@ function executeSshDockerCleanup(sourceConfig, allowlist) {
   if (!match) throw new Error("远程清理没有返回可验证结果");
   const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
   remoteCache.clear();
-  return { completedAt: new Date().toISOString(), results: [...skipped, ...(payload.results || [])] };
+  const results = [...skipped, ...(payload.results || [])];
+  const after = collectSshSnapshot(sourceConfig);
+  return { completedAt: new Date().toISOString(), results, verification: buildPostCleanupVerification(snapshot, after, results) };
 }
 
 function executeGithubCleanup(sourceConfig, allowlist) {

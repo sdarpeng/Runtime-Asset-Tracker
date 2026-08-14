@@ -18086,7 +18086,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve2.call(this, root, ref);
+      let _sch = resolve3.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -18113,7 +18113,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve2(root, ref) {
+    function resolve3(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -18744,7 +18744,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve2(baseURI, relativeURI, options) {
+    function resolve3(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
       const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
@@ -19028,7 +19028,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve2,
+      resolve: resolve3,
       resolveComponent,
       equal,
       serialize,
@@ -22123,8 +22123,8 @@ var require_content_type = __commonJS({
 
 // mcp/server.mjs
 import { createServer } from "node:http";
-import { readFileSync as readFileSync2 } from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
+import { readFileSync as readFileSync3 } from "node:fs";
+import { dirname as dirname3, join as join3 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // node_modules/zod/v3/helpers/util.js
@@ -29586,7 +29586,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error51) {
@@ -29603,7 +29603,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const earlyReject = (error51) => {
         reject(error51);
       };
@@ -29681,7 +29681,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve2(parseResult.data);
+            resolve3(parseResult.data);
           }
         } catch (error51) {
           reject(error51);
@@ -29942,12 +29942,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve2, interval);
+      const timeoutId = setTimeout(resolve3, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -31042,7 +31042,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+      await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -31706,12 +31706,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       const json3 = serializeMessage(message);
       if (this._stdout.write(json3)) {
-        resolve2();
+        resolve3();
       } else {
-        this._stdout.once("drain", resolve2);
+        this._stdout.once("drain", resolve3);
       }
     });
   }
@@ -32000,7 +32000,7 @@ var readBodyDirect = (request) => {
     request[bodyBufferKey] = buffered;
     return Promise.resolve(buffered);
   }
-  const promise2 = new Promise((resolve2, reject) => {
+  const promise2 = new Promise((resolve3, reject) => {
     const chunks2 = [];
     let settled = false;
     const finish = (callback) => {
@@ -32018,7 +32018,7 @@ var readBodyDirect = (request) => {
         else if (recovered === void 0) reject(error51 ?? normalizeAbortError(request, incoming));
         else {
           request[bodyBufferKey] = recovered;
-          resolve2(recovered);
+          resolve3(recovered);
         }
       });
       return true;
@@ -32030,7 +32030,7 @@ var readBodyDirect = (request) => {
       finish(() => {
         const buffer = chunks2.length === 1 ? chunks2[0] : Buffer.concat(chunks2);
         request[bodyBufferKey] = buffer;
-        resolve2(buffer);
+        resolve3(buffer);
       });
     };
     const onError = (error51) => {
@@ -32552,7 +32552,7 @@ var responseViaResponseObject = async (res, outgoing, options = {}) => {
         });
         if (!chunk) {
           if (i === 1) {
-            await new Promise((resolve2) => setTimeout(resolve2));
+            await new Promise((resolve3) => setTimeout(resolve3));
             maxReadCount = 3;
             continue;
           }
@@ -33232,9 +33232,9 @@ data:
       const initRequest = messages.find((m2) => isInitializeRequest(m2));
       const clientProtocolVersion = initRequest ? initRequest.params.protocolVersion : req.headers.get("mcp-protocol-version") ?? DEFAULT_NEGOTIATED_PROTOCOL_VERSION;
       if (this._enableJsonResponse) {
-        return new Promise((resolve2) => {
+        return new Promise((resolve3) => {
           this._streamMapping.set(streamId, {
-            resolveJson: resolve2,
+            resolveJson: resolve3,
             cleanup: () => {
               this._streamMapping.delete(streamId);
             }
@@ -33719,15 +33719,15 @@ function N3(Z, $, J, X, V) {
 
 // mcp/inventory.mjs
 import { execFileSync as execFileSync2 } from "node:child_process";
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statfsSync, statSync, writeFileSync } from "node:fs";
-import { homedir, hostname as hostname3, platform } from "node:os";
-import { dirname, join, parse as parse3, resolve } from "node:path";
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { appendFileSync as appendFileSync2, closeSync, existsSync as existsSync2, mkdirSync as mkdirSync2, openSync, readFileSync as readFileSync2, readSync, statfsSync, statSync, writeFileSync } from "node:fs";
+import { homedir as homedir2, hostname as hostname4, platform as platform2 } from "node:os";
+import { dirname as dirname2, join as join2, parse as parse3, resolve as resolve2 } from "node:path";
+import { randomUUID as randomUUID3 } from "node:crypto";
 
 // mcp/remote.mjs
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 var remoteCache = /* @__PURE__ */ new Map();
 var CACHE_TTL_MS = 6e4;
 function sleep(milliseconds) {
@@ -33843,6 +33843,44 @@ function expiryClassification(expiresAt, now = Date.now(), windowDays = 7) {
   if (!Number.isFinite(expiry)) return void 0;
   if (expiry <= now) return "expired";
   return expiry - now <= windowDays * 24 * 60 * 6e4 ? "expiring" : "retained";
+}
+function normalizedTags(tags) {
+  return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.startsWith("<none>")))].sort();
+}
+function validateRemoteRetirementApproval(requested, current, sourceConfig = {}) {
+  if (!requested || !current || requested.type !== "image" || current.type !== "image" || requested.id !== current.id) return false;
+  if (String(requested.project || "") !== String(sourceConfig.projectId || requested.project || "")) return false;
+  if ((current.lineage?.consumers || []).length > 0) return false;
+  const evidence = requested.retirementEvidence;
+  if (!/^[0-9a-f]{64}$/i.test(String(evidence?.reportSha256 || ""))) return false;
+  if (!/^[0-9a-f]{40}$/i.test(String(evidence?.revision || ""))) return false;
+  if (String(current.lineage?.revision || "").toLowerCase() !== String(evidence.revision).toLowerCase()) return false;
+  const liveTags = normalizedTags(current.lineage?.tags);
+  const approvedTags = normalizedTags(evidence.approvedTags);
+  const previewTags = normalizedTags(requested.tags);
+  return liveTags.length > 0 && liveTags.length === approvedTags.length && liveTags.every((tag, index) => tag === approvedTags[index]) && liveTags.length === previewTags.length && liveTags.every((tag, index) => tag === previewTags[index]);
+}
+function buildPostCleanupVerification(before, after, results = []) {
+  const activeContainers = (snapshot) => new Map((snapshot?.assets || []).filter((asset) => asset.type === "container" && asset.classification === "active").map((asset) => [asset.id, asset.name]));
+  const beforeActive = activeContainers(before);
+  const afterActive = activeContainers(after);
+  const missingActiveContainers = [...beforeActive].filter(([id]) => !afterActive.has(id)).map(([id, name]) => ({ id, name }));
+  const remainingImageIds = new Set((after?.assets || []).filter((asset) => asset.type === "image").map((asset) => asset.id));
+  const removedIds = results.filter((item) => item.status === "removed" && item.type === "image").map((item) => item.id);
+  const removedImagesStillPresent = removedIds.filter((id) => remainingImageIds.has(id));
+  const freeBytesBefore = Number(before?.disk?.freeBytes || 0);
+  const freeBytesAfter = Number(after?.disk?.freeBytes || 0);
+  return {
+    status: missingActiveContainers.length === 0 && removedImagesStillPresent.length === 0 ? "pass" : "fail",
+    checkedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    activeContainerCountBefore: beforeActive.size,
+    activeContainerCountAfter: afterActive.size,
+    missingActiveContainers,
+    removedImagesStillPresent,
+    freeBytesBefore,
+    freeBytesAfter,
+    freeBytesDelta: freeBytesAfter - freeBytesBefore
+  };
 }
 function remoteSnapshotScript(sourceConfig = {}) {
   const context = Buffer.from(JSON.stringify({
@@ -34380,7 +34418,15 @@ function awsDockerCleanupScript(allowlist) {
     type: item.type,
     id: item.id,
     name: item.name,
-    sizeBytes: Number(item.sizeBytes || 0)
+    sizeBytes: Number(item.sizeBytes || 0),
+    tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
+    revision: item.revision ? String(item.revision) : void 0,
+    retirementEvidence: item.retirementEvidence ? {
+      reportSha256: String(item.retirementEvidence.reportSha256 || ""),
+      group: String(item.retirementEvidence.group || ""),
+      approvedTags: Array.isArray(item.retirementEvidence.approvedTags) ? item.retirementEvidence.approvedTags.map(String) : [],
+      revision: String(item.retirementEvidence.revision || "")
+    } : void 0
   }))), "utf8").toString("base64");
   return String.raw`import base64, datetime, gzip, json, re, subprocess
 
@@ -34437,11 +34483,22 @@ for item in items:
         if detail:
             labels = (detail.get("Config") or {}).get("Labels") or {}
             code, refs, _ = run(docker + ["ps", "-aq", "--filter", "ancestor=" + identifier])
-            tags = detail.get("RepoTags") or []
+            tags = sorted(detail.get("RepoTags") or [])
             digests = detail.get("RepoDigests") or []
             dangling = not tags and not digests
             protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
-            safe = code == 0 and not refs and not protected and not future_expiry(labels, detail.get("Created")) and (label(labels, "disposable") == "true" or dangling)
+            evidence = item.get("retirementEvidence") or {}
+            approved_tags = sorted(set(str(tag) for tag in (evidence.get("approvedTags") or []) if tag and not str(tag).startswith("<none>")))
+            requested_tags = sorted(set(str(tag) for tag in (item.get("tags") or []) if tag and not str(tag).startswith("<none>")))
+            revision = str(labels.get("org.opencontainers.image.revision") or label(labels, "git-sha") or "").lower()
+            attested = bool(
+                re.match(r"^[0-9a-f]{64}$", str(evidence.get("reportSha256") or ""), re.I)
+                and re.match(r"^[0-9a-f]{40}$", str(evidence.get("revision") or ""), re.I)
+                and revision == str(evidence.get("revision") or "").lower()
+                and tags == approved_tags
+                and tags == requested_tags
+            )
+            safe = code == 0 and not refs and not future_expiry(labels, detail.get("Created")) and ((not protected and (label(labels, "disposable") == "true" or dangling)) or attested)
             reason = "未被任何容器引用的悬空/显式 disposable 镜像"
     elif kind == "volume":
         detail = inspect("volume", identifier)
@@ -34455,12 +34512,17 @@ for item in items:
     if not safe:
         results.append({**item, "status":"skipped", "reclaimedBytes":0, "reason":"执行前复核不再满足安全清理条件"})
         continue
-    command = docker + (["image", "rm", identifier] if kind == "image" else ["volume", "rm", identifier])
+    command = docker + (["image", "rm"] + (requested_tags if kind == "image" and requested_tags else [identifier]) if kind == "image" else ["volume", "rm", identifier])
     code, _, error = run(command)
-    results.append({**item, "status":"removed" if code == 0 else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if code == 0 else 0, "reason":reason if code == 0 else error[-300:]})
+    removed = code == 0 and (kind != "image" or inspect("image", identifier) is None)
+    results.append({**item, "status":"removed" if removed else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if removed else 0, "removedReferences":requested_tags if kind == "image" else None, "reason":reason if removed else (error[-300:] or "image still exists after exact tag removal")})
 
 encoded = base64.b64encode(gzip.compress(json.dumps({"results":results}, separators=(",",":"), ensure_ascii=False).encode("utf-8"))).decode("ascii")
 print("RATCLEAN1:" + encoded)`;
+}
+function ssmMutationCommand(script) {
+  const encoded = gzipSync(Buffer.from(String(script), "utf8"), { level: 9 }).toString("base64");
+  return `echo '${encoded}' | base64 -d | gzip -d | bash`;
 }
 function runSsmMutation(sourceConfig, script, comment) {
   const instanceId = sourceConfig?.instanceId;
@@ -34477,8 +34539,7 @@ function runSsmMutation(sourceConfig, script, comment) {
   ]);
   const instance = managed.InstanceInformationList?.find((item) => item.InstanceId === instanceId);
   if (!instance || instance.PingStatus !== "Online") throw new Error(`EC2 ${instanceId} \u672A\u901A\u8FC7 Systems Manager \u5728\u7EBF`);
-  const encoded = Buffer.from(script, "utf8").toString("base64");
-  const command = `echo '${encoded}' | base64 -d | bash`;
+  const command = ssmMutationCommand(script);
   const sent = runJson("aws", [
     ...regionArgs,
     "ssm",
@@ -34526,23 +34587,26 @@ function runSsmMutation(sourceConfig, script, comment) {
 }
 function executeAwsDockerCleanup(sourceConfig, allowlist) {
   const snapshot = collectAwsSnapshot(sourceConfig);
-  const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
   const approved = [];
   for (const requested of allowlist) {
-    const current = safeAssets.get(`${requested.type}:${requested.id}`);
-    if (!current) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u5FEB\u7167\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
+    const current = currentAssets.get(`${requested.type}:${requested.id}`);
+    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, sourceConfig);
+    if (!current || !safe) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u5FEB\u7167\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
     else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
   if (!approved.length) return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: skipped };
   const script = awsDockerCleanupScript(approved);
-  const encoded = Buffer.from(script, "utf8").toString("base64");
-  const invocation = runSsmMutation(sourceConfig, `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`, "Runtime Asset Tracker exact safe Docker cleanup");
+  const encoded = gzipSync(Buffer.from(script, "utf8"), { level: 9 }).toString("base64");
+  const invocation = runSsmMutation(sourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, "Runtime Asset Tracker exact safe Docker cleanup");
   const match = invocation.output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
   if (!match) throw new Error("\u8FDC\u7A0B\u6E05\u7406\u6CA1\u6709\u8FD4\u56DE\u53EF\u9A8C\u8BC1\u7ED3\u679C");
   const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
   remoteCache.clear();
-  return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), commandId: invocation.commandId, results: [...skipped, ...payload.results || []] };
+  const results = [...skipped, ...payload.results || []];
+  const after = collectAwsSnapshot(sourceConfig);
+  return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), commandId: invocation.commandId, results, verification: buildPostCleanupVerification(snapshot, after, results) };
 }
 function runSshMutation(sourceConfig, script) {
   const sshProfile = String(sourceConfig?.sshProfile || "").trim();
@@ -34563,12 +34627,13 @@ function runSshMutation(sourceConfig, script) {
 }
 function executeSshDockerCleanup(sourceConfig, allowlist) {
   const snapshot = collectSshSnapshot(sourceConfig);
-  const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
   const approved = [];
   for (const requested of allowlist) {
-    const current = safeAssets.get(`${requested.type}:${requested.id}`);
-    if (!current) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u5FEB\u7167\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
+    const current = currentAssets.get(`${requested.type}:${requested.id}`);
+    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, sourceConfig);
+    if (!current || !safe) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u5FEB\u7167\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
     else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
   if (!approved.length) return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: skipped };
@@ -34577,7 +34642,9 @@ function executeSshDockerCleanup(sourceConfig, allowlist) {
   if (!match) throw new Error("\u8FDC\u7A0B\u6E05\u7406\u6CA1\u6709\u8FD4\u56DE\u53EF\u9A8C\u8BC1\u7ED3\u679C");
   const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
   remoteCache.clear();
-  return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: [...skipped, ...payload.results || []] };
+  const results = [...skipped, ...payload.results || []];
+  const after = collectSshSnapshot(sourceConfig);
+  return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results, verification: buildPostCleanupVerification(snapshot, after, results) };
 }
 function executeGithubCleanup(sourceConfig, allowlist) {
   const snapshot = collectGithubSnapshot(sourceConfig);
@@ -34693,14 +34760,252 @@ function collectRemoteDashboard({ source, scope, project, config: config2, sourc
   }
 }
 
-// mcp/inventory.mjs
+// mcp/reconciliation.mjs
+import { createHash as createHash2, randomUUID as randomUUID2 } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { homedir, hostname as hostname3, platform } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+var RECONCILIATION_SCHEMA = "sparkling.runtime-image-retirement-reconciliation/v1";
 var RUNTIME_PREFIX = "com.codex.runtime.";
-var previewStore = /* @__PURE__ */ new Map();
-var dashboardCache = /* @__PURE__ */ new Map();
-function stateRoot() {
+var IMAGE_ID = /^sha256:[0-9a-f]{64}$/i;
+var COMMIT = /^[0-9a-f]{40}$/i;
+var REPORT_SHA = /^[0-9a-f]{64}$/i;
+function defaultStateRoot() {
   if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve(process.env.RUNTIME_ASSET_STATE_DIR);
   if (platform() === "win32") return join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "RuntimeAssetTracker");
   return join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "runtime-asset-tracker");
+}
+function stableStrings(values) {
+  return [...new Set((values || []).map(String).filter(Boolean))].sort();
+}
+function readJson(path) {
+  const raw = readFileSync(path);
+  if (raw[0] === 239 && raw[1] === 187 && raw[2] === 191) throw new Error("Reconciliation JSON must not contain a UTF-8 BOM.");
+  return { raw, value: JSON.parse(raw.toString("utf8")) };
+}
+function existingLedgerEvents(path) {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf8").split(/\r?\n/).filter(Boolean).flatMap((line) => {
+    try {
+      return [JSON.parse(line)];
+    } catch {
+      return [];
+    }
+  });
+}
+function reportProtectionIds(report) {
+  return new Set([
+    ...(report.neverDelete?.currentProduction || []).map((item) => item.id),
+    ...report.neverDelete?.activeVerificationAndPreviewImageIds || [],
+    ...(report.rollbackKeep || []).map((item) => item.id)
+  ].filter(Boolean));
+}
+function validateRetirementReconciliation(report, { project, source, instanceId, groups } = {}) {
+  const errors = [];
+  if (!report || typeof report !== "object" || Array.isArray(report)) return { ok: false, errors: ["Report must be an object."] };
+  if (report.schemaVersion !== RECONCILIATION_SCHEMA) errors.push("Unsupported reconciliation schema.");
+  if (report.readOnly !== true || report.actionTaken !== "none") errors.push("Only a read-only, non-executed reconciliation report can be imported.");
+  if (project && report.target?.project !== project) errors.push("Report project does not match the selected project.");
+  if (source && !["local", "production", "staging"].includes(source)) errors.push("Retirement imports are limited to local, production, or staging.");
+  if (instanceId && report.target?.instanceId !== instanceId) errors.push("Report instance does not match the registered environment.");
+  const selectedGroups = stableStrings(groups);
+  if (selectedGroups.length === 0) errors.push("At least one exact candidate group is required.");
+  const available = new Map((report.candidateGroups || []).map((group) => [String(group.group), group]));
+  const protectedIds = reportProtectionIds(report);
+  const seen = /* @__PURE__ */ new Set();
+  let imageCount = 0;
+  let uniqueBytes = 0;
+  for (const name of selectedGroups) {
+    const group = available.get(name);
+    if (!group) {
+      errors.push(`Unknown reconciliation group: ${name}.`);
+      continue;
+    }
+    if (!String(group.confidence || "").startsWith("high")) errors.push(`Group ${name} is not high confidence.`);
+    if (!Array.isArray(group.images) || group.images.length !== group.imageCount) errors.push(`Group ${name} image count is inconsistent.`);
+    let groupBytes = 0;
+    for (const image of group.images || []) {
+      imageCount += 1;
+      groupBytes += Number(image.uniqueBytes || 0);
+      uniqueBytes += Number(image.uniqueBytes || 0);
+      if (!IMAGE_ID.test(String(image.id || ""))) errors.push(`Group ${name} contains an invalid image ID.`);
+      if (seen.has(image.id)) errors.push(`Image ${image.id} appears in more than one selected group.`);
+      seen.add(image.id);
+      if (protectedIds.has(image.id)) errors.push(`Protected image ${image.id} cannot be retired.`);
+      if (!COMMIT.test(String(image.revision || ""))) errors.push(`Image ${image.id} lacks a full Git revision.`);
+      if (source === "local" && !String(image.recoverySource || "").trim()) errors.push(`Local image ${image.id} lacks an explicit recovery source.`);
+      if (!Array.isArray(image.tags) || image.tags.length === 0 || image.tags.some((tag) => !tag || String(tag).startsWith("<none>"))) errors.push(`Image ${image.id} lacks an exact tag set.`);
+      if (stableStrings(image.tags).length !== image.tags.length) errors.push(`Image ${image.id} has duplicate tags.`);
+      if (!Number.isFinite(Number(image.uniqueBytes)) || Number(image.uniqueBytes) < 0) errors.push(`Image ${image.id} has an invalid unique byte count.`);
+    }
+    if (groupBytes !== Number(group.uniqueBytes)) errors.push(`Group ${name} unique byte total is inconsistent.`);
+  }
+  return { ok: errors.length === 0, errors, selectedGroups, imageCount, uniqueBytes, protectedIds: [...protectedIds] };
+}
+function retirementAttestations(events) {
+  const retirements = /* @__PURE__ */ new Map();
+  const protections = /* @__PURE__ */ new Map();
+  for (const event of events || []) {
+    const type = String(event?.asset?.type || "");
+    const id = String(event?.asset?.id || "");
+    if (type !== "image" || !IMAGE_ID.test(id)) continue;
+    const key = `image:${id}`;
+    if (event.event === "asset.retirement.revoked") {
+      retirements.delete(key);
+      continue;
+    }
+    if (event.event === "asset.protection.bound" && event.status === "protected") {
+      protections.set(key, {
+        project: String(event.project || ""),
+        environment: String(event.environment || ""),
+        revision: COMMIT.test(String(event.gitSha || "")) ? String(event.gitSha).toLowerCase() : void 0,
+        reportSha256: String(event.details?.reportSha256 || ""),
+        reason: String(event.details?.reason || "reconciliation-protected")
+      });
+      retirements.delete(key);
+      continue;
+    }
+    if (event.event !== "asset.retired" || event.status !== "retired") continue;
+    const details = event.details || {};
+    const approvedTags = stableStrings(details.approvedTags);
+    const reportSha256 = String(details.reportSha256 || "").toLowerCase();
+    const revision = String(event.gitSha || "").toLowerCase();
+    const project = String(event.project || "");
+    const environment = String(event.environment || "");
+    const owner = String(event.owner || "");
+    const recoverySource = String(details.recoverySource || "");
+    if (String(details.disposable).toLowerCase() !== "true" || String(details.retention).toLowerCase() !== "retired") continue;
+    if (!approvedTags.length || !REPORT_SHA.test(reportSha256) || !COMMIT.test(revision) || !project || !environment || !owner || !recoverySource) continue;
+    retirements.set(key, {
+      project,
+      environment,
+      owner,
+      release: String(event.release || "retired"),
+      revision,
+      approvedTags,
+      expectedUniqueBytes: Number(details.expectedUniqueBytes || 0),
+      reportSha256,
+      group: String(details.group || ""),
+      recoverySource,
+      labels: {
+        [`${RUNTIME_PREFIX}project`]: project,
+        [`${RUNTIME_PREFIX}environment`]: environment,
+        [`${RUNTIME_PREFIX}owner`]: owner,
+        [`${RUNTIME_PREFIX}asset-kind`]: "image",
+        [`${RUNTIME_PREFIX}retention`]: "retired",
+        [`${RUNTIME_PREFIX}disposable`]: "true",
+        [`${RUNTIME_PREFIX}recovery-source`]: recoverySource,
+        [`${RUNTIME_PREFIX}git-sha`]: revision,
+        [`${RUNTIME_PREFIX}release`]: String(event.release || "retired"),
+        [`${RUNTIME_PREFIX}retirement-report-sha256`]: reportSha256,
+        [`${RUNTIME_PREFIX}retirement-group`]: String(details.group || "")
+      }
+    });
+  }
+  return { retirements, protections };
+}
+function importRetirementReconciliation({ reportPath, source, project, groups, owner = "platform-engineering" } = {}) {
+  if (!isAbsolute(String(reportPath || ""))) throw new Error("Reconciliation report path must be absolute.");
+  const { raw, value: report } = readJson(reportPath);
+  const stateDirectory = defaultStateRoot();
+  const configPath = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join(stateDirectory, "dashboard-config.json");
+  const config2 = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf8")) : { projects: [] };
+  const registeredProject = (config2.projects || []).find((item) => String(item.id || item.repository) === String(project));
+  const environment = source === "local" ? { id: "local" } : registeredProject?.environments?.find((item) => item.id === source);
+  if (!registeredProject || !environment) throw new Error("Selected project/environment is not registered in Tracker configuration.");
+  const validation = validateRetirementReconciliation(report, { project, source, instanceId: environment.instanceId, groups });
+  if (!validation.ok) throw new Error(`Reconciliation report is invalid: ${validation.errors.join("; ")}`);
+  const reportSha256 = createHash2("sha256").update(raw).digest("hex");
+  const ledgerPath = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateDirectory, "events.jsonl");
+  const existing = existingLedgerEvents(ledgerPath);
+  const existingKeys = new Set(existing.filter((event) => event.event === "asset.retired").map((event) => `${event.asset?.id}\0${event.details?.reportSha256}\0${event.details?.group}`));
+  const events = [];
+  const selected = new Set(validation.selectedGroups);
+  for (const group of report.candidateGroups || []) {
+    if (!selected.has(group.group)) continue;
+    for (const image of group.images) {
+      const key = `${image.id}\0${reportSha256}\0${group.group}`;
+      if (existingKeys.has(key)) continue;
+      const recoverySource = String(image.recoverySource || `git:https://github.com/${project}.git@${image.revision}`).trim();
+      events.push({
+        schemaVersion: 1,
+        eventId: randomUUID2(),
+        occurredAt: (/* @__PURE__ */ new Date()).toISOString(),
+        event: "asset.retired",
+        host: hostname3(),
+        project,
+        environment: source,
+        release: `reconciled-${group.group}`,
+        gitSha: image.revision,
+        owner,
+        asset: { type: "image", id: image.id, service: image.tags.some((tag) => /(?:^|[-_:])web(?:[-_:]|$)/i.test(tag)) ? "web" : "api" },
+        status: "retired",
+        details: {
+          disposable: "true",
+          retention: "retired",
+          recoverySource: `${recoverySource}; report-sha256:${reportSha256}; group:${group.group}`,
+          approvedTags: stableStrings(image.tags),
+          expectedUniqueBytes: Number(image.uniqueBytes || 0),
+          reportSha256,
+          reportPath,
+          group: group.group,
+          confidence: group.confidence
+        }
+      });
+    }
+  }
+  const protections = [
+    ...(report.neverDelete?.currentProduction || []).map((item) => ({ id: item.id, revision: item.revision, reason: "current-production" })),
+    ...(report.neverDelete?.activeVerificationAndPreviewImageIds || []).map((id) => ({ id, reason: "active-verification-or-preview" })),
+    ...(report.rollbackKeep || []).map((item) => ({ id: item.id, revision: item.revision, reason: item.reason || "rollback-keep" }))
+  ];
+  const protectedKeys = new Set(existing.filter((event) => event.event === "asset.protection.bound").map((event) => `${event.asset?.id}\0${event.details?.reportSha256}`));
+  for (const item of protections) {
+    if (!IMAGE_ID.test(String(item.id || "")) || protectedKeys.has(`${item.id}\0${reportSha256}`)) continue;
+    events.push({
+      schemaVersion: 1,
+      eventId: randomUUID2(),
+      occurredAt: (/* @__PURE__ */ new Date()).toISOString(),
+      event: "asset.protection.bound",
+      host: hostname3(),
+      project,
+      environment: source,
+      release: "reconciliation-protection",
+      gitSha: COMMIT.test(String(item.revision || "")) ? String(item.revision).toLowerCase() : "unknown",
+      owner,
+      asset: { type: "image", id: item.id },
+      status: "protected",
+      details: { reportSha256, reportPath, reason: item.reason }
+    });
+  }
+  if (events.length) {
+    mkdirSync(dirname(ledgerPath), { recursive: true });
+    appendFileSync(ledgerPath, `${events.map((event) => JSON.stringify(event)).join("\n")}
+`, { encoding: "utf8", mode: 384 });
+  }
+  return {
+    importedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    reportPath,
+    reportSha256,
+    source,
+    project,
+    groups: validation.selectedGroups,
+    candidateImageCount: validation.imageCount,
+    candidateUniqueBytes: validation.uniqueBytes,
+    retirementEventsAdded: events.filter((event) => event.event === "asset.retired").length,
+    protectionEventsAdded: events.filter((event) => event.event === "asset.protection.bound").length,
+    idempotentSkipCount: validation.imageCount - events.filter((event) => event.event === "asset.retired").length
+  };
+}
+
+// mcp/inventory.mjs
+var RUNTIME_PREFIX2 = "com.codex.runtime.";
+var previewStore = /* @__PURE__ */ new Map();
+var dashboardCache = /* @__PURE__ */ new Map();
+function stateRoot() {
+  if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve2(process.env.RUNTIME_ASSET_STATE_DIR);
+  if (platform2() === "win32") return join2(process.env.LOCALAPPDATA || join2(homedir2(), "AppData", "Local"), "RuntimeAssetTracker");
+  return join2(process.env.XDG_STATE_HOME || join2(homedir2(), ".local", "state"), "runtime-asset-tracker");
 }
 function run(command, args, options = {}) {
   try {
@@ -34749,10 +35054,10 @@ function inspectMany(kind, identifiers) {
   });
 }
 function safeLabels(labels) {
-  return Object.fromEntries(Object.entries(labels || {}).filter(([key]) => key.startsWith(RUNTIME_PREFIX) || key.startsWith("com.docker.compose.") || ["org.opencontainers.image.revision", "org.opencontainers.image.source"].includes(key)));
+  return Object.fromEntries(Object.entries(labels || {}).filter(([key]) => key.startsWith(RUNTIME_PREFIX2) || key.startsWith("com.docker.compose.") || ["org.opencontainers.image.revision", "org.opencontainers.image.source"].includes(key)));
 }
 function labelValue(labels, key) {
-  return labels?.[`${RUNTIME_PREFIX}${key}`];
+  return labels?.[`${RUNTIME_PREFIX2}${key}`];
 }
 function classification({ labels = {}, active = false, dangling = false, knownProtected = false, assetType = "generic", createdAt, expiresAt, now = Date.now() }) {
   if (active) return "active";
@@ -34798,9 +35103,26 @@ function dockerSummary() {
     reclaimableBytes: parseBytes(row.Reclaimable)
   }]));
 }
+function localBuildCacheBar(summary = {}) {
+  const cache = Object.entries(summary).find(([type]) => String(type).toLowerCase() === "build cache")?.[1] || {};
+  const totalBytes = Number(cache.sizeBytes || 0);
+  const reclaimableBytes = Math.min(totalBytes, Number(cache.reclaimableBytes || 0));
+  return {
+    type: "cache",
+    totalBytes,
+    count: Number(cache.totalCount || 0),
+    activeBytes: 0,
+    protectedBytes: 0,
+    expiringBytes: 0,
+    retainedBytes: Math.max(0, totalBytes - reclaimableBytes),
+    reclaimableBytes,
+    unit: "bytes"
+  };
+}
 function dockerInventory() {
   const available = Boolean(run("docker", ["version", "--format", "{{.Server.Version}}"]));
   if (!available) return { available: false, assets: [], summary: {} };
+  const retirementOverrides = readRetirementOverrides();
   const containerRows = jsonLines(run("docker", ["ps", "-a", "--size", "--no-trunc", "--format", "{{json .}}"]));
   const containerDetails = inspectMany("container", containerRows.map((item) => item.ID));
   const verboseSizes = parseVerboseDockerSizes();
@@ -34819,7 +35141,10 @@ function dockerInventory() {
     }
   }
   const containers = containerDetails.map((item) => {
-    const labels = safeLabels(item.Config?.Labels);
+    const labels = {
+      ...safeLabels(item.Config?.Labels),
+      ...retirementOverrides.get(`container:${item.Id}`) || {}
+    };
     const active = Boolean(item.State?.Running);
     return {
       id: item.Id,
@@ -34851,7 +35176,10 @@ function dockerInventory() {
   const imageDetails = new Map(inspectMany("image", [...consolidatedImages.keys()]).map((item) => [item.Id, item]));
   const images = [...consolidatedImages.values()].map((row) => {
     const item = imageDetails.get(row.ID);
-    const labels = safeLabels(item?.Config?.Labels);
+    const labels = {
+      ...safeLabels(item?.Config?.Labels),
+      ...retirementOverrides.get(`image:${row.ID}`) || {}
+    };
     const tags = row.tags;
     const running = runningImageIds.has(row.ID);
     const referenced = referencedImageIds.has(row.ID);
@@ -34883,7 +35211,10 @@ function dockerInventory() {
   const volumeSizes = verboseSizes.volumeSizes;
   const protectedName = /(postgres|mysql|maria|redis|valkey|uploads?|media|assets?|database|db[-_]?data|backup)/i;
   const volumes = volumeDetails.map((item) => {
-    const labels = safeLabels(item.Labels);
+    const labels = {
+      ...safeLabels(item.Labels),
+      ...retirementOverrides.get(`volume:${item.Name}`) || {}
+    };
     const active = activeMountedVolumes.has(item.Name);
     const mounted = allMountedVolumes.has(item.Name);
     const knownProtected = protectedName.test(item.Name);
@@ -34930,10 +35261,14 @@ function registeredProjects(config2 = loadConfig()) {
   return [...unique.values()];
 }
 function publicProjectOptions(projects) {
-  return projects.map(({ id, repository, label }) => ({ id, repository, label }));
+  return [
+    { id: "all", repository: "local-host", label: "All local projects", hostScope: true },
+    ...projects.map(({ id, repository, label }) => ({ id, repository, label }))
+  ];
 }
 function resolveProjectId(value, projects, config2) {
-  const requested = value && value !== "all" ? canonicalProjectId(value, projects) : "";
+  if (value === "all") return "all";
+  const requested = value ? canonicalProjectId(value, projects) : "";
   if (projects.some((item) => item.id === requested)) return requested;
   const legacyGithub = (config2.sources || []).find((item) => item.kind === "github" || item.id === "github");
   const legacyProject = canonicalProjectId(legacyGithub?.repository, projects);
@@ -34943,6 +35278,7 @@ function resolveProjectId(value, projects, config2) {
 function projectSourceConfigs(config2, project) {
   const projects = registeredProjects(config2);
   const selectedProject = resolveProjectId(project, projects, config2);
+  if (selectedProject === "all") return [{ id: "local", kind: "local", projectId: "all" }];
   const registered = projects.find((item) => item.id === selectedProject);
   const legacyGithub = (config2.sources || []).find((item) => item.kind === "github" || item.id === "github");
   const legacyOwner = canonicalProjectId(legacyGithub?.repository, projects);
@@ -34972,8 +35308,18 @@ function publicConnection(source) {
   };
 }
 function projectSourceCards(config2, projects, selectedProject, dockerAvailable) {
+  if (selectedProject === "all") {
+    const diskRoot2 = process.env.RUNTIME_ASSET_DISK_ROOT || (platform2() === "win32" ? "D:\\" : "/");
+    return [{
+      id: "local",
+      label: `Local ${diskRoot2}`,
+      kind: "local",
+      status: dockerAvailable ? "connected" : "unavailable",
+      detail: "All registered and legacy local projects"
+    }];
+  }
   const project = projects.find((item) => item.id === selectedProject);
-  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform() === "win32" ? "D:\\" : "/");
+  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform2() === "win32" ? "D:\\" : "/");
   return projectSourceConfigs(config2, selectedProject).map((source) => {
     if (source.id === "local") {
       return { id: "local", label: `Local ${diskRoot}`, kind: "local", status: dockerAvailable ? "connected" : "unavailable", detail: project?.label || selectedProject };
@@ -34991,11 +35337,21 @@ function projectSourceCards(config2, projects, selectedProject, dockerAvailable)
     };
   });
 }
+function compactProjectToken(value) {
+  const normalizedRepository = normalizeGithubRepository(value);
+  return String(normalizedRepository || value || "").split("/").at(-1).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
 function canonicalProjectId(value, projects) {
   const normalizedRepository = normalizeGithubRepository(value);
   const key = String(normalizedRepository || value || "").toLowerCase();
   const match = projects.find((item) => [item.id, item.repository, item.label, ...item.aliases].some((candidate) => String(candidate || "").toLowerCase() === key));
-  return match?.id || value || "unknown";
+  if (match) return match.id;
+  const compact = compactProjectToken(value);
+  const prefixed = projects.flatMap((item) => [item.repository, item.label, ...item.aliases].map((candidate) => ({
+    project: item,
+    token: compactProjectToken(candidate)
+  }))).filter((candidate) => candidate.token.length >= 4 && compact.startsWith(candidate.token)).sort((left, right) => right.token.length - left.token.length)[0];
+  return prefixed?.project.id || value || "unknown";
 }
 function worktreeInventory(config2, projects) {
   const roots = [...new Set([
@@ -35006,6 +35362,7 @@ function worktreeInventory(config2, projects) {
   if (!roots.length) roots.push(process.cwd());
   const blocksByPath = /* @__PURE__ */ new Map();
   for (const root of roots) {
+    if (!existsSync2(join2(root, ".git"))) continue;
     const output = run("git", ["worktree", "list", "--porcelain"], { cwd: root });
     for (const block of output.split(/\r?\n\r?\n/).filter(Boolean)) {
       const pathLine = block.split(/\r?\n/).find((line) => line.startsWith("worktree "));
@@ -35041,43 +35398,99 @@ function worktreeInventory(config2, projects) {
   });
 }
 function readLedger(limit = 24) {
-  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
-  if (!existsSync(ledger)) return [];
+  return readRawLedgerEvents().slice(-limit).reverse().map((item) => ({
+    id: item.eventId,
+    occurredAt: item.occurredAt,
+    event: item.event,
+    project: item.project,
+    environment: item.environment,
+    assetType: item.asset?.type,
+    assetId: item.asset?.id,
+    status: item.status
+  }));
+}
+function readRawLedgerEvents(maxBytes = 8 * 1024 * 1024) {
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join2(stateRoot(), "events.jsonl");
+  if (!existsSync2(ledger)) return [];
   const stats = statSync(ledger);
-  const length = Math.min(stats.size, 2 * 1024 * 1024);
+  const length = Math.min(stats.size, maxBytes);
   const buffer = Buffer.alloc(length);
   const fd = openSync(ledger, "r");
   readSync(fd, buffer, 0, length, stats.size - length);
   closeSync(fd);
-  return buffer.toString("utf8").split(/\r?\n/).filter(Boolean).slice(-limit).reverse().flatMap((line) => {
+  const lines = buffer.toString("utf8").split(/\r?\n/);
+  if (stats.size > length) lines.shift();
+  return lines.filter(Boolean).flatMap((line) => {
     try {
-      const item = JSON.parse(line);
-      return [{
-        id: item.eventId,
-        occurredAt: item.occurredAt,
-        event: item.event,
-        project: item.project,
-        environment: item.environment,
-        assetType: item.asset?.type,
-        assetId: item.asset?.id,
-        status: item.status
-      }];
+      return [JSON.parse(line)];
     } catch {
       return [];
     }
   });
 }
+function retirementOverrideLabels(events) {
+  const overrides = /* @__PURE__ */ new Map();
+  for (const event of events || []) {
+    const type = String(event?.asset?.type || "");
+    const id = String(event?.asset?.id || "");
+    if (!id || !["image", "container", "volume"].includes(type)) continue;
+    const key = `${type}:${id}`;
+    if (event.event === "asset.retirement.revoked") {
+      overrides.delete(key);
+      continue;
+    }
+    if (event.event !== "asset.retired" || event.status !== "retired") continue;
+    const details = event.details || {};
+    const recoverySource = String(details.recoverySource || "").trim();
+    const dataClassification = String(details.dataClassification || "").trim();
+    const contentFingerprint = String(details.contentFingerprint || "").trim();
+    const project = String(event.project || "").trim();
+    const owner = String(event.owner || "").trim();
+    if (String(details.disposable).toLowerCase() !== "true") continue;
+    if (String(details.retention).toLowerCase() !== "retired") continue;
+    if (!recoverySource || !project || project === "unknown" || !owner || owner === "unknown") continue;
+    if (type === "volume" && (dataClassification !== "synthetic-test-fixture" || !/^sha256:[0-9a-f]{64}$/i.test(contentFingerprint))) continue;
+    const labels = {
+      [`${RUNTIME_PREFIX2}project`]: project,
+      [`${RUNTIME_PREFIX2}environment`]: String(event.environment || "local"),
+      [`${RUNTIME_PREFIX2}owner`]: owner,
+      [`${RUNTIME_PREFIX2}asset-kind`]: type,
+      [`${RUNTIME_PREFIX2}retention`]: "retired",
+      [`${RUNTIME_PREFIX2}disposable`]: "true",
+      [`${RUNTIME_PREFIX2}recovery-source`]: recoverySource
+    };
+    if (event.release && event.release !== "unknown") labels[`${RUNTIME_PREFIX2}release`] = String(event.release);
+    if (event.gitSha && event.gitSha !== "unknown") labels[`${RUNTIME_PREFIX2}git-sha`] = String(event.gitSha);
+    if (type === "volume") {
+      labels[`${RUNTIME_PREFIX2}data-classification`] = dataClassification;
+      labels[`${RUNTIME_PREFIX2}content-fingerprint`] = contentFingerprint;
+    }
+    overrides.set(key, labels);
+  }
+  return overrides;
+}
+function readRetirementOverrides() {
+  return retirementOverrideLabels(readRawLedgerEvents());
+}
+function readRetirementGovernance() {
+  return retirementAttestations(readRawLedgerEvents());
+}
+function importReconciliation(input) {
+  const result = importRetirementReconciliation(input);
+  dashboardCache.clear();
+  return result;
+}
 function loadConfig() {
-  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join(stateRoot(), "dashboard-config.json");
-  if (!existsSync(path)) return { sources: [] };
+  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join2(stateRoot(), "dashboard-config.json");
+  if (!existsSync2(path)) return { sources: [] };
   try {
-    return JSON.parse(readFileSync(path, "utf8"));
+    return JSON.parse(readFileSync2(path, "utf8"));
   } catch {
     return { sources: [] };
   }
 }
 function saveSchedule(schedule) {
-  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join(stateRoot(), "dashboard-config.json");
+  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join2(stateRoot(), "dashboard-config.json");
   const config2 = loadConfig();
   const next = {
     ...config2,
@@ -35090,7 +35503,7 @@ function saveSchedule(schedule) {
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     }
   };
-  mkdirSync(dirname(path), { recursive: true });
+  mkdirSync2(dirname2(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(next, null, 2)}
 `, { encoding: "utf8", mode: 384 });
   dashboardCache.clear();
@@ -35129,13 +35542,15 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
   const sources = projectSourceCards(config2, projects, selectedProject, true);
   if (selectedSource !== "local") {
     const scopedConfig = { ...config2, sources: sourceConfigs.filter((item) => item.id !== "local") };
-    return collectRemoteDashboard({ source: selectedSource, scope: "project", project: selectedProject, config: scopedConfig, sources });
+    const dashboard2 = collectRemoteDashboard({ source: selectedSource, scope: "project", project: selectedProject, config: scopedConfig, sources });
+    return applyRemoteRetirementGovernance(dashboard2, readRetirementGovernance());
   }
   const docker = dockerInventory();
   const worktrees = worktreeInventory(config2, projects);
   const allAssets = [...worktrees, ...docker.assets].map((asset) => ({ ...asset, project: canonicalProjectId(asset.project, projects) }));
-  const filtered = allAssets.filter((asset) => asset.project === selectedProject);
-  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform() === "win32" ? "D:\\" : "/");
+  const hostScope = selectedProject === "all";
+  const filtered = hostScope ? allAssets : allAssets.filter((asset) => asset.project === selectedProject);
+  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform2() === "win32" ? "D:\\" : "/");
   let disk = { totalBytes: 0, freeBytes: 0 };
   try {
     const stats = statfsSync(diskRoot);
@@ -35146,24 +35561,15 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
     aggregate2("worktree", filtered),
     aggregate2("image", filtered),
     aggregate2("volume", filtered),
-    {
-      type: "cache",
-      totalBytes: 0,
-      count: 0,
-      activeBytes: 0,
-      protectedBytes: 0,
-      expiringBytes: 0,
-      retainedBytes: 0,
-      reclaimableBytes: 0,
-      unit: "bytes"
-    }
+    localBuildCacheBar(docker.summary)
   ];
   const dashboard = {
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    scope: "project",
+    scope: hostScope ? "host" : "project",
+    hostScope,
     selectedSource,
     selectedProject,
-    host: hostname3(),
+    host: hostname4(),
     dockerAvailable: docker.available,
     disk,
     bars,
@@ -35171,11 +35577,92 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
     projects: projects.map((item) => item.id),
     projectOptions: publicProjectOptions(projects),
     assets: filtered.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
-    events: readLedger().filter((event) => canonicalProjectId(event.project, projects) === selectedProject),
+    events: hostScope ? readLedger() : readLedger().filter((event) => canonicalProjectId(event.project, projects) === selectedProject),
     schedule: config2.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" }
   };
   dashboardCache.set(cacheKey2, { createdAt: Date.now(), value: dashboard });
   return dashboard;
+}
+function normalizedTags2(tags) {
+  return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.startsWith("<none>")))].sort();
+}
+function applyRemoteRetirementGovernance(dashboard, governance) {
+  if (!dashboard?.remoteSnapshotAvailable || dashboard.selectedSource === "github") return dashboard;
+  const project = String(dashboard.selectedProject || "");
+  const environment = String(dashboard.selectedSource || "");
+  const assets = (dashboard.assets || []).map((asset) => {
+    if (asset.type !== "image") return asset;
+    const key = `image:${asset.id}`;
+    const protection = governance?.protections?.get(key);
+    const retirement = governance?.retirements?.get(key);
+    const consumers = Array.isArray(asset.lineage?.consumers) ? asset.lineage.consumers : [];
+    const referenced = consumers.length > 0;
+    if (protection && protection.project === project && protection.environment === environment) {
+      return {
+        ...asset,
+        classification: referenced ? "active" : "protected",
+        retirementBlocked: true,
+        lineage: { ...asset.lineage, protection },
+        reason: referenced ? asset.reason : `Reconciliation protection: ${protection.reason}`
+      };
+    }
+    if (!retirement || retirement.project !== project || retirement.environment !== environment) return asset;
+    const liveTags = normalizedTags2(asset.lineage?.tags);
+    const approvedTags = normalizedTags2(retirement.approvedTags);
+    const tagSetMatches = liveTags.length === approvedTags.length && liveTags.every((tag, index) => tag === approvedTags[index]);
+    const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX2}git-sha`] || "").toLowerCase();
+    const revisionMatches = revision === retirement.revision;
+    if (referenced) {
+      return {
+        ...asset,
+        classification: "active",
+        retirementBlocked: true,
+        lineage: { ...asset.lineage, retirement },
+        reason: "Retirement is blocked because a running or stopped container still references the image."
+      };
+    }
+    if (!tagSetMatches || !revisionMatches) {
+      return {
+        ...asset,
+        classification: "retained",
+        retirementBlocked: true,
+        lineage: { ...asset.lineage, retirement, liveTags, approvedTags },
+        reason: !tagSetMatches ? "Retirement is blocked because the exact image tag set drifted." : "Retirement is blocked because the Git revision drifted."
+      };
+    }
+    return {
+      ...asset,
+      classification: "reclaimable",
+      labels: { ...asset.labels || {}, ...retirement.labels },
+      lineage: { ...asset.lineage, retirement },
+      reason: "Exact remote retirement attestation, zero container references, matching revision, and matching atomic tag set."
+    };
+  });
+  const productionConsumers = assets.filter((asset) => asset.type === "image").flatMap((asset) => {
+    const revision = String(asset.lineage?.revision || "").toLowerCase();
+    return (asset.lineage?.consumers || []).filter((consumer) => /^sparkling-cms-prod-(?:api|web)-/i.test(String(consumer.name || "")) && consumer.state === "running").map((consumer) => ({ imageId: asset.id, imageRevision: revision, consumer: consumer.name }));
+  });
+  const releaseRevision = String(dashboard.revision || "").toLowerCase();
+  const mismatches = releaseRevision ? productionConsumers.filter((item) => item.imageRevision && item.imageRevision !== releaseRevision) : [];
+  const protections = [...governance?.protections?.values?.() || []];
+  const matchingReportProtections = mismatches.length > 0 && mismatches.every((item) => {
+    const current = governance?.protections?.get(`image:${item.imageId}`);
+    if (!current || current.project !== project || current.environment !== environment) return false;
+    return protections.some((candidate) => candidate.project === project && candidate.environment === environment && candidate.revision === releaseRevision && candidate.reportSha256 === current.reportSha256);
+  });
+  const releaseRuntimeDrift = mismatches.length ? {
+    detected: true,
+    releaseRevision,
+    mismatches,
+    acknowledgedByProtectionReport: matchingReportProtections,
+    cleanupBlocked: !matchingReportProtections
+  } : { detected: false, releaseRevision, mismatches: [], acknowledgedByProtectionReport: false, cleanupBlocked: false };
+  return {
+    ...dashboard,
+    assets,
+    bars: rebuildAnalyzedBars(dashboard.bars, assets),
+    releaseRuntimeDrift
+  };
 }
 function rebuildAnalyzedBars(bars, assets) {
   return (bars || []).map((bar) => {
@@ -35240,6 +35727,72 @@ function lineageFinding(asset, dashboard) {
     suggestedLabels
   };
 }
+function detectSupersededBuildChains(assets) {
+  const families = /* @__PURE__ */ new Map();
+  for (const asset of assets || []) {
+    if (asset.type !== "image" || (asset.lineage?.consumers || []).length > 0) continue;
+    const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX2}git-sha`] || "").toLowerCase();
+    const tags = normalizedTags2(asset.lineage?.tags);
+    const service = tags.some((tag) => /(?:^|[-_:])ocr(?:[-_:]|$)/i.test(tag)) ? "ocr" : tags.some((tag) => /(?:^|[-_:])ai[-_]?worker(?:[-_:]|$)/i.test(tag)) ? "ai-worker" : tags.some((tag) => /(?:^|[-_:])transcode[-_]?worker(?:[-_:]|$)/i.test(tag)) ? "transcode-worker" : tags.some((tag) => /(?:^|[-_:])amazon[-_]?service(?:[-_:]|$)/i.test(tag)) ? "amazon-service" : tags.some((tag) => /(?:^|[-_:])web(?:[-_:]|$)/i.test(tag)) ? "web" : tags.some((tag) => /(?:^|[-_:])(?:api|migrate)(?:[-_:]|$)/i.test(tag)) ? "api" : tags.some((tag) => /(?:^|[-_:])worker(?:[-_:]|$)/i.test(tag)) ? "worker" : "other";
+    const attestedGroup = asset.lineage?.retirement?.group;
+    const protectedSignal = tags.some((tag) => /(?:^|[-_:])(?:recovery|rollback|restore|backup)(?:[-_:]|$)/i.test(tag));
+    if (!attestedGroup && protectedSignal) continue;
+    const semanticSignals = ["audit", "candidate", "preview", "retry", "smoke", "latest", "staging", "production", "prod"].filter((signal) => tags.some((tag) => new RegExp(`(?:^|[-_:])${signal}(?:[-_:]|$)`, "i").test(tag)));
+    if (service === "other" && !String(asset.project || "").includes("/") && semanticSignals.length === 0) continue;
+    const projectFamily = String(asset.project || "unknown").split("/").at(-1).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const family = `${projectFamily}-${service}`;
+    const taggedTimes = tags.flatMap((tag) => {
+      const match = tag.match(/(20\d{6})t(\d{4,6})z/i);
+      if (!match) return [];
+      const time3 = match[2].padEnd(6, "0");
+      return [Date.parse(`${match[1].slice(0, 4)}-${match[1].slice(4, 6)}-${match[1].slice(6, 8)}T${time3.slice(0, 2)}:${time3.slice(2, 4)}:${time3.slice(4, 6)}Z`)];
+    }).filter(Number.isFinite);
+    const effectiveBuildAt = taggedTimes.length ? Math.max(...taggedTimes) : Date.parse(asset.createdAt || 0);
+    const groupKey = attestedGroup ? `attested:${attestedGroup}` : `continuous:${family}`;
+    const key = `${asset.project}\0${service}\0${groupKey}`;
+    families.set(key, [...families.get(key) || [], {
+      id: asset.id,
+      revision: /^[0-9a-f]{40}$/.test(revision) ? revision : "unknown",
+      tags,
+      createdAt: asset.createdAt,
+      effectiveBuildAt: Number.isFinite(effectiveBuildAt) ? new Date(effectiveBuildAt).toISOString() : asset.createdAt,
+      sizeBytes: Number(asset.sizeBytes || 0),
+      classification: asset.classification,
+      semanticSignals
+    }]);
+  }
+  const chains = [];
+  for (const [key, images] of families.entries()) {
+    const [project, service, groupKey] = key.split("\0");
+    const ordered = images.sort((left, right) => Date.parse(right.effectiveBuildAt || 0) - Date.parse(left.effectiveBuildAt || 0) || right.tags.join("\0").localeCompare(left.tags.join("\0")));
+    const attested = groupKey.startsWith("attested:");
+    const group = groupKey.replace(/^(?:attested|continuous):/, "");
+    const windows = attested ? [ordered] : ordered.reduce((result, image) => {
+      const current = result.at(-1);
+      if (!current || Math.abs(Date.parse(current.at(-1).effectiveBuildAt || 0) - Date.parse(image.effectiveBuildAt || 0)) > 72 * 60 * 6e4) result.push([image]);
+      else current.push(image);
+      return result;
+    }, []);
+    for (const window2 of windows) {
+      if (!attested && window2.length < 2) continue;
+      chains.push({
+        project,
+        service,
+        group: attested ? group : `continuous-${group}`,
+        imageCount: window2.length,
+        revisions: [...new Set(window2.map((item) => item.revision))],
+        semanticSignals: [...new Set(window2.flatMap((item) => item.semanticSignals || []))],
+        images: window2,
+        keepLatest: window2[0],
+        supersededCandidates: window2.slice(1),
+        requiresAncestryProof: !attested,
+        decision: "review-only",
+        status: window2.length > 1 ? "superseded-build-chain" : "single-retired-build"
+      });
+    }
+  }
+  return chains.sort((left, right) => right.images.reduce((sum, item) => sum + item.sizeBytes, 0) - left.images.reduce((sum, item) => sum + item.sizeBytes, 0)).slice(0, 20);
+}
 function runDeepScan({ source = "local", project = "all" } = {}) {
   const dashboard = collectDashboard({ source, project });
   if (dashboard.selectedSource !== "local" && !dashboard.remoteSnapshotAvailable) {
@@ -35290,6 +35843,7 @@ function runDeepScan({ source = "local", project = "all" } = {}) {
     newlyReclaimableCount: newlyReclaimable.length,
     expiringCount: findings.filter((item) => item.classification === "expiring").length,
     unresolvedCount: findings.filter((item) => item.missing.length > 0).length,
+    supersededBuildChains: detectSupersededBuildChains(assets),
     findings: findings.filter((item) => item.classification === "expiring" || item.classification === "reclaimable" || item.missing.length > 0).sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 80)
   };
   return {
@@ -35303,13 +35857,17 @@ function runDeepScan({ source = "local", project = "all" } = {}) {
     }
   };
 }
-function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"] } = {}) {
+function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"], assetIds } = {}) {
   const dashboard = collectDashboard({ source, project });
   const selectedSource = dashboard.selectedSource || source;
+  if (dashboard.releaseRuntimeDrift?.cleanupBlocked) throw new Error("Cleanup is blocked by an unacknowledged release/runtime image revision drift.");
+  const requestedIds = Array.isArray(assetIds) && assetIds.length ? new Set(assetIds.map(String)) : null;
+  if (dashboard.selectedProject === "all" && !requestedIds) throw new Error("Host-wide cleanup preview requires exact assetIds; broad all-project cleanup is not allowed.");
   if (selectedSource !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${selectedSource} \u5FEB\u7167\u4E0D\u53EF\u7528`);
   const allowlist = dashboard.assets.filter((asset) => {
     if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
-    if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
+    if (requestedIds && !requestedIds.has(String(asset.id))) return false;
+    if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX2}disposable`] === "true";
     return selectedSource === "github" ? ["artifact", "actions_cache"].includes(asset.type) : ["image", "volume", "cache"].includes(asset.type);
   }).map((asset) => ({
     type: asset.type,
@@ -35318,8 +35876,22 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
     project: asset.project,
     sizeBytes: asset.sizeBytes,
     reason: asset.reason,
+    recoverySource: labelValue(asset.labels || {}, "recovery-source") || asset.lineage?.source || asset.lineage?.remote,
+    tags: asset.type === "image" ? normalizedTags2(asset.lineage?.tags) : void 0,
+    revision: asset.type === "image" ? asset.lineage?.revision : void 0,
+    retirementEvidence: asset.lineage?.retirement ? {
+      reportSha256: asset.lineage.retirement.reportSha256,
+      group: asset.lineage.retirement.group,
+      approvedTags: normalizedTags2(asset.lineage.retirement.approvedTags),
+      revision: asset.lineage.retirement.revision
+    } : void 0,
     remoteKind: asset.remoteKind
   }));
+  if (requestedIds) {
+    const selectedIds = new Set(allowlist.map((asset) => String(asset.id)));
+    const missingIds = [...requestedIds].filter((id) => !selectedIds.has(id));
+    if (missingIds.length) throw new Error(`Exact cleanup scope contains ${missingIds.length} image(s) that are no longer safely reclaimable.`);
+  }
   if (selectedSource === "local" && types.includes("cache")) {
     const cache = dashboard.bars.find((item) => item.type === "cache");
     if (Number(cache?.reclaimableBytes || 0) > 0) {
@@ -35333,7 +35905,7 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
       });
     }
   }
-  const token = randomUUID2();
+  const token = randomUUID3();
   const preview = {
     token,
     source: selectedSource,
@@ -35343,19 +35915,20 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
     expiresAt: new Date(Date.now() + 10 * 6e4).toISOString(),
     allowlist,
     totalBytes: allowlist.reduce((total, asset) => total + Number(asset.sizeBytes || 0), 0),
-    protectedCount: dashboard.assets.filter((asset) => asset.classification === "protected").length
+    protectedCount: dashboard.assets.filter((asset) => asset.classification === "protected").length,
+    releaseRuntimeDrift: dashboard.releaseRuntimeDrift
   };
   previewStore.set(token, preview);
   return preview;
 }
 function appendCleanupEvent(event, details, environment = "local") {
-  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join2(stateRoot(), "events.jsonl");
   const item = {
     schemaVersion: 1,
-    eventId: randomUUID2(),
+    eventId: randomUUID3(),
     occurredAt: (/* @__PURE__ */ new Date()).toISOString(),
     event,
-    host: hostname3(),
+    host: hostname4(),
     project: "runtime-asset-tracker",
     environment,
     release: "dashboard",
@@ -35363,9 +35936,22 @@ function appendCleanupEvent(event, details, environment = "local") {
     owner: "local-user",
     details
   };
-  mkdirSync(dirname(ledger), { recursive: true });
-  appendFileSync(ledger, `${JSON.stringify(item)}
+  mkdirSync2(dirname2(ledger), { recursive: true });
+  appendFileSync2(ledger, `${JSON.stringify(item)}
 `, { encoding: "utf8", mode: 384 });
+}
+function localCleanupArgs(asset) {
+  if (asset.type === "container") return ["container", "rm", asset.id];
+  if (asset.type === "image") {
+    const tags = [...new Set((asset.lineage?.tags || []).filter((tag) => tag && !tag.startsWith("<none>")))];
+    return ["image", "rm", ...tags.length > 0 ? tags : [asset.id]];
+  }
+  if (asset.type === "volume") return ["volume", "rm", asset.id];
+  if (asset.type === "cache" && asset.id === "docker-build-cache") return ["builder", "prune", "--all", "--force"];
+  return null;
+}
+function localCleanupTimeoutMs(asset) {
+  return asset?.type === "cache" && asset?.id === "docker-build-cache" ? 15 * 6e4 : 3e4;
 }
 function executeCleanup({ token, confirmed = false }) {
   const preview = previewStore.get(token);
@@ -35409,10 +35995,24 @@ function executeCleanup({ token, confirmed = false }) {
       results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
       continue;
     }
-    const args = asset.type === "container" ? ["container", "rm", asset.id] : asset.type === "image" ? ["image", "rm", asset.id] : asset.type === "volume" ? ["volume", "rm", asset.id] : asset.type === "cache" && asset.id === "docker-build-cache" ? ["builder", "prune", "--all", "--force"] : null;
+    const args = localCleanupArgs(asset);
     if (!args) continue;
-    const output = run("docker", args, { timeout: 3e4 });
-    results.push({ ...requested, sizeBytes: asset.sizeBytes, status: output ? "removed" : "failed", reclaimedBytes: output ? Number(asset.sizeBytes || 0) : 0 });
+    if (asset.type === "image" && args.length > 3) {
+      const currentTags = args.slice(2);
+      const tagDrift = currentTags.some((tag) => run("docker", ["image", "inspect", tag, "--format", "{{.Id}}"], { timeout: 1e4 }) !== asset.id);
+      if (tagDrift) {
+        results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u53D1\u73B0\u955C\u50CF tag \u4E0E\u5DF2\u6279\u51C6 image ID \u4E0D\u518D\u4E00\u81F4" });
+        continue;
+      }
+    }
+    const output = run("docker", args, { timeout: localCleanupTimeoutMs(asset) });
+    results.push({
+      ...requested,
+      sizeBytes: asset.sizeBytes,
+      removedReferences: asset.type === "image" ? args.slice(2) : void 0,
+      status: output ? "removed" : "failed",
+      reclaimedBytes: output ? Number(asset.sizeBytes || 0) : 0
+    });
   }
   previewStore.delete(token);
   dashboardCache.clear();
@@ -35421,9 +36021,9 @@ function executeCleanup({ token, confirmed = false }) {
 }
 
 // mcp/server.mjs
-var moduleDirectory = dirname2(fileURLToPath(import.meta.url));
+var moduleDirectory = dirname3(fileURLToPath(import.meta.url));
 var DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
-var dashboardHtml = readFileSync2(join2(moduleDirectory, "dashboard.html"), "utf8");
+var dashboardHtml = readFileSync3(join3(moduleDirectory, "dashboard.html"), "utf8");
 function toolResult(structuredContent, text) {
   return {
     structuredContent,
@@ -35466,7 +36066,8 @@ function createRuntimeAssetServer() {
     inputSchema: {
       source: external_exports.enum(["local", "production", "staging", "github"]).optional(),
       project: external_exports.string().optional(),
-      types: external_exports.array(external_exports.enum(["container", "image", "volume", "cache", "pull_request", "artifact", "actions_cache", "workflow_run"])).optional()
+      types: external_exports.array(external_exports.enum(["container", "image", "volume", "cache", "pull_request", "artifact", "actions_cache", "workflow_run"])).optional(),
+      assetIds: external_exports.array(external_exports.string().regex(/^sha256:[0-9a-f]{64}$/i)).max(160).optional()
     },
     outputSchema: { preview: external_exports.record(external_exports.string(), external_exports.unknown()) },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -35474,6 +36075,23 @@ function createRuntimeAssetServer() {
   }, async (input) => {
     const preview = createCleanupPreview(input);
     return toolResult({ preview }, `Cleanup preview contains ${preview.allowlist.length} explicitly disposable assets.`);
+  });
+  K3(server, "import_retirement_reconciliation", {
+    title: "Import exact retirement reconciliation",
+    description: "Validate a machine-readable reconciliation report and append exact remote image retirement/protection attestations. This never deletes images.",
+    inputSchema: {
+      reportPath: external_exports.string().min(3).max(1024),
+      source: external_exports.enum(["production", "staging"]),
+      project: external_exports.string().min(3).max(128),
+      groups: external_exports.array(external_exports.string().min(1).max(128)).min(1).max(32),
+      owner: external_exports.string().min(1).max(128).optional()
+    },
+    outputSchema: { reconciliation: external_exports.record(external_exports.string(), external_exports.unknown()) },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } }
+  }, async (input) => {
+    const reconciliation = importReconciliation(input);
+    return toolResult({ reconciliation }, `Imported ${reconciliation.retirementEventsAdded} exact image retirement attestations and ${reconciliation.protectionEventsAdded} protection bindings.`);
   });
   K3(server, "deep_scan_runtime_lineage", {
     title: "Deep scan runtime asset lineage",
@@ -35555,6 +36173,10 @@ async function startHttp() {
       }
       if (request.method === "POST" && url2.pathname === "/api/cleanup-preview") {
         sendJson(response, 200, { preview: createCleanupPreview(await readBody(request)) });
+        return;
+      }
+      if (request.method === "POST" && url2.pathname === "/api/reconciliation-import") {
+        sendJson(response, 200, { reconciliation: importReconciliation(await readBody(request)) });
         return;
       }
       if (request.method === "POST" && url2.pathname === "/api/deep-scan") {

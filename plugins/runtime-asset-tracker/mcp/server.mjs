@@ -7,7 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
-import { collectDashboard, createCleanupPreview, executeCleanup, runDeepScan, saveSchedule } from "./inventory.mjs";
+import { collectDashboard, createCleanupPreview, executeCleanup, importReconciliation, runDeepScan, saveSchedule } from "./inventory.mjs";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
@@ -60,6 +60,7 @@ export function createRuntimeAssetServer() {
       source: z.enum(["local", "production", "staging", "github"]).optional(),
       project: z.string().optional(),
       types: z.array(z.enum(["container", "image", "volume", "cache", "pull_request", "artifact", "actions_cache", "workflow_run"])).optional(),
+      assetIds: z.array(z.string().regex(/^sha256:[0-9a-f]{64}$/i)).max(160).optional(),
     },
     outputSchema: { preview: z.record(z.string(), z.unknown()) },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -67,6 +68,24 @@ export function createRuntimeAssetServer() {
   }, async (input) => {
     const preview = createCleanupPreview(input);
     return toolResult({ preview }, `Cleanup preview contains ${preview.allowlist.length} explicitly disposable assets.`);
+  });
+
+  registerAppTool(server, "import_retirement_reconciliation", {
+    title: "Import exact retirement reconciliation",
+    description: "Validate a machine-readable reconciliation report and append exact remote image retirement/protection attestations. This never deletes images.",
+    inputSchema: {
+      reportPath: z.string().min(3).max(1024),
+      source: z.enum(["production", "staging"]),
+      project: z.string().min(3).max(128),
+      groups: z.array(z.string().min(1).max(128)).min(1).max(32),
+      owner: z.string().min(1).max(128).optional(),
+    },
+    outputSchema: { reconciliation: z.record(z.string(), z.unknown()) },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } },
+  }, async (input) => {
+    const reconciliation = importReconciliation(input);
+    return toolResult({ reconciliation }, `Imported ${reconciliation.retirementEventsAdded} exact image retirement attestations and ${reconciliation.protectionEventsAdded} protection bindings.`);
   });
 
   registerAppTool(server, "deep_scan_runtime_lineage", {
@@ -155,6 +174,10 @@ async function startHttp() {
       }
       if (request.method === "POST" && url.pathname === "/api/cleanup-preview") {
         sendJson(response, 200, { preview: createCleanupPreview(await readBody(request)) });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/reconciliation-import") {
+        sendJson(response, 200, { reconciliation: importReconciliation(await readBody(request)) });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/deep-scan") {

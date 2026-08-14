@@ -28,9 +28,14 @@ For local standalone preview, run `node dist/server.mjs --http` from the plugin 
 
 Before cleanup:
 
-1. Call `preview_cleanup` to create the exact expiring allowlist.
-2. Show protected and excluded assets alongside the candidate total.
-3. Call `execute_cleanup` only after the user confirms that exact preview. The server must re-read and revalidate remote candidates before mutation.
+1. When historical remote images cannot carry new OCI labels, call `import_retirement_reconciliation` with an absolute machine-readable report path and exact high-confidence groups. The import appends retirement and protection attestations; it never deletes images.
+2. Call `preview_cleanup` to create the exact expiring allowlist. Use `assetIds` when the authorized scope is an exact subset.
+3. Show protected and excluded assets, exact image IDs, every tag, Git revision, recovery evidence, release/runtime drift status, and Docker unique bytes alongside the candidate total.
+4. Call `execute_cleanup` only after the user confirms that exact preview. The server must re-read and revalidate remote candidates before mutation.
+5. Multi-tag images are one atomic unit: revalidate that every approved tag still resolves to the approved image ID, remove every exact tag without `--force`, and fail if the image remains.
+6. Re-scan after cleanup and report missing active containers, images that survived deletion, and the actual free-space delta.
+
+A reconciliation import must fail closed when the project, environment, instance, image ID, tag set, Git revision, group confidence, byte totals, or current/rollback protection set is inconsistent. A release-directory revision that differs from the running production image blocks cleanup unless the same reconciliation report explicitly protects both the running image and the release-revision rollback image.
 
 The schedule editor persists report-only inventory schedules. It must not silently enable unattended deletion.
 
