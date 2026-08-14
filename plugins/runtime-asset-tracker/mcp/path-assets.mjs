@@ -219,10 +219,21 @@ export function discoverWorktreeAssets(config = {}, projects = [], events = []) 
   }
   const roots = candidateRoots(config, projects);
   const candidates = new Map([...registered.keys()].map((key) => [key, registered.get(key).fields.worktree]));
+  const codexWorktreeRoot = resolve(process.env.CODEX_HOME || join(homedir(), ".codex"), "worktrees");
   for (const root of roots) {
     for (const entry of safeEntries(root)) {
       if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
       const path = resolve(root, entry.name);
+      if (keyPath(root) === keyPath(codexWorktreeRoot)) {
+        const bucketProjects = safeEntries(path).filter((child) => child.isDirectory() && !child.isSymbolicLink());
+        if (bucketProjects.length) {
+          for (const child of bucketProjects) {
+            const projectPath = resolve(path, child.name);
+            candidates.set(keyPath(projectPath), projectPath);
+          }
+          continue;
+        }
+      }
       if (probableSibling(path, projects, [...(config.worktreeRoots || []), ...(config.residualRoots || [])].map((item) => resolve(item)))) candidates.set(keyPath(path), path);
     }
   }

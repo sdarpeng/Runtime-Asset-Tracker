@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   PATH_RECONCILIATION_SCHEMA,
+  discoverWorktreeAssets,
   executePathAssetCleanup,
   importPathRetirementReconciliation,
   pathAssetId,
@@ -17,6 +18,25 @@ function temporaryDirectory(name) {
 }
 
 describe("worktree and host artifact lifecycle", () => {
+  it("expands Codex hash buckets into project roots without counting the bucket twice", () => {
+    const sandbox = temporaryDirectory("tracker-codex-bucket");
+    const codexHome = join(sandbox, ".codex");
+    const project = join(codexHome, "worktrees", "a1b2", "ExampleProject");
+    mkdirSync(project, { recursive: true });
+    writeFileSync(join(project, "tracked.txt"), "bytes");
+    const priorCodex = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = codexHome;
+    try {
+      const assets = discoverWorktreeAssets({}, [], []);
+      const roots = assets.filter((asset) => asset.type === "worktree_residual").map((asset) => asset.path);
+      assert.deepEqual(roots.map((item) => item.toLowerCase()), [project.toLowerCase()]);
+      assert.equal(roots.map((item) => item.toLowerCase()).includes(join(codexHome, "worktrees", "a1b2").toLowerCase()), false);
+    } finally {
+      if (priorCodex === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = priorCodex;
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
   it("measures real bytes, identifies generated assets, and produces a stable fingerprint", () => {
     const root = temporaryDirectory("tracker-scan");
     try {
