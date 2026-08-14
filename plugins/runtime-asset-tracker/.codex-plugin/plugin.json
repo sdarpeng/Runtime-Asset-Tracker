@@ -1,6 +1,6 @@
 {
   "name": "runtime-asset-tracker",
-  "version": "0.3.0+codex.20260814-worktree-lifecycle",
+  "version": "0.3.1+codex.20260814-codex-bucket-dedup",
   "description": "Track Docker assets, Git worktrees, residual directories, and host artifacts with portable labels and an append-only JSONL ledger.",
   "author": {
     "name": "SparklingPlay Engineering"

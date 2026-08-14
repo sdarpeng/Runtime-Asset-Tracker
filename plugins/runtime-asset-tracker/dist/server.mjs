@@ -35214,10 +35214,21 @@ function discoverWorktreeAssets(config2 = {}, projects = [], events = []) {
   }
   const roots = candidateRoots(config2, projects);
   const candidates = new Map([...registered.keys()].map((key) => [key, registered.get(key).fields.worktree]));
+  const codexWorktreeRoot = resolve2(process.env.CODEX_HOME || join2(homedir2(), ".codex"), "worktrees");
   for (const root of roots) {
     for (const entry of safeEntries(root)) {
       if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
       const path = resolve2(root, entry.name);
+      if (keyPath(root) === keyPath(codexWorktreeRoot)) {
+        const bucketProjects = safeEntries(path).filter((child) => child.isDirectory() && !child.isSymbolicLink());
+        if (bucketProjects.length) {
+          for (const child of bucketProjects) {
+            const projectPath = resolve2(path, child.name);
+            candidates.set(keyPath(projectPath), projectPath);
+          }
+          continue;
+        }
+      }
       if (probableSibling(path, projects, [...config2.worktreeRoots || [], ...config2.residualRoots || []].map((item) => resolve2(item)))) candidates.set(keyPath(path), path);
     }
   }
@@ -36430,7 +36441,7 @@ function toolResult(structuredContent, text) {
 }
 function createRuntimeAssetServer() {
   const server = new McpServer(
-    { name: "runtime-asset-tracker", version: "0.3.0" },
+    { name: "runtime-asset-tracker", version: "0.3.1" },
     { instructions: "Use open_runtime_dashboard for a visual inventory. Always call preview_cleanup before execute_cleanup. Never infer that an unlabeled volume is disposable." }
   );
   N3(server, "Runtime Asset Dashboard", DASHBOARD_URI, {

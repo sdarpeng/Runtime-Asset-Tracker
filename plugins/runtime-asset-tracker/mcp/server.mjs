@@ -22,7 +22,7 @@ function toolResult(structuredContent, text) {
 
 export function createRuntimeAssetServer() {
   const server = new McpServer(
-    { name: "runtime-asset-tracker", version: "0.3.0" },
+    { name: "runtime-asset-tracker", version: "0.3.1" },
     { instructions: "Use open_runtime_dashboard for a visual inventory. Always call preview_cleanup before execute_cleanup. Never infer that an unlabeled volume is disposable." },
   );
 
