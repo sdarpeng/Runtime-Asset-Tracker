@@ -69,6 +69,21 @@ describe("worktree and host artifact lifecycle", () => {
     }
   });
 
+  it("accounts an artifact directory once and does not rediscover nested archives", () => {
+    const root = temporaryDirectory("tracker-artifact-dedup");
+    try {
+      const execution = join(root, ".codex-execution-final", "stage");
+      mkdirSync(execution, { recursive: true });
+      writeFileSync(join(execution, "candidate.tar"), Buffer.alloc(2048));
+      const scan = scanPathUsage(root);
+      assert.equal(scan.artifacts.length, 1);
+      assert.equal(scan.artifacts[0].path, join(root, ".codex-execution-final"));
+      assert.equal(scan.artifacts[0].sizeBytes, 2048);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("does not follow directory junctions while scanning or deleting a residual", () => {
     const sandbox = temporaryDirectory("tracker-no-follow");
     const outside = join(sandbox, "outside");
