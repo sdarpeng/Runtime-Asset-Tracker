@@ -1,7 +1,7 @@
 {
   "name": "runtime-asset-tracker",
-  "version": "0.2.0+codex.20260814-retirement-reconciliation",
-  "description": "Track Docker images, containers, volumes, Compose operations, and deployments with portable labels and an append-only JSONL ledger.",
+  "version": "0.3.0+codex.20260814-worktree-lifecycle",
+  "description": "Track Docker assets, Git worktrees, residual directories, and host artifacts with portable labels and an append-only JSONL ledger.",
   "author": {
     "name": "SparklingPlay Engineering"
   },
@@ -33,7 +33,10 @@
       "Release/runtime revision drift guard",
       "Atomic multi-tag image retirement",
       "Superseded build-chain findings",
-      "Post-cleanup runtime and disk verification"
+      "Post-cleanup runtime and disk verification",
+      "Real-byte Git worktree and residual inventory",
+      "No-follow host artifact scanning",
+      "Fingerprint-bound exact path retirement"
     ],
     "brandColor": "#20B8EC",
     "screenshots": [

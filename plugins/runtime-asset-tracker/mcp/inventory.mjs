@@ -5,6 +5,7 @@ import { dirname, join, parse, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { collectRemoteDashboard, executeRemoteCleanup, expiryClassification, resolveExpiry } from "./remote.mjs";
 import { importRetirementReconciliation, retirementAttestations } from "./reconciliation.mjs";
+import { discoverWorktreeAssets, executePathAssetCleanup, importPathRetirementReconciliation } from "./path-assets.mjs";
 
 const RUNTIME_PREFIX = "com.codex.runtime.";
 const previewStore = new Map();
@@ -393,7 +394,7 @@ export function canonicalProjectId(value, projects) {
   return prefixed?.project.id || value || "unknown";
 }
 
-function worktreeInventory(config, projects) {
+function legacyWorktreeInventory(config, projects) {
   const roots = [...new Set([
     process.env.RUNTIME_ASSET_GIT_ROOT,
     ...(config.gitRoots || []),
@@ -436,6 +437,10 @@ function worktreeInventory(config, projects) {
       reason: dirty ? "包含未提交内容" : fields.detached ? "干净 detached worktree，可审查" : "干净分支 worktree，未证明可删除",
     };
   });
+}
+
+function worktreeInventory(config, projects) {
+  return discoverWorktreeAssets(config, projects, readRawLedgerEvents());
 }
 
 function readLedger(limit = 24) {
@@ -528,6 +533,12 @@ export function importReconciliation(input) {
   return result;
 }
 
+export function importPathReconciliation(input) {
+  const result = importPathRetirementReconciliation(input);
+  dashboardCache.clear();
+  return result;
+}
+
 function loadConfig() {
   const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join(stateRoot(), "dashboard-config.json");
   if (!existsSync(path)) return { sources: [] };
@@ -556,9 +567,10 @@ export function saveSchedule(schedule) {
 
 function aggregate(type, assets, fallback = {}) {
   const matching = assets.filter((asset) => asset.type === type);
-  const sum = (kind) => matching.filter((asset) => asset.classification === kind).reduce((total, asset) => total + Number(asset.sizeBytes || 0), 0);
-  const measured = matching.reduce((value, asset) => value + Number(asset.sizeBytes || 0), 0);
-  const total = type === "worktree" ? measured : Math.max(measured, Number(fallback.sizeBytes || 0));
+  const bytes = (asset) => Number(asset.accountedBytes ?? asset.sizeBytes ?? 0);
+  const sum = (kind) => matching.filter((asset) => asset.classification === kind).reduce((total, asset) => total + bytes(asset), 0);
+  const measured = matching.reduce((value, asset) => value + bytes(asset), 0);
+  const total = ["worktree", "worktree_residual", "host_artifact"].includes(type) ? measured : Math.max(measured, Number(fallback.sizeBytes || 0));
   const activeBytes = sum("active");
   const protectedBytes = sum("protected");
   const expiringBytes = sum("expiring");
@@ -572,17 +584,17 @@ function aggregate(type, assets, fallback = {}) {
     expiringBytes,
     retainedBytes: Math.max(0, total - activeBytes - protectedBytes - expiringBytes - reclaimableBytes),
     reclaimableBytes,
-    unit: type === "worktree" ? "count" : "bytes",
+    unit: "bytes",
   };
 }
 
-export function collectDashboard({ scope = "project", source = "local", project = "all" } = {}) {
+export function collectDashboard({ scope = "project", source = "local", project = "all", includeAllAssets = false } = {}) {
   const config = loadConfig();
   const projects = registeredProjects(config);
   const selectedProject = resolveProjectId(project, projects, config);
   const sourceConfigs = projectSourceConfigs(config, selectedProject);
   const selectedSource = sourceConfigs.some((item) => item.id === source) ? source : "local";
-  const cacheKey = `${selectedSource}:${selectedProject}`;
+  const cacheKey = `${selectedSource}:${selectedProject}:${includeAllAssets ? "full" : "bounded"}`;
   const cached = dashboardCache.get(cacheKey);
   if (cached && Date.now() - cached.createdAt < 20_000) return { ...cached.value, generatedAt: new Date().toISOString(), cached: true };
   const sources = projectSourceCards(config, projects, selectedProject, true);
@@ -604,6 +616,8 @@ export function collectDashboard({ scope = "project", source = "local", project 
   } catch { /* disk metrics are optional */ }
   const bars = [
     aggregate("worktree", filtered),
+    aggregate("worktree_residual", filtered),
+    aggregate("host_artifact", filtered),
     aggregate("image", filtered),
     aggregate("volume", filtered),
     localBuildCacheBar(docker.summary),
@@ -621,7 +635,7 @@ export function collectDashboard({ scope = "project", source = "local", project 
     sources: projectSourceCards(config, projects, selectedProject, docker.available),
     projects: projects.map((item) => item.id),
     projectOptions: publicProjectOptions(projects),
-    assets: filtered.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
+    assets: filtered.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, includeAllAssets ? undefined : 320),
     events: hostScope ? readLedger() : readLedger().filter((event) => canonicalProjectId(event.project, projects) === selectedProject),
     schedule: config.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" },
   };
@@ -716,7 +730,7 @@ export function applyRemoteRetirementGovernance(dashboard, governance) {
 function rebuildAnalyzedBars(bars, assets) {
   return (bars || []).map((bar) => {
     const matching = assets.filter((asset) => asset.type === bar.type);
-    const measure = (asset) => bar.unit === "count" ? 1 : Number(asset.sizeBytes || 0);
+    const measure = (asset) => bar.unit === "count" ? 1 : Number(asset.accountedBytes ?? asset.sizeBytes ?? 0);
     const sum = (classification) => matching.filter((asset) => asset.classification === classification).reduce((total, asset) => total + measure(asset), 0);
     const activeBytes = sum("active");
     const protectedBytes = sum("protected");
@@ -755,7 +769,7 @@ function lineageFinding(asset, dashboard) {
     matchingEvents.length > 0 && `事件账本：${matchingEvents.length} 条`,
   ].filter(Boolean);
   const missing = [];
-  if (!owner && !["pull_request", "artifact", "actions_cache", "workflow_run", "cache", "worktree"].includes(asset.type)) missing.push("owner");
+  if (!owner && !["pull_request", "artifact", "actions_cache", "workflow_run", "cache", "worktree", "worktree_residual", "host_artifact"].includes(asset.type)) missing.push("owner");
   if (!recoverySource && !["container", "pull_request", "workflow_run"].includes(asset.type)) missing.push("恢复来源");
   if (!["active", "protected", "reclaimable"].includes(asset.classification) && !asset.expiresAt) missing.push("到期时间/TTL");
   if (["image", "volume"].includes(asset.type) && !Array.isArray(lineage.consumers)) missing.push("消费者关系");
@@ -856,7 +870,7 @@ export function detectSupersededBuildChains(assets) {
 }
 
 export function runDeepScan({ source = "local", project = "all" } = {}) {
-  const dashboard = collectDashboard({ source, project });
+  const dashboard = collectDashboard({ source, project, includeAllAssets: true });
   if (dashboard.selectedSource !== "local" && !dashboard.remoteSnapshotAvailable) {
     throw new Error(dashboard.remoteError || `${dashboard.selectedSource} 快照不可用`);
   }
@@ -923,8 +937,8 @@ export function runDeepScan({ source = "local", project = "all" } = {}) {
   };
 }
 
-export function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"], assetIds } = {}) {
-  const dashboard = collectDashboard({ source, project });
+export function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact", "artifact", "actions_cache"], assetIds } = {}) {
+  const dashboard = collectDashboard({ source, project, includeAllAssets: true });
   const selectedSource = dashboard.selectedSource || source;
   if (dashboard.releaseRuntimeDrift?.cleanupBlocked) throw new Error("Cleanup is blocked by an unacknowledged release/runtime image revision drift.");
   const requestedIds = Array.isArray(assetIds) && assetIds.length ? new Set(assetIds.map(String)) : null;
@@ -936,7 +950,7 @@ export function createCleanupPreview({ source = "local", project = "all", types 
     if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
     return selectedSource === "github"
       ? ["artifact", "actions_cache"].includes(asset.type)
-      : ["image", "volume", "cache"].includes(asset.type);
+      : ["image", "volume", "cache", "worktree", "worktree_residual", "host_artifact"].includes(asset.type);
   }).map((asset) => ({
     type: asset.type,
     id: asset.id,
@@ -958,7 +972,7 @@ export function createCleanupPreview({ source = "local", project = "all", types 
   if (requestedIds) {
     const selectedIds = new Set(allowlist.map((asset) => String(asset.id)));
     const missingIds = [...requestedIds].filter((id) => !selectedIds.has(id));
-    if (missingIds.length) throw new Error(`Exact cleanup scope contains ${missingIds.length} image(s) that are no longer safely reclaimable.`);
+    if (missingIds.length) throw new Error(`Exact cleanup scope contains ${missingIds.length} asset(s) that are no longer safely reclaimable.`);
   }
   if (selectedSource === "local" && types.includes("cache")) {
     const cache = dashboard.bars.find((item) => item.type === "cache");
@@ -1053,7 +1067,7 @@ export function executeCleanup({ token, confirmed = false }) {
     return cleanup;
   }
   dashboardCache.clear();
-  const current = collectDashboard({ source: "local", project: preview.project });
+  const current = collectDashboard({ source: "local", project: preview.project, includeAllAssets: true });
   const safeAssets = new Map(current.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
   const currentCache = current.bars.find((item) => item.type === "cache");
   if (Number(currentCache?.reclaimableBytes || 0) > 0) {
@@ -1069,6 +1083,15 @@ export function executeCleanup({ token, confirmed = false }) {
     const asset = safeAssets.get(`${requested.type}:${requested.id}`);
     if (!asset) {
       results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前复核不再满足安全清理条件" });
+      continue;
+    }
+    if (["worktree", "worktree_residual", "host_artifact"].includes(asset.type)) {
+      try {
+        executePathAssetCleanup(asset);
+        results.push({ ...requested, sizeBytes: asset.sizeBytes, status: "removed", reclaimedBytes: Number(asset.sizeBytes || 0) });
+      } catch (error) {
+        results.push({ ...requested, sizeBytes: asset.sizeBytes, status: "failed", reclaimedBytes: 0, reason: error.message });
+      }
       continue;
     }
     const args = localCleanupArgs(asset);

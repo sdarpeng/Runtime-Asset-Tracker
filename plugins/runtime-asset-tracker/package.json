@@ -1,6 +1,6 @@
 {
   "name": "runtime-asset-tracker-plugin",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,11 +10,11 @@
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/ext-apps": "latest",
-    "@modelcontextprotocol/sdk": "latest",
-    "zod": "latest"
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "esbuild": "latest"
+    "esbuild": "0.28.1"
   }
 }

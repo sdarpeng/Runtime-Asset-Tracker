@@ -34,7 +34,9 @@ const classifications = {
 };
 
 const barMeta = {
-  worktree: { label: "Worktrees", caption: "本地工作区与分支", Icon: GitBranch },
+  worktree: { label: "Git Worktrees", caption: "已登记工作树的真实磁盘占用", Icon: GitBranch },
+  worktree_residual: { label: "Worktree Residuals", caption: "未被 Git 登记的疑似残留目录", Icon: GitBranch },
+  host_artifact: { label: "Host Artifacts", caption: "依赖、构建、归档与执行制品", Icon: Package },
   image: { label: "Docker Images", caption: "唯一层占用与容器引用", Icon: Package },
   volume: { label: "Docker Volumes", caption: "真实占用与挂载关系", Icon: Database },
   cache: { label: "Build Cache", caption: "构建缓存", Icon: Stack },
@@ -103,7 +105,7 @@ function createBridge() {
     window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
   });
   const ready = request("ui/initialize", {
-    appInfo: { name: "runtime-asset-dashboard", version: "0.2.0" },
+    appInfo: { name: "runtime-asset-dashboard", version: "0.3.0" },
     appCapabilities: {},
     protocolVersion: "2026-01-26",
   }).then(() => window.parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized", params: {} }, "*"));
@@ -352,7 +354,7 @@ export function App() {
 
   const requestPreview = async () => {
     setLoading(true);
-    try { acceptResult(await callTool("preview_cleanup", { source, project: effectiveProject, types: ["container", "image", "volume", "cache", "artifact", "actions_cache"] })); }
+    try { acceptResult(await callTool("preview_cleanup", { source, project: effectiveProject, types: ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact", "artifact", "actions_cache"] })); }
     catch (error) { setNotice(`预览失败：${error.message || error}`); }
     finally { setLoading(false); }
   };

@@ -18086,7 +18086,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve3.call(this, root, ref);
+      let _sch = resolve4.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -18113,7 +18113,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve3(root, ref) {
+    function resolve4(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -18744,7 +18744,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve3(baseURI, relativeURI, options) {
+    function resolve4(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
       const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
@@ -18755,49 +18755,49 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative, options, skipNormalization) {
+    function resolveComponent(base, relative2, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse4(serialize(base, options), options);
-        relative = parse4(serialize(relative, options), options);
+        relative2 = parse4(serialize(relative2, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative.scheme) {
-        target.scheme = relative.scheme;
-        target.userinfo = relative.userinfo;
-        target.host = relative.host;
-        target.port = relative.port;
-        target.path = removeDotSegments(relative.path || "");
-        target.query = relative.query;
+      if (!options.tolerant && relative2.scheme) {
+        target.scheme = relative2.scheme;
+        target.userinfo = relative2.userinfo;
+        target.host = relative2.host;
+        target.port = relative2.port;
+        target.path = removeDotSegments(relative2.path || "");
+        target.query = relative2.query;
       } else {
-        if (relative.userinfo !== void 0 || relative.host !== void 0 || relative.port !== void 0) {
-          target.userinfo = relative.userinfo;
-          target.host = relative.host;
-          target.port = relative.port;
-          target.path = removeDotSegments(relative.path || "");
-          target.query = relative.query;
+        if (relative2.userinfo !== void 0 || relative2.host !== void 0 || relative2.port !== void 0) {
+          target.userinfo = relative2.userinfo;
+          target.host = relative2.host;
+          target.port = relative2.port;
+          target.path = removeDotSegments(relative2.path || "");
+          target.query = relative2.query;
         } else {
-          if (!relative.path) {
+          if (!relative2.path) {
             target.path = base.path;
-            if (relative.query !== void 0) {
-              target.query = relative.query;
+            if (relative2.query !== void 0) {
+              target.query = relative2.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative.path[0] === "/") {
-              target.path = removeDotSegments(relative.path);
+            if (relative2.path[0] === "/") {
+              target.path = removeDotSegments(relative2.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative.path;
+                target.path = "/" + relative2.path;
               } else if (!base.path) {
-                target.path = relative.path;
+                target.path = relative2.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative2.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative.query;
+            target.query = relative2.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -18805,7 +18805,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative.fragment;
+      target.fragment = relative2.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -19028,7 +19028,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve3,
+      resolve: resolve4,
       resolveComponent,
       equal,
       serialize,
@@ -22123,8 +22123,8 @@ var require_content_type = __commonJS({
 
 // mcp/server.mjs
 import { createServer } from "node:http";
-import { readFileSync as readFileSync3 } from "node:fs";
-import { dirname as dirname3, join as join3 } from "node:path";
+import { readFileSync as readFileSync4 } from "node:fs";
+import { dirname as dirname4, join as join4 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // node_modules/zod/v3/helpers/util.js
@@ -29586,7 +29586,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error51) {
@@ -29603,7 +29603,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       const earlyReject = (error51) => {
         reject(error51);
       };
@@ -29681,7 +29681,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve3(parseResult.data);
+            resolve4(parseResult.data);
           }
         } catch (error51) {
           reject(error51);
@@ -29942,12 +29942,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve3, interval);
+      const timeoutId = setTimeout(resolve4, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -31042,7 +31042,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+      await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -31706,12 +31706,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve3) => {
+    return new Promise((resolve4) => {
       const json3 = serializeMessage(message);
       if (this._stdout.write(json3)) {
-        resolve3();
+        resolve4();
       } else {
-        this._stdout.once("drain", resolve3);
+        this._stdout.once("drain", resolve4);
       }
     });
   }
@@ -32000,7 +32000,7 @@ var readBodyDirect = (request) => {
     request[bodyBufferKey] = buffered;
     return Promise.resolve(buffered);
   }
-  const promise2 = new Promise((resolve3, reject) => {
+  const promise2 = new Promise((resolve4, reject) => {
     const chunks2 = [];
     let settled = false;
     const finish = (callback) => {
@@ -32018,7 +32018,7 @@ var readBodyDirect = (request) => {
         else if (recovered === void 0) reject(error51 ?? normalizeAbortError(request, incoming));
         else {
           request[bodyBufferKey] = recovered;
-          resolve3(recovered);
+          resolve4(recovered);
         }
       });
       return true;
@@ -32030,7 +32030,7 @@ var readBodyDirect = (request) => {
       finish(() => {
         const buffer = chunks2.length === 1 ? chunks2[0] : Buffer.concat(chunks2);
         request[bodyBufferKey] = buffer;
-        resolve3(buffer);
+        resolve4(buffer);
       });
     };
     const onError = (error51) => {
@@ -32552,7 +32552,7 @@ var responseViaResponseObject = async (res, outgoing, options = {}) => {
         });
         if (!chunk) {
           if (i === 1) {
-            await new Promise((resolve3) => setTimeout(resolve3));
+            await new Promise((resolve4) => setTimeout(resolve4));
             maxReadCount = 3;
             continue;
           }
@@ -33232,9 +33232,9 @@ data:
       const initRequest = messages.find((m2) => isInitializeRequest(m2));
       const clientProtocolVersion = initRequest ? initRequest.params.protocolVersion : req.headers.get("mcp-protocol-version") ?? DEFAULT_NEGOTIATED_PROTOCOL_VERSION;
       if (this._enableJsonResponse) {
-        return new Promise((resolve3) => {
+        return new Promise((resolve4) => {
           this._streamMapping.set(streamId, {
-            resolveJson: resolve3,
+            resolveJson: resolve4,
             cleanup: () => {
               this._streamMapping.delete(streamId);
             }
@@ -33718,11 +33718,11 @@ function N3(Z, $, J, X, V) {
 }
 
 // mcp/inventory.mjs
-import { execFileSync as execFileSync2 } from "node:child_process";
-import { appendFileSync as appendFileSync2, closeSync, existsSync as existsSync2, mkdirSync as mkdirSync2, openSync, readFileSync as readFileSync2, readSync, statfsSync, statSync, writeFileSync } from "node:fs";
-import { homedir as homedir2, hostname as hostname4, platform as platform2 } from "node:os";
-import { dirname as dirname2, join as join2, parse as parse3, resolve as resolve2 } from "node:path";
-import { randomUUID as randomUUID3 } from "node:crypto";
+import { execFileSync as execFileSync3 } from "node:child_process";
+import { appendFileSync as appendFileSync3, closeSync, existsSync as existsSync3, mkdirSync as mkdirSync3, openSync, readFileSync as readFileSync3, readSync, statfsSync, statSync, writeFileSync } from "node:fs";
+import { homedir as homedir3, hostname as hostname5, platform as platform3 } from "node:os";
+import { dirname as dirname3, join as join3, parse as parse3, resolve as resolve3 } from "node:path";
+import { randomUUID as randomUUID4 } from "node:crypto";
 
 // mcp/remote.mjs
 import { execFileSync } from "node:child_process";
@@ -34998,18 +34998,440 @@ function importRetirementReconciliation({ reportPath, source, project, groups, o
   };
 }
 
+// mcp/path-assets.mjs
+import { execFileSync as execFileSync2 } from "node:child_process";
+import { createHash as createHash3, randomUUID as randomUUID3 } from "node:crypto";
+import { appendFileSync as appendFileSync2, chmodSync, existsSync as existsSync2, lstatSync, mkdirSync as mkdirSync2, readFileSync as readFileSync2, readdirSync, rmdirSync, unlinkSync } from "node:fs";
+import { homedir as homedir2, hostname as hostname4, platform as platform2 } from "node:os";
+import { basename, dirname as dirname2, extname, isAbsolute as isAbsolute2, join as join2, relative, resolve as resolve2, sep } from "node:path";
+var PATH_RECONCILIATION_SCHEMA = "sparkling.runtime-path-retirement-reconciliation/v1";
+var PATH_TYPES = /* @__PURE__ */ new Set(["worktree", "worktree_residual", "host_artifact"]);
+var FINGERPRINT = /^sha256:[0-9a-f]{64}$/i;
+var ARCHIVE = /(?:\.tar\.gz|\.tar|\.tgz|\.zip|\.gz|\.7z|\.bundle)$/i;
+var ARTIFACT_DIR = /^(?:node_modules|dist|build|coverage|smoke-artifacts|test-results|playwright-report|\.next|\.nuxt|\.turbo|\.cache|\.pytest_cache|__pycache__|\.prod-artifacts|\.codex-(?:execution|artifacts?|deploy|release).*)$/i;
+var scanCache = /* @__PURE__ */ new Map();
+function defaultStateRoot2() {
+  if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve2(process.env.RUNTIME_ASSET_STATE_DIR);
+  if (platform2() === "win32") return join2(process.env.LOCALAPPDATA || join2(homedir2(), "AppData", "Local"), "RuntimeAssetTracker");
+  return join2(process.env.XDG_STATE_HOME || join2(homedir2(), ".local", "state"), "runtime-asset-tracker");
+}
+function runGit(args, cwd, timeout = 2e4) {
+  try {
+    return execFileSync2("git", args, { cwd, encoding: "utf8", windowsHide: true, timeout, maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }).trim();
+  } catch {
+    return "";
+  }
+}
+function keyPath(value) {
+  const path = resolve2(value);
+  return platform2() === "win32" ? path.toLowerCase() : path;
+}
+function pathAssetId(type, path) {
+  const digest = createHash3("sha256").update(`${type}\0${keyPath(path)}`).digest("hex");
+  return `path-sha256:${digest}`;
+}
+function within(path, root) {
+  const child = resolve2(path);
+  const parent = resolve2(root);
+  const rel = relative(parent, child);
+  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute2(rel);
+}
+function safeEntries(path) {
+  try {
+    return readdirSync(path, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    return [];
+  }
+}
+function metadataToken(path, stats, kind) {
+  return `${keyPath(path).replaceAll("\\", "/")}\0${kind}\0${Number(stats.size || 0)}\0${Math.trunc(Number(stats.mtimeMs || 0))}
+`;
+}
+function scanPathUsage(rootPath, { maxEntries = 4e5, largeFileBytes = 100 * 1024 * 1024 } = {}) {
+  const root = resolve2(rootPath);
+  const artifacts = [];
+  const reparsePoints = [];
+  let entryCount = 0;
+  let totalBytes = 0;
+  let truncated = false;
+  function scan(path, rel, captureArtifact = true) {
+    if (entryCount >= maxEntries) {
+      truncated = true;
+      return { bytes: 0, count: 0, fingerprint: void 0 };
+    }
+    let stats;
+    try {
+      stats = lstatSync(path);
+    } catch {
+      return { bytes: 0, count: 0, fingerprint: void 0 };
+    }
+    entryCount += 1;
+    const isReparse = stats.isSymbolicLink();
+    const kind = isReparse ? "reparse" : stats.isDirectory() ? "directory" : stats.isFile() ? "file" : "other";
+    const hash2 = createHash3("sha256").update(metadataToken(path, stats, kind));
+    if (isReparse) {
+      reparsePoints.push(path);
+      return { bytes: Number(stats.size || 0), count: 1, fingerprint: `sha256:${hash2.digest("hex")}` };
+    }
+    if (!stats.isDirectory()) {
+      const bytes2 = Number(stats.size || 0);
+      totalBytes += bytes2;
+      if (captureArtifact && stats.isFile() && (bytes2 >= largeFileBytes || ARCHIVE.test(path))) {
+        const artifactHash = hash2.copy().digest("hex");
+        artifacts.push({ path, category: ARCHIVE.test(path) ? "archive" : "large-file", sizeBytes: bytes2, entryCount: 1, fingerprint: `sha256:${artifactHash}`, truncated: false });
+      }
+      return { bytes: bytes2, count: 1, fingerprint: `sha256:${hash2.digest("hex")}` };
+    }
+    const entries = safeEntries(path);
+    const isArtifactRoot = captureArtifact && (ARTIFACT_DIR.test(basename(path)) || entries.some((entry) => /^part-\d+(?:\.|$)/i.test(entry.name)));
+    let bytes = 0;
+    let count = 1;
+    for (const entry of entries) {
+      if (entryCount >= maxEntries) {
+        truncated = true;
+        break;
+      }
+      const child = join2(path, entry.name);
+      const result2 = scan(child, rel ? join2(rel, entry.name) : entry.name, !isArtifactRoot);
+      bytes += result2.bytes;
+      count += result2.count;
+      hash2.update(`${entry.name}\0${result2.bytes}\0${result2.count}\0${result2.fingerprint || "truncated"}
+`);
+    }
+    const fingerprint = `sha256:${hash2.digest("hex")}`;
+    if (isArtifactRoot) {
+      artifacts.push({
+        path,
+        category: ARTIFACT_DIR.test(basename(path)) ? "generated-directory" : "archive-parts",
+        sizeBytes: bytes,
+        entryCount: count,
+        fingerprint,
+        truncated
+      });
+    }
+    return { bytes, count, fingerprint };
+  }
+  if (!existsSync2(root)) return { path: root, exists: false, sizeBytes: 0, entryCount: 0, fingerprint: void 0, artifacts: [], reparsePoints: [], truncated: false };
+  const result = scan(root, "", true);
+  return {
+    path: root,
+    exists: true,
+    sizeBytes: result.bytes,
+    entryCount,
+    fingerprint: result.fingerprint,
+    artifacts: artifacts.sort((a, b) => b.sizeBytes - a.sizeBytes),
+    reparsePoints,
+    truncated
+  };
+}
+function cachedPathUsage(path, options = {}) {
+  const ttl = Math.max(0, Number(options.cacheTtlMs ?? 5 * 6e4));
+  const key = `${keyPath(path)}\0${Number(options.maxEntries || 4e5)}\0${Number(options.largeFileBytes || 100 * 1024 * 1024)}`;
+  const cached2 = scanCache.get(key);
+  if (cached2 && Date.now() - cached2.createdAt < ttl) return cached2.value;
+  const value = scanPathUsage(path, options);
+  scanCache.set(key, { createdAt: Date.now(), value });
+  return value;
+}
+function parseWorktreeBlocks(output) {
+  return String(output || "").split(/\r?\n\r?\n/).filter(Boolean).flatMap((block) => {
+    const fields = Object.fromEntries(block.split(/\r?\n/).map((line) => {
+      const space = line.indexOf(" ");
+      return space > 0 ? [line.slice(0, space), line.slice(space + 1)] : [line, true];
+    }));
+    return fields.worktree ? [{ ...fields, worktree: resolve2(fields.worktree) }] : [];
+  });
+}
+function readPathAttestations(events) {
+  const attestations = /* @__PURE__ */ new Map();
+  for (const event of events || []) {
+    const type = String(event?.asset?.type || "");
+    const id = String(event?.asset?.id || "");
+    if (!PATH_TYPES.has(type) || !id.startsWith("path-sha256:")) continue;
+    const key = `${type}:${id}`;
+    if (event.event === "asset.retirement.revoked") {
+      attestations.delete(key);
+      continue;
+    }
+    const details = event.details || {};
+    if (event.event !== "asset.retired" || event.status !== "retired" || String(details.disposable) !== "true" || String(details.retention) !== "retired") continue;
+    if (!FINGERPRINT.test(String(details.contentFingerprint || "")) || !isAbsolute2(String(details.path || "")) || !String(details.recoverySource || "").trim()) continue;
+    attestations.set(key, {
+      path: resolve2(details.path),
+      expectedBytes: Number(details.expectedBytes),
+      fingerprint: String(details.contentFingerprint).toLowerCase(),
+      recoverySource: String(details.recoverySource),
+      reportSha256: String(details.reportSha256 || ""),
+      owner: String(event.owner || "")
+    });
+  }
+  return attestations;
+}
+function applyAttestation(asset, attestations) {
+  const attestation = attestations.get(`${asset.type}:${asset.id}`);
+  if (!attestation) return asset;
+  const exact = keyPath(attestation.path) === keyPath(asset.path) && attestation.expectedBytes === Number(asset.sizeBytes) && attestation.fingerprint === String(asset.lineage?.contentFingerprint || "").toLowerCase() && !asset.lineage?.scanTruncated && !asset.lineage?.primary && !asset.lineage?.dirty && !asset.lineage?.lifecycleProtected;
+  if (!exact) return { ...asset, retirementBlocked: true, reason: "Retirement evidence no longer matches the live path, byte count, fingerprint, or Git state." };
+  return {
+    ...asset,
+    classification: "reclaimable",
+    labels: {
+      ...asset.labels || {},
+      "com.codex.runtime.disposable": "true",
+      "com.codex.runtime.retention": "retired",
+      "com.codex.runtime.recovery-source": attestation.recoverySource
+    },
+    lineage: { ...asset.lineage, retirement: attestation, recoverySource: attestation.recoverySource },
+    reason: "Exact path retirement attestation matches the live byte count and content fingerprint."
+  };
+}
+function candidateRoots(config2, projects) {
+  const configured = [...config2.worktreeRoots || [], ...config2.residualRoots || []].filter(Boolean).map((item) => resolve2(item));
+  const codexRoot = resolve2(process.env.CODEX_HOME || join2(homedir2(), ".codex"), "worktrees");
+  const siblingRoots = projects.flatMap((project) => (project.gitRoots || []).map((root) => dirname2(resolve2(root))));
+  return [...new Set([...configured, codexRoot, ...siblingRoots].filter(existsSync2).map(keyPath))];
+}
+function probableSibling(path, projects, configuredRoots) {
+  if (configuredRoots.some((root) => keyPath(dirname2(path)) === keyPath(root))) return true;
+  if (keyPath(dirname2(path)) === keyPath(resolve2(process.env.CODEX_HOME || join2(homedir2(), ".codex"), "worktrees"))) return true;
+  const name = basename(path).toLowerCase();
+  return projects.some((project) => (project.gitRoots || []).some((root) => {
+    const base = basename(resolve2(root)).toLowerCase();
+    return name === base || name.startsWith(`${base}-`);
+  }));
+}
+function discoverWorktreeAssets(config2 = {}, projects = [], events = []) {
+  const gitRoots = [...new Set([process.env.RUNTIME_ASSET_GIT_ROOT, ...config2.gitRoots || [], ...projects.flatMap((item) => item.gitRoots || [])].filter(Boolean).map((item) => resolve2(item)))];
+  const registered = /* @__PURE__ */ new Map();
+  for (const gitRoot of gitRoots) {
+    if (!existsSync2(gitRoot)) continue;
+    const blocks = parseWorktreeBlocks(runGit(["worktree", "list", "--porcelain"], gitRoot));
+    const primaryGitRoot = blocks[0]?.worktree || gitRoot;
+    for (const fields of blocks) {
+      const key = keyPath(fields.worktree);
+      if (!registered.has(key)) registered.set(key, { fields, gitRoot: primaryGitRoot });
+    }
+  }
+  const roots = candidateRoots(config2, projects);
+  const candidates = new Map([...registered.keys()].map((key) => [key, registered.get(key).fields.worktree]));
+  for (const root of roots) {
+    for (const entry of safeEntries(root)) {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+      const path = resolve2(root, entry.name);
+      if (probableSibling(path, projects, [...config2.worktreeRoots || [], ...config2.residualRoots || []].map((item) => resolve2(item)))) candidates.set(keyPath(path), path);
+    }
+  }
+  const attestations = readPathAttestations(events);
+  const bindings = config2.threadBindings || {};
+  const assets = [];
+  for (const [key, path] of candidates) {
+    const registration = registered.get(key);
+    const scan = cachedPathUsage(path, config2.pathScan || {});
+    if (!scan.exists) continue;
+    const status = registration ? runGit(["status", "--short"], path, 1e4) : "";
+    const remote = registration ? runGit(["remote", "get-url", "origin"], path, 1e4) : "";
+    const binding = bindings[path] || bindings[key] || {};
+    const completedBinding = ["complete", "completed", "closed", "merged", "retired"].includes(String(binding.status || "").toLowerCase());
+    const lifecycleProtected = Boolean(binding.permanent || binding.pinned || binding.threadId && !completedBinding);
+    const primary = registration ? keyPath(registration.gitRoot) === key : false;
+    const dirty = Boolean(status);
+    const type = registration ? "worktree" : "worktree_residual";
+    const artifactBytes = scan.artifacts.reduce((sum, item) => sum + item.sizeBytes, 0);
+    const rootProject = projects.find((project2) => (project2.gitRoots || []).some((root) => keyPath(path).startsWith(keyPath(dirname2(root)))));
+    const project = rootProject?.id || remote || "unknown";
+    let asset = {
+      id: pathAssetId(type, path),
+      name: basename(path),
+      path,
+      type,
+      project,
+      environment: "local",
+      status: registration ? dirty ? "dirty" : registration.fields.detached ? "detached" : "clean" : "unregistered-residual",
+      classification: primary || dirty || lifecycleProtected ? "protected" : "review",
+      sizeBytes: scan.sizeBytes,
+      accountedBytes: Math.max(0, scan.sizeBytes - artifactBytes),
+      unit: "bytes",
+      gitSha: registration?.fields.HEAD,
+      branch: typeof registration?.fields.branch === "string" ? registration.fields.branch.replace("refs/heads/", "") : "detached-or-unknown",
+      labels: {},
+      lineage: {
+        path,
+        allowedRoot: roots.find((root) => within(path, root)) || dirname2(path),
+        registered: Boolean(registration),
+        gitRoot: registration?.gitRoot,
+        primary,
+        dirty,
+        lifecycleProtected,
+        remote,
+        contentFingerprint: scan.fingerprint,
+        entryCount: scan.entryCount,
+        scanTruncated: scan.truncated,
+        reparsePoints: scan.reparsePoints,
+        threadBinding: binding.threadId ? binding : void 0
+      },
+      reason: primary ? "Primary checkout is protected." : dirty ? "Contains uncommitted changes." : lifecycleProtected ? "Task binding is active, pinned, permanent, or lacks a completed outcome." : registration ? "Clean registered worktree requires an exact retirement attestation." : "Physical directory is not registered by Git and requires exact retirement evidence."
+    };
+    asset = applyAttestation(asset, attestations);
+    assets.push(asset);
+    for (const artifact of scan.artifacts) {
+      let artifactAsset = {
+        id: pathAssetId("host_artifact", artifact.path),
+        name: basename(artifact.path),
+        path: artifact.path,
+        type: "host_artifact",
+        project,
+        environment: "local",
+        status: artifact.category,
+        classification: "review",
+        sizeBytes: artifact.sizeBytes,
+        accountedBytes: artifact.sizeBytes,
+        unit: "bytes",
+        labels: {},
+        lineage: {
+          path: artifact.path,
+          parentAssetId: asset.id,
+          parentPath: path,
+          allowedRoot: path,
+          category: artifact.category,
+          contentFingerprint: artifact.fingerprint,
+          entryCount: artifact.entryCount,
+          scanTruncated: artifact.truncated || scan.truncated,
+          reparsePoints: scan.reparsePoints.filter((item) => within(item, artifact.path))
+        },
+        reason: "Generated dependency, build, archive, or execution artifact requires exact retirement evidence."
+      };
+      artifactAsset = applyAttestation(artifactAsset, attestations);
+      assets.push(artifactAsset);
+    }
+  }
+  return assets;
+}
+function validatePathRetirementReconciliation(report) {
+  const errors = [];
+  if (!report || report.schemaVersion !== PATH_RECONCILIATION_SCHEMA) return { ok: false, errors: ["Unsupported path reconciliation schema."] };
+  if (report.readOnly !== true || report.actionTaken !== "none") errors.push("Only a read-only, non-executed report can be imported.");
+  if (!Array.isArray(report.assets) || report.assets.length === 0) errors.push("At least one exact path asset is required.");
+  const seen = /* @__PURE__ */ new Set();
+  for (const asset of report.assets || []) {
+    if (!PATH_TYPES.has(asset.type)) errors.push(`Unsupported path asset type: ${asset.type}.`);
+    if (!String(asset.id || "").startsWith("path-sha256:")) errors.push("Path asset ID is invalid.");
+    if (seen.has(asset.id)) errors.push(`Duplicate path asset ID: ${asset.id}.`);
+    seen.add(asset.id);
+    if (!isAbsolute2(String(asset.path || "")) || pathAssetId(asset.type, asset.path) !== asset.id) errors.push(`Path identity mismatch for ${asset.id}.`);
+    if (!FINGERPRINT.test(String(asset.contentFingerprint || ""))) errors.push(`Missing content fingerprint for ${asset.id}.`);
+    if (!Number.isFinite(Number(asset.expectedBytes)) || Number(asset.expectedBytes) < 0) errors.push(`Invalid expected bytes for ${asset.id}.`);
+    if (asset.disposable !== true || asset.retention !== "retired" || !String(asset.recoverySource || "").trim()) errors.push(`Missing retirement or recovery evidence for ${asset.id}.`);
+    if (!String(asset.confidence || "").startsWith("high")) errors.push(`Asset ${asset.id} is not high confidence.`);
+  }
+  return { ok: errors.length === 0, errors };
+}
+function importPathRetirementReconciliation({ reportPath, owner = "platform-engineering" } = {}) {
+  if (!isAbsolute2(String(reportPath || ""))) throw new Error("Path reconciliation report path must be absolute.");
+  const raw = readFileSync2(reportPath);
+  if (raw[0] === 239 && raw[1] === 187 && raw[2] === 191) throw new Error("Reconciliation JSON must not contain a UTF-8 BOM.");
+  const report = JSON.parse(raw.toString("utf8"));
+  const validation = validatePathRetirementReconciliation(report);
+  if (!validation.ok) throw new Error(`Path reconciliation report is invalid: ${validation.errors.join("; ")}`);
+  const reportSha256 = createHash3("sha256").update(raw).digest("hex");
+  const ledgerPath = process.env.RUNTIME_ASSET_LEDGER_FILE || join2(defaultStateRoot2(), "events.jsonl");
+  const existing = existsSync2(ledgerPath) ? readFileSync2(ledgerPath, "utf8").split(/\r?\n/).filter(Boolean).flatMap((line) => {
+    try {
+      return [JSON.parse(line)];
+    } catch {
+      return [];
+    }
+  }) : [];
+  const existingKeys = new Set(existing.filter((event) => event.event === "asset.retired").map((event) => `${event.asset?.type}\0${event.asset?.id}\0${event.details?.reportSha256}`));
+  const events = [];
+  for (const asset of report.assets) {
+    const key = `${asset.type}\0${asset.id}\0${reportSha256}`;
+    if (existingKeys.has(key)) continue;
+    events.push({
+      schemaVersion: 1,
+      eventId: randomUUID3(),
+      occurredAt: (/* @__PURE__ */ new Date()).toISOString(),
+      event: "asset.retired",
+      host: hostname4(),
+      project: String(asset.project || report.target?.project || "host"),
+      environment: "local",
+      release: String(asset.outcomeId || report.outcomeId || "path-reconciliation"),
+      gitSha: String(asset.gitSha || "unknown"),
+      owner: String(asset.owner || owner),
+      asset: { type: asset.type, id: asset.id },
+      status: "retired",
+      details: {
+        disposable: "true",
+        retention: "retired",
+        path: resolve2(asset.path),
+        expectedBytes: Number(asset.expectedBytes),
+        contentFingerprint: String(asset.contentFingerprint).toLowerCase(),
+        recoverySource: String(asset.recoverySource),
+        threadId: asset.threadId,
+        outcomeId: asset.outcomeId,
+        reportPath,
+        reportSha256,
+        confidence: asset.confidence
+      }
+    });
+  }
+  if (events.length) {
+    mkdirSync2(dirname2(ledgerPath), { recursive: true });
+    appendFileSync2(ledgerPath, `${events.map((event) => JSON.stringify(event)).join("\n")}
+`, { encoding: "utf8", mode: 384 });
+  }
+  return { importedAt: (/* @__PURE__ */ new Date()).toISOString(), reportPath, reportSha256, candidatePathCount: report.assets.length, retirementEventsAdded: events.length, idempotentSkipCount: report.assets.length - events.length };
+}
+function removeTreeNoFollow(path) {
+  const stats = lstatSync(path);
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    try {
+      unlinkSync(path);
+    } catch (error51) {
+      chmodSync(path, 384);
+      unlinkSync(path);
+    }
+    return;
+  }
+  for (const entry of safeEntries(path)) removeTreeNoFollow(join2(path, entry.name));
+  try {
+    rmdirSync(path);
+  } catch (error51) {
+    chmodSync(path, 448);
+    rmdirSync(path);
+  }
+}
+function executePathAssetCleanup(asset) {
+  if (!PATH_TYPES.has(asset?.type) || asset.classification !== "reclaimable") throw new Error("Path asset is not reclaimable.");
+  const path = resolve2(asset.path || asset.lineage?.path || "");
+  const allowedRoot = resolve2(asset.lineage?.allowedRoot || "");
+  if (!path || !allowedRoot || !within(path, allowedRoot) || !existsSync2(path)) throw new Error("Path cleanup target is outside its exact allowed root or no longer exists.");
+  const current = scanPathUsage(path);
+  if (current.truncated || current.sizeBytes !== Number(asset.sizeBytes) || current.fingerprint !== asset.lineage?.contentFingerprint) throw new Error("Path content changed after preview.");
+  if (asset.type === "worktree") {
+    if (asset.lineage?.primary || asset.lineage?.dirty || !asset.lineage?.gitRoot) throw new Error("Primary or dirty worktree cleanup is blocked.");
+    const registered = parseWorktreeBlocks(runGit(["worktree", "list", "--porcelain"], asset.lineage.gitRoot)).some((item) => keyPath(item.worktree) === keyPath(path));
+    if (!registered) throw new Error("Registered worktree identity changed after preview.");
+    const output = runGit(["worktree", "remove", "--", path], asset.lineage.gitRoot, 12e4);
+    if (existsSync2(path)) throw new Error(output || "Git did not remove the exact worktree.");
+    return { output, removed: true };
+  }
+  removeTreeNoFollow(path);
+  if (existsSync2(path)) throw new Error("Exact path still exists after cleanup.");
+  return { removed: true };
+}
+
 // mcp/inventory.mjs
 var RUNTIME_PREFIX2 = "com.codex.runtime.";
 var previewStore = /* @__PURE__ */ new Map();
 var dashboardCache = /* @__PURE__ */ new Map();
 function stateRoot() {
-  if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve2(process.env.RUNTIME_ASSET_STATE_DIR);
-  if (platform2() === "win32") return join2(process.env.LOCALAPPDATA || join2(homedir2(), "AppData", "Local"), "RuntimeAssetTracker");
-  return join2(process.env.XDG_STATE_HOME || join2(homedir2(), ".local", "state"), "runtime-asset-tracker");
+  if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve3(process.env.RUNTIME_ASSET_STATE_DIR);
+  if (platform3() === "win32") return join3(process.env.LOCALAPPDATA || join3(homedir3(), "AppData", "Local"), "RuntimeAssetTracker");
+  return join3(process.env.XDG_STATE_HOME || join3(homedir3(), ".local", "state"), "runtime-asset-tracker");
 }
 function run(command, args, options = {}) {
   try {
-    return execFileSync2(command, args, {
+    return execFileSync3(command, args, {
       encoding: "utf8",
       windowsHide: true,
       timeout: options.timeout || 2e4,
@@ -35309,7 +35731,7 @@ function publicConnection(source) {
 }
 function projectSourceCards(config2, projects, selectedProject, dockerAvailable) {
   if (selectedProject === "all") {
-    const diskRoot2 = process.env.RUNTIME_ASSET_DISK_ROOT || (platform2() === "win32" ? "D:\\" : "/");
+    const diskRoot2 = process.env.RUNTIME_ASSET_DISK_ROOT || (platform3() === "win32" ? "D:\\" : "/");
     return [{
       id: "local",
       label: `Local ${diskRoot2}`,
@@ -35319,7 +35741,7 @@ function projectSourceCards(config2, projects, selectedProject, dockerAvailable)
     }];
   }
   const project = projects.find((item) => item.id === selectedProject);
-  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform2() === "win32" ? "D:\\" : "/");
+  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform3() === "win32" ? "D:\\" : "/");
   return projectSourceConfigs(config2, selectedProject).map((source) => {
     if (source.id === "local") {
       return { id: "local", label: `Local ${diskRoot}`, kind: "local", status: dockerAvailable ? "connected" : "unavailable", detail: project?.label || selectedProject };
@@ -35354,48 +35776,7 @@ function canonicalProjectId(value, projects) {
   return prefixed?.project.id || value || "unknown";
 }
 function worktreeInventory(config2, projects) {
-  const roots = [...new Set([
-    process.env.RUNTIME_ASSET_GIT_ROOT,
-    ...config2.gitRoots || [],
-    ...projects.flatMap((item) => item.gitRoots || [])
-  ].filter(Boolean))];
-  if (!roots.length) roots.push(process.cwd());
-  const blocksByPath = /* @__PURE__ */ new Map();
-  for (const root of roots) {
-    if (!existsSync2(join2(root, ".git"))) continue;
-    const output = run("git", ["worktree", "list", "--porcelain"], { cwd: root });
-    for (const block of output.split(/\r?\n\r?\n/).filter(Boolean)) {
-      const pathLine = block.split(/\r?\n/).find((line) => line.startsWith("worktree "));
-      if (pathLine) blocksByPath.set(pathLine.slice("worktree ".length).toLowerCase(), block);
-    }
-  }
-  return [...blocksByPath.values()].map((block, index) => {
-    const fields = Object.fromEntries(block.split(/\r?\n/).map((line) => {
-      const space = line.indexOf(" ");
-      return space > 0 ? [line.slice(0, space), line.slice(space + 1)] : [line, true];
-    }));
-    const path = fields.worktree;
-    const status = path ? run("git", ["status", "--short"], { cwd: path, timeout: 8e3 }) : "";
-    const remote = path ? normalizeGithubRepository(run("git", ["remote", "get-url", "origin"], { cwd: path, timeout: 8e3 })) : "";
-    const rootProject = projects.find((item) => item.gitRoots.some((root) => path?.toLowerCase().startsWith(root.toLowerCase())));
-    const dirty = Boolean(status);
-    return {
-      id: path,
-      name: path ? parse3(path).base : "unknown",
-      path,
-      type: "worktree",
-      project: canonicalProjectId(remote || rootProject?.id, projects),
-      environment: "local",
-      status: dirty ? "dirty" : fields.detached ? "detached" : "clean",
-      classification: dirty ? "protected" : fields.detached ? "review" : "retained",
-      sizeBytes: 1,
-      unit: "count",
-      gitSha: fields.HEAD,
-      branch: typeof fields.branch === "string" ? fields.branch.replace("refs/heads/", "") : "detached",
-      lineage: { primary: index === 0, dirty, detached: Boolean(fields.detached), gitSha: fields.HEAD, branch: typeof fields.branch === "string" ? fields.branch.replace("refs/heads/", "") : "detached", remote },
-      reason: dirty ? "\u5305\u542B\u672A\u63D0\u4EA4\u5185\u5BB9" : fields.detached ? "\u5E72\u51C0 detached worktree\uFF0C\u53EF\u5BA1\u67E5" : "\u5E72\u51C0\u5206\u652F worktree\uFF0C\u672A\u8BC1\u660E\u53EF\u5220\u9664"
-    };
-  });
+  return discoverWorktreeAssets(config2, projects, readRawLedgerEvents());
 }
 function readLedger(limit = 24) {
   return readRawLedgerEvents().slice(-limit).reverse().map((item) => ({
@@ -35410,8 +35791,8 @@ function readLedger(limit = 24) {
   }));
 }
 function readRawLedgerEvents(maxBytes = 8 * 1024 * 1024) {
-  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join2(stateRoot(), "events.jsonl");
-  if (!existsSync2(ledger)) return [];
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join3(stateRoot(), "events.jsonl");
+  if (!existsSync3(ledger)) return [];
   const stats = statSync(ledger);
   const length = Math.min(stats.size, maxBytes);
   const buffer = Buffer.alloc(length);
@@ -35480,17 +35861,22 @@ function importReconciliation(input) {
   dashboardCache.clear();
   return result;
 }
+function importPathReconciliation(input) {
+  const result = importPathRetirementReconciliation(input);
+  dashboardCache.clear();
+  return result;
+}
 function loadConfig() {
-  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join2(stateRoot(), "dashboard-config.json");
-  if (!existsSync2(path)) return { sources: [] };
+  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join3(stateRoot(), "dashboard-config.json");
+  if (!existsSync3(path)) return { sources: [] };
   try {
-    return JSON.parse(readFileSync2(path, "utf8"));
+    return JSON.parse(readFileSync3(path, "utf8"));
   } catch {
     return { sources: [] };
   }
 }
 function saveSchedule(schedule) {
-  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join2(stateRoot(), "dashboard-config.json");
+  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join3(stateRoot(), "dashboard-config.json");
   const config2 = loadConfig();
   const next = {
     ...config2,
@@ -35503,7 +35889,7 @@ function saveSchedule(schedule) {
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     }
   };
-  mkdirSync2(dirname2(path), { recursive: true });
+  mkdirSync3(dirname3(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(next, null, 2)}
 `, { encoding: "utf8", mode: 384 });
   dashboardCache.clear();
@@ -35511,9 +35897,10 @@ function saveSchedule(schedule) {
 }
 function aggregate2(type, assets, fallback = {}) {
   const matching = assets.filter((asset) => asset.type === type);
-  const sum = (kind) => matching.filter((asset) => asset.classification === kind).reduce((total2, asset) => total2 + Number(asset.sizeBytes || 0), 0);
-  const measured = matching.reduce((value, asset) => value + Number(asset.sizeBytes || 0), 0);
-  const total = type === "worktree" ? measured : Math.max(measured, Number(fallback.sizeBytes || 0));
+  const bytes = (asset) => Number(asset.accountedBytes ?? asset.sizeBytes ?? 0);
+  const sum = (kind) => matching.filter((asset) => asset.classification === kind).reduce((total2, asset) => total2 + bytes(asset), 0);
+  const measured = matching.reduce((value, asset) => value + bytes(asset), 0);
+  const total = ["worktree", "worktree_residual", "host_artifact"].includes(type) ? measured : Math.max(measured, Number(fallback.sizeBytes || 0));
   const activeBytes = sum("active");
   const protectedBytes = sum("protected");
   const expiringBytes = sum("expiring");
@@ -35527,16 +35914,16 @@ function aggregate2(type, assets, fallback = {}) {
     expiringBytes,
     retainedBytes: Math.max(0, total - activeBytes - protectedBytes - expiringBytes - reclaimableBytes),
     reclaimableBytes,
-    unit: type === "worktree" ? "count" : "bytes"
+    unit: "bytes"
   };
 }
-function collectDashboard({ scope = "project", source = "local", project = "all" } = {}) {
+function collectDashboard({ scope = "project", source = "local", project = "all", includeAllAssets = false } = {}) {
   const config2 = loadConfig();
   const projects = registeredProjects(config2);
   const selectedProject = resolveProjectId(project, projects, config2);
   const sourceConfigs = projectSourceConfigs(config2, selectedProject);
   const selectedSource = sourceConfigs.some((item) => item.id === source) ? source : "local";
-  const cacheKey2 = `${selectedSource}:${selectedProject}`;
+  const cacheKey2 = `${selectedSource}:${selectedProject}:${includeAllAssets ? "full" : "bounded"}`;
   const cached2 = dashboardCache.get(cacheKey2);
   if (cached2 && Date.now() - cached2.createdAt < 2e4) return { ...cached2.value, generatedAt: (/* @__PURE__ */ new Date()).toISOString(), cached: true };
   const sources = projectSourceCards(config2, projects, selectedProject, true);
@@ -35550,7 +35937,7 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
   const allAssets = [...worktrees, ...docker.assets].map((asset) => ({ ...asset, project: canonicalProjectId(asset.project, projects) }));
   const hostScope = selectedProject === "all";
   const filtered = hostScope ? allAssets : allAssets.filter((asset) => asset.project === selectedProject);
-  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform2() === "win32" ? "D:\\" : "/");
+  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform3() === "win32" ? "D:\\" : "/");
   let disk = { totalBytes: 0, freeBytes: 0 };
   try {
     const stats = statfsSync(diskRoot);
@@ -35559,6 +35946,8 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
   }
   const bars = [
     aggregate2("worktree", filtered),
+    aggregate2("worktree_residual", filtered),
+    aggregate2("host_artifact", filtered),
     aggregate2("image", filtered),
     aggregate2("volume", filtered),
     localBuildCacheBar(docker.summary)
@@ -35569,14 +35958,14 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
     hostScope,
     selectedSource,
     selectedProject,
-    host: hostname4(),
+    host: hostname5(),
     dockerAvailable: docker.available,
     disk,
     bars,
     sources: projectSourceCards(config2, projects, selectedProject, docker.available),
     projects: projects.map((item) => item.id),
     projectOptions: publicProjectOptions(projects),
-    assets: filtered.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
+    assets: filtered.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, includeAllAssets ? void 0 : 320),
     events: hostScope ? readLedger() : readLedger().filter((event) => canonicalProjectId(event.project, projects) === selectedProject),
     schedule: config2.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" }
   };
@@ -35667,7 +36056,7 @@ function applyRemoteRetirementGovernance(dashboard, governance) {
 function rebuildAnalyzedBars(bars, assets) {
   return (bars || []).map((bar) => {
     const matching = assets.filter((asset) => asset.type === bar.type);
-    const measure = (asset) => bar.unit === "count" ? 1 : Number(asset.sizeBytes || 0);
+    const measure = (asset) => bar.unit === "count" ? 1 : Number(asset.accountedBytes ?? asset.sizeBytes ?? 0);
     const sum = (classification2) => matching.filter((asset) => asset.classification === classification2).reduce((total, asset) => total + measure(asset), 0);
     const activeBytes = sum("active");
     const protectedBytes = sum("protected");
@@ -35705,7 +36094,7 @@ function lineageFinding(asset, dashboard) {
     matchingEvents.length > 0 && `\u4E8B\u4EF6\u8D26\u672C\uFF1A${matchingEvents.length} \u6761`
   ].filter(Boolean);
   const missing = [];
-  if (!owner && !["pull_request", "artifact", "actions_cache", "workflow_run", "cache", "worktree"].includes(asset.type)) missing.push("owner");
+  if (!owner && !["pull_request", "artifact", "actions_cache", "workflow_run", "cache", "worktree", "worktree_residual", "host_artifact"].includes(asset.type)) missing.push("owner");
   if (!recoverySource && !["container", "pull_request", "workflow_run"].includes(asset.type)) missing.push("\u6062\u590D\u6765\u6E90");
   if (!["active", "protected", "reclaimable"].includes(asset.classification) && !asset.expiresAt) missing.push("\u5230\u671F\u65F6\u95F4/TTL");
   if (["image", "volume"].includes(asset.type) && !Array.isArray(lineage.consumers)) missing.push("\u6D88\u8D39\u8005\u5173\u7CFB");
@@ -35794,7 +36183,7 @@ function detectSupersededBuildChains(assets) {
   return chains.sort((left, right) => right.images.reduce((sum, item) => sum + item.sizeBytes, 0) - left.images.reduce((sum, item) => sum + item.sizeBytes, 0)).slice(0, 20);
 }
 function runDeepScan({ source = "local", project = "all" } = {}) {
-  const dashboard = collectDashboard({ source, project });
+  const dashboard = collectDashboard({ source, project, includeAllAssets: true });
   if (dashboard.selectedSource !== "local" && !dashboard.remoteSnapshotAvailable) {
     throw new Error(dashboard.remoteError || `${dashboard.selectedSource} \u5FEB\u7167\u4E0D\u53EF\u7528`);
   }
@@ -35857,8 +36246,8 @@ function runDeepScan({ source = "local", project = "all" } = {}) {
     }
   };
 }
-function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "artifact", "actions_cache"], assetIds } = {}) {
-  const dashboard = collectDashboard({ source, project });
+function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact", "artifact", "actions_cache"], assetIds } = {}) {
+  const dashboard = collectDashboard({ source, project, includeAllAssets: true });
   const selectedSource = dashboard.selectedSource || source;
   if (dashboard.releaseRuntimeDrift?.cleanupBlocked) throw new Error("Cleanup is blocked by an unacknowledged release/runtime image revision drift.");
   const requestedIds = Array.isArray(assetIds) && assetIds.length ? new Set(assetIds.map(String)) : null;
@@ -35868,7 +36257,7 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
     if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
     if (requestedIds && !requestedIds.has(String(asset.id))) return false;
     if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX2}disposable`] === "true";
-    return selectedSource === "github" ? ["artifact", "actions_cache"].includes(asset.type) : ["image", "volume", "cache"].includes(asset.type);
+    return selectedSource === "github" ? ["artifact", "actions_cache"].includes(asset.type) : ["image", "volume", "cache", "worktree", "worktree_residual", "host_artifact"].includes(asset.type);
   }).map((asset) => ({
     type: asset.type,
     id: asset.id,
@@ -35890,7 +36279,7 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
   if (requestedIds) {
     const selectedIds = new Set(allowlist.map((asset) => String(asset.id)));
     const missingIds = [...requestedIds].filter((id) => !selectedIds.has(id));
-    if (missingIds.length) throw new Error(`Exact cleanup scope contains ${missingIds.length} image(s) that are no longer safely reclaimable.`);
+    if (missingIds.length) throw new Error(`Exact cleanup scope contains ${missingIds.length} asset(s) that are no longer safely reclaimable.`);
   }
   if (selectedSource === "local" && types.includes("cache")) {
     const cache = dashboard.bars.find((item) => item.type === "cache");
@@ -35905,7 +36294,7 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
       });
     }
   }
-  const token = randomUUID3();
+  const token = randomUUID4();
   const preview = {
     token,
     source: selectedSource,
@@ -35922,13 +36311,13 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
   return preview;
 }
 function appendCleanupEvent(event, details, environment = "local") {
-  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join2(stateRoot(), "events.jsonl");
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join3(stateRoot(), "events.jsonl");
   const item = {
     schemaVersion: 1,
-    eventId: randomUUID3(),
+    eventId: randomUUID4(),
     occurredAt: (/* @__PURE__ */ new Date()).toISOString(),
     event,
-    host: hostname4(),
+    host: hostname5(),
     project: "runtime-asset-tracker",
     environment,
     release: "dashboard",
@@ -35936,8 +36325,8 @@ function appendCleanupEvent(event, details, environment = "local") {
     owner: "local-user",
     details
   };
-  mkdirSync2(dirname2(ledger), { recursive: true });
-  appendFileSync2(ledger, `${JSON.stringify(item)}
+  mkdirSync3(dirname3(ledger), { recursive: true });
+  appendFileSync3(ledger, `${JSON.stringify(item)}
 `, { encoding: "utf8", mode: 384 });
 }
 function localCleanupArgs(asset) {
@@ -35977,7 +36366,7 @@ function executeCleanup({ token, confirmed = false }) {
     return cleanup;
   }
   dashboardCache.clear();
-  const current = collectDashboard({ source: "local", project: preview.project });
+  const current = collectDashboard({ source: "local", project: preview.project, includeAllAssets: true });
   const safeAssets = new Map(current.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
   const currentCache = current.bars.find((item) => item.type === "cache");
   if (Number(currentCache?.reclaimableBytes || 0) > 0) {
@@ -35993,6 +36382,15 @@ function executeCleanup({ token, confirmed = false }) {
     const asset = safeAssets.get(`${requested.type}:${requested.id}`);
     if (!asset) {
       results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
+      continue;
+    }
+    if (["worktree", "worktree_residual", "host_artifact"].includes(asset.type)) {
+      try {
+        executePathAssetCleanup(asset);
+        results.push({ ...requested, sizeBytes: asset.sizeBytes, status: "removed", reclaimedBytes: Number(asset.sizeBytes || 0) });
+      } catch (error51) {
+        results.push({ ...requested, sizeBytes: asset.sizeBytes, status: "failed", reclaimedBytes: 0, reason: error51.message });
+      }
       continue;
     }
     const args = localCleanupArgs(asset);
@@ -36021,9 +36419,9 @@ function executeCleanup({ token, confirmed = false }) {
 }
 
 // mcp/server.mjs
-var moduleDirectory = dirname3(fileURLToPath(import.meta.url));
+var moduleDirectory = dirname4(fileURLToPath(import.meta.url));
 var DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
-var dashboardHtml = readFileSync3(join3(moduleDirectory, "dashboard.html"), "utf8");
+var dashboardHtml = readFileSync4(join4(moduleDirectory, "dashboard.html"), "utf8");
 function toolResult(structuredContent, text) {
   return {
     structuredContent,
@@ -36032,7 +36430,7 @@ function toolResult(structuredContent, text) {
 }
 function createRuntimeAssetServer() {
   const server = new McpServer(
-    { name: "runtime-asset-tracker", version: "0.2.0" },
+    { name: "runtime-asset-tracker", version: "0.3.0" },
     { instructions: "Use open_runtime_dashboard for a visual inventory. Always call preview_cleanup before execute_cleanup. Never infer that an unlabeled volume is disposable." }
   );
   N3(server, "Runtime Asset Dashboard", DASHBOARD_URI, {
@@ -36066,8 +36464,8 @@ function createRuntimeAssetServer() {
     inputSchema: {
       source: external_exports.enum(["local", "production", "staging", "github"]).optional(),
       project: external_exports.string().optional(),
-      types: external_exports.array(external_exports.enum(["container", "image", "volume", "cache", "pull_request", "artifact", "actions_cache", "workflow_run"])).optional(),
-      assetIds: external_exports.array(external_exports.string().regex(/^sha256:[0-9a-f]{64}$/i)).max(160).optional()
+      types: external_exports.array(external_exports.enum(["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact", "pull_request", "artifact", "actions_cache", "workflow_run"])).optional(),
+      assetIds: external_exports.array(external_exports.string().min(1).max(1024)).max(320).optional()
     },
     outputSchema: { preview: external_exports.record(external_exports.string(), external_exports.unknown()) },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -36092,6 +36490,20 @@ function createRuntimeAssetServer() {
   }, async (input) => {
     const reconciliation = importReconciliation(input);
     return toolResult({ reconciliation }, `Imported ${reconciliation.retirementEventsAdded} exact image retirement attestations and ${reconciliation.protectionEventsAdded} protection bindings.`);
+  });
+  K3(server, "import_path_retirement_reconciliation", {
+    title: "Import exact path retirement reconciliation",
+    description: "Validate a machine-readable worktree/residual/artifact retirement report and append exact attestations. This never deletes paths.",
+    inputSchema: {
+      reportPath: external_exports.string().min(3).max(1024),
+      owner: external_exports.string().min(1).max(128).optional()
+    },
+    outputSchema: { reconciliation: external_exports.record(external_exports.string(), external_exports.unknown()) },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } }
+  }, async (input) => {
+    const reconciliation = importPathReconciliation(input);
+    return toolResult({ reconciliation }, `Imported ${reconciliation.retirementEventsAdded} exact path retirement attestations.`);
   });
   K3(server, "deep_scan_runtime_lineage", {
     title: "Deep scan runtime asset lineage",
@@ -36177,6 +36589,10 @@ async function startHttp() {
       }
       if (request.method === "POST" && url2.pathname === "/api/reconciliation-import") {
         sendJson(response, 200, { reconciliation: importReconciliation(await readBody(request)) });
+        return;
+      }
+      if (request.method === "POST" && url2.pathname === "/api/path-reconciliation-import") {
+        sendJson(response, 200, { reconciliation: importPathReconciliation(await readBody(request)) });
         return;
       }
       if (request.method === "POST" && url2.pathname === "/api/deep-scan") {
