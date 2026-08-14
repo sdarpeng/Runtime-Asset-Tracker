@@ -1,6 +1,6 @@
 {
   "name": "runtime-asset-tracker",
-  "version": "0.1.0+codex.20260802224628",
+  "version": "0.2.0+codex.20260814-retirement-reconciliation",
   "description": "Track Docker images, containers, volumes, Compose operations, and deployments with portable labels and an append-only JSONL ledger.",
   "author": {
     "name": "SparklingPlay Engineering"
@@ -26,7 +26,14 @@
       "SSH and AWS credential profile references",
       "Revalidated safe remote cleanup",
       "Expiry-aware capacity classification",
-      "Read-only deep lineage scan"
+      "Read-only deep lineage scan",
+      "Machine-readable retirement reconciliation import",
+      "Docker unique-layer accounting",
+      "Current and rollback image protection bindings",
+      "Release/runtime revision drift guard",
+      "Atomic multi-tag image retirement",
+      "Superseded build-chain findings",
+      "Post-cleanup runtime and disk verification"
     ],
     "brandColor": "#20B8EC",
     "screenshots": [
