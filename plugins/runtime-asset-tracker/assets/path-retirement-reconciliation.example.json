@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "sparkling.runtime-path-retirement-reconciliation/v1",
+  "readOnly": true,
+  "actionTaken": "none",
+  "target": {
+    "project": "owner/repository",
+    "host": "developer-workstation"
+  },
+  "outcomeId": "merged-pr-123",
+  "assets": [
+    {
+      "id": "path-sha256:replace-with-64-hex-digest",
+      "type": "worktree_residual",
+      "path": "D:\\CodexWorktrees\\MyProject-retired-task",
+      "project": "owner/repository",
+      "expectedBytes": 123456789,
+      "contentFingerprint": "sha256:replace-with-64-hex-digest",
+      "disposable": true,
+      "retention": "retired",
+      "recoverySource": "git:https://github.com/owner/repository.git@full-commit-sha",
+      "confidence": "high-exact",
+      "threadId": "codex-task-id",
+      "outcomeId": "merged-pr-123"
+    }
+  ]
+}

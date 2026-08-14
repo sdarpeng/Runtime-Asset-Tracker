@@ -7,7 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
-import { collectDashboard, createCleanupPreview, executeCleanup, importReconciliation, runDeepScan, saveSchedule } from "./inventory.mjs";
+import { collectDashboard, createCleanupPreview, executeCleanup, importPathReconciliation, importReconciliation, runDeepScan, saveSchedule } from "./inventory.mjs";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
@@ -22,7 +22,7 @@ function toolResult(structuredContent, text) {
 
 export function createRuntimeAssetServer() {
   const server = new McpServer(
-    { name: "runtime-asset-tracker", version: "0.2.0" },
+    { name: "runtime-asset-tracker", version: "0.3.0" },
     { instructions: "Use open_runtime_dashboard for a visual inventory. Always call preview_cleanup before execute_cleanup. Never infer that an unlabeled volume is disposable." },
   );
 
@@ -59,8 +59,8 @@ export function createRuntimeAssetServer() {
     inputSchema: {
       source: z.enum(["local", "production", "staging", "github"]).optional(),
       project: z.string().optional(),
-      types: z.array(z.enum(["container", "image", "volume", "cache", "pull_request", "artifact", "actions_cache", "workflow_run"])).optional(),
-      assetIds: z.array(z.string().regex(/^sha256:[0-9a-f]{64}$/i)).max(160).optional(),
+      types: z.array(z.enum(["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact", "pull_request", "artifact", "actions_cache", "workflow_run"])).optional(),
+      assetIds: z.array(z.string().min(1).max(1024)).max(320).optional(),
     },
     outputSchema: { preview: z.record(z.string(), z.unknown()) },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -86,6 +86,21 @@ export function createRuntimeAssetServer() {
   }, async (input) => {
     const reconciliation = importReconciliation(input);
     return toolResult({ reconciliation }, `Imported ${reconciliation.retirementEventsAdded} exact image retirement attestations and ${reconciliation.protectionEventsAdded} protection bindings.`);
+  });
+
+  registerAppTool(server, "import_path_retirement_reconciliation", {
+    title: "Import exact path retirement reconciliation",
+    description: "Validate a machine-readable worktree/residual/artifact retirement report and append exact attestations. This never deletes paths.",
+    inputSchema: {
+      reportPath: z.string().min(3).max(1024),
+      owner: z.string().min(1).max(128).optional(),
+    },
+    outputSchema: { reconciliation: z.record(z.string(), z.unknown()) },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } },
+  }, async (input) => {
+    const reconciliation = importPathReconciliation(input);
+    return toolResult({ reconciliation }, `Imported ${reconciliation.retirementEventsAdded} exact path retirement attestations.`);
   });
 
   registerAppTool(server, "deep_scan_runtime_lineage", {
@@ -178,6 +193,10 @@ async function startHttp() {
       }
       if (request.method === "POST" && url.pathname === "/api/reconciliation-import") {
         sendJson(response, 200, { reconciliation: importReconciliation(await readBody(request)) });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/path-reconciliation-import") {
+        sendJson(response, 200, { reconciliation: importPathReconciliation(await readBody(request)) });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/deep-scan") {

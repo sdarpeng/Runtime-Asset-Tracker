@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { canonicalProjectId, collectDashboard, createCleanupPreview, localBuildCacheBar, localCleanupArgs, localCleanupTimeoutMs, normalizeGithubRepository, parseBytes, projectSourceConfigs, registeredProjects, resolveProjectId, retirementOverrideLabels } from "../mcp/inventory.mjs";
+
+function withIsolatedDashboard(callback) {
+  const sandbox = mkdtempSync(join(tmpdir(), "tracker-dashboard-"));
+  const configPath = join(sandbox, "dashboard-config.json");
+  const codexHome = join(sandbox, "codex-home");
+  mkdirSync(join(codexHome, "worktrees"), { recursive: true });
+  writeFileSync(configPath, JSON.stringify({ projects: [], sources: [] }));
+  const priorConfig = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG;
+  const priorCodex = process.env.CODEX_HOME;
+  process.env.RUNTIME_ASSET_DASHBOARD_CONFIG = configPath;
+  process.env.CODEX_HOME = codexHome;
+  try { return callback(); } finally {
+    if (priorConfig === undefined) delete process.env.RUNTIME_ASSET_DASHBOARD_CONFIG; else process.env.RUNTIME_ASSET_DASHBOARD_CONFIG = priorConfig;
+    if (priorCodex === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = priorCodex;
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+}
 
 describe("runtime asset dashboard inventory", () => {
   it("parses Docker size units and clamps invalid negative values", () => {
@@ -129,18 +149,19 @@ describe("runtime asset dashboard inventory", () => {
     assert.equal(projectSourceConfigs(config, "owner/cms").some((item) => item.id === "production"), false);
   });
 
-  it("returns the four dashboard capacity bands without mutating Docker", () => {
-    const dashboard = collectDashboard();
+  it("returns Docker and real-byte host path capacity bands without mutating Docker", () => {
+    const dashboard = withIsolatedDashboard(() => collectDashboard());
     assert.equal(dashboard.selectedProject, "all");
     assert.equal(dashboard.scope, "host");
-    assert.equal(dashboard.bars.length, 4);
-    assert.deepEqual(dashboard.bars.map((item) => item.type), ["worktree", "image", "volume", "cache"]);
+    assert.equal(dashboard.bars.length, 6);
+    assert.deepEqual(dashboard.bars.map((item) => item.type), ["worktree", "worktree_residual", "host_artifact", "image", "volume", "cache"]);
+    assert.ok(dashboard.bars.slice(0, 3).every((item) => item.unit === "bytes"));
     assert.ok(Array.isArray(dashboard.assets));
     assert.ok(Array.isArray(dashboard.events));
   });
 
   it("requires exact asset IDs before a host-wide cleanup preview", () => {
-    assert.throws(() => createCleanupPreview(), /Host-wide cleanup preview requires exact assetIds/);
+    assert.throws(() => withIsolatedDashboard(() => createCleanupPreview()), /Host-wide cleanup preview requires exact assetIds/);
   });
 
   it("applies an exact ledger retirement only with disposable and recovery evidence", () => {

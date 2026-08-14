@@ -2,6 +2,22 @@
   "gitRoots": [
     "D:\\MyProject"
   ],
+  "worktreeRoots": [
+    "D:\\CodexWorktrees"
+  ],
+  "residualRoots": [],
+  "pathScan": {
+    "maxEntries": 400000,
+    "largeFileBytes": 104857600,
+    "cacheTtlMs": 300000
+  },
+  "threadBindings": {
+    "D:\\CodexWorktrees\\MyProject-task-v3": {
+      "threadId": "codex-task-id",
+      "outcomeId": "merged-pr-or-release-id",
+      "status": "complete"
+    }
+  },
   "projects": [
     {
       "id": "owner/repository",
