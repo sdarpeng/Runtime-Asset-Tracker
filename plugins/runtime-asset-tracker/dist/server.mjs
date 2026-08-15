@@ -34776,7 +34776,8 @@ function defaultStateRoot() {
   return join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "runtime-asset-tracker");
 }
 function stableStrings(values) {
-  return [...new Set((values || []).map(String).filter(Boolean))].sort();
+  const items = Array.isArray(values) ? values : values == null ? [] : [values];
+  return [...new Set(items.map(String).filter(Boolean))].sort();
 }
 function readJson(path) {
   const raw = readFileSync(path);

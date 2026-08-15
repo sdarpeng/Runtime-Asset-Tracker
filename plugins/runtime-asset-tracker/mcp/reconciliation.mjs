@@ -16,7 +16,8 @@ function defaultStateRoot() {
 }
 
 function stableStrings(values) {
-  return [...new Set((values || []).map(String).filter(Boolean))].sort();
+  const items = Array.isArray(values) ? values : values == null ? [] : [values];
+  return [...new Set(items.map(String).filter(Boolean))].sort();
 }
 
 function readJson(path) {

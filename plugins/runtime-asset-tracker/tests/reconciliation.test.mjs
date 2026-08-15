@@ -74,6 +74,28 @@ describe("runtime retirement reconciliation", () => {
     assert.equal(governance.protections.get(`image:${ROLLBACK}`).revision, RELEASE_REVISION);
   });
 
+  it("normalizes legacy scalar approvedTags without crashing dashboard reconciliation", () => {
+    const governance = retirementAttestations([{
+      event: "asset.retired",
+      status: "retired",
+      project: PROJECT,
+      environment: "production",
+      owner: "platform",
+      release: "legacy-import",
+      gitSha: REVISION,
+      asset: { type: "image", id: IMAGE },
+      details: {
+        disposable: "true",
+        retention: "retired",
+        recoverySource: `git:${REVISION}`,
+        approvedTags: "example/api:legacy",
+        reportSha256: "d".repeat(64),
+        group: "legacy-import",
+      },
+    }]);
+    assert.deepEqual(governance.retirements.get(`image:${IMAGE}`).approvedTags, ["example/api:legacy"]);
+  });
+
   it("imports exact local retirement without requiring a remote environment registration", () => {
     const root = mkdtempSync(join(tmpdir(), "rat-reconcile-local-"));
     temporaryRoots.push(root);
