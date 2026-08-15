@@ -33720,7 +33720,7 @@ function N3(Z, $, J, X, V) {
 
 // mcp/inventory.mjs
 import { execFileSync as execFileSync3 } from "node:child_process";
-import { appendFileSync as appendFileSync4, closeSync, existsSync as existsSync4, mkdirSync as mkdirSync4, openSync, readFileSync as readFileSync5, readSync, statfsSync, statSync as statSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { appendFileSync as appendFileSync4, closeSync, constants as FS_CONSTANTS, existsSync as existsSync4, fstatSync, fsyncSync, mkdirSync as mkdirSync4, openSync, readFileSync as readFileSync5, readSync, statfsSync, statSync as statSync2, writeFileSync as writeFileSync2, writeSync } from "node:fs";
 import { homedir as homedir4, hostname as hostname6, platform as platform4 } from "node:os";
 import { dirname as dirname4, join as join4, parse as parse3, resolve as resolve5 } from "node:path";
 import { createHash as createHash6, randomUUID as randomUUID5 } from "node:crypto";
@@ -37115,15 +37115,6 @@ function readRecentLedgerEvents(maxBytes = 8 * 1024 * 1024) {
 function emptyAuthorityState() {
   return { retirements: /* @__PURE__ */ new Map(), protections: /* @__PURE__ */ new Map(), lifecycle: /* @__PURE__ */ new Map(), orders: /* @__PURE__ */ new Map(), parsedEventCount: 0 };
 }
-function cloneAuthorityState(state) {
-  return {
-    retirements: new Map(state.retirements),
-    protections: new Map(state.protections),
-    lifecycle: new Map(state.lifecycle),
-    orders: new Map(state.orders || []),
-    parsedEventCount: Number(state.parsedEventCount || 0)
-  };
-}
 function scopedAssetKey(event) {
   const project = String(event?.project || "").trim();
   const environment = String(event?.environment || "").trim();
@@ -37176,17 +37167,25 @@ function authorityStateEvents(state) {
   ];
   return ordered.sort((left, right) => left.order - right.order).map((item) => item.event);
 }
-function scanLedgerAuthority(ledger, startOffset, initialState) {
-  const state = cloneAuthorityState(initialState);
+function ledgerFileIdentity(stats) {
+  return `${String(stats.dev)}:${String(stats.ino)}`;
+}
+function scanLedgerAuthority(ledger) {
+  const state = emptyAuthorityState();
   const fd = openSync(ledger, "r");
   const decoder = new StringDecoder("utf8");
   const buffer = Buffer.alloc(4 * 1024 * 1024);
-  let position = startOffset;
+  const digest = createHash6("sha256");
+  const openedStats = fstatSync(fd);
+  const snapshotSize = openedStats.size;
+  let position = 0;
   let carry = "";
   try {
-    while (true) {
-      const bytesRead = readSync(fd, buffer, 0, buffer.length, position);
-      if (bytesRead === 0) break;
+    while (position < snapshotSize) {
+      const requested = Math.min(buffer.length, snapshotSize - position);
+      const bytesRead = readSync(fd, buffer, 0, requested, position);
+      if (bytesRead === 0) throw new Error(`Authoritative ledger changed while reading at byte ${position}`);
+      digest.update(buffer.subarray(0, bytesRead));
       position += bytesRead;
       const text = carry + decoder.write(buffer.subarray(0, bytesRead));
       const lines = text.split(/\r?\n/);
@@ -37211,29 +37210,36 @@ function scanLedgerAuthority(ledger, startOffset, initialState) {
   } finally {
     closeSync(fd);
   }
-  return { state, size: position };
+  return {
+    state,
+    size: position,
+    identity: ledgerFileIdentity(openedStats),
+    mtimeMs: openedStats.mtimeMs,
+    ctimeMs: openedStats.ctimeMs,
+    digest: digest.digest("hex")
+  };
 }
-function readAuthoritativeLedgerEvents() {
+function readAuthoritativeLedgerEvents(io = {}) {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
   if (!existsSync4(ledger)) return [];
-  const stats = statSync2(ledger);
-  const cached2 = ledgerAuthorityCache.get(ledger);
-  const canResume = cached2 && stats.size > cached2.size && cached2.size > 0;
-  if (cached2 && stats.size === cached2.size && stats.mtimeMs === cached2.mtimeMs) return cached2.events;
-  const initialState = canResume ? cached2.state : emptyAuthorityState();
-  const startOffset = canResume ? cached2.size : 0;
-  const scanned = scanLedgerAuthority(ledger, startOffset, initialState);
-  const events = authorityStateEvents(scanned.state);
-  ledgerAuthorityCache.set(ledger, { size: stats.size, mtimeMs: stats.mtimeMs, state: scanned.state, events });
-  return events;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const scanned = scanLedgerAuthority(ledger);
+    io.afterScan?.({ attempt, ledger, scanned });
+    const current = statSync2(ledger);
+    const stable = ledgerFileIdentity(current) === scanned.identity && current.size === scanned.size && current.mtimeMs === scanned.mtimeMs && current.ctimeMs === scanned.ctimeMs;
+    if (!stable) continue;
+    const events = authorityStateEvents(scanned.state);
+    ledgerAuthorityCache.set(ledger, { ...scanned, state: scanned.state, events });
+    return events;
+  }
+  throw new Error("Authoritative ledger changed during verification; refusing to use an unstable authority snapshot");
 }
 function ledgerAuthorityStatus() {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
   if (!existsSync4(ledger)) return { path: ledger, exists: false, integrity: "empty", bytes: 0, effectiveEvents: 0 };
   const events = readAuthoritativeLedgerEvents();
-  const stats = statSync2(ledger);
   const cache = ledgerAuthorityCache.get(ledger);
-  return { path: ledger, exists: true, integrity: "verified-full-history", bytes: stats.size, parsedEventCount: cache?.state?.parsedEventCount || 0, effectiveEvents: events.length };
+  return { path: ledger, exists: true, integrity: "verified-full-history", bytes: cache?.size || 0, digest: cache?.digest, parsedEventCount: cache?.state?.parsedEventCount || 0, effectiveEvents: events.length };
 }
 function retirementOverrideLabels(events, { project, environment } = {}) {
   const retirements = /* @__PURE__ */ new Map();
@@ -37869,7 +37875,15 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
   previewStore.set(token, preview);
   return preview;
 }
-function appendCleanupEvent(event, details, environment = "local") {
+function appendCleanupEvent(event, details, environment = "local", io = {}) {
+  const operations = {
+    exists: io.exists || existsSync4,
+    mkdir: io.mkdir || mkdirSync4,
+    open: io.open || openSync,
+    write: io.write || writeSync,
+    fsync: io.fsync || fsyncSync,
+    close: io.close || closeSync
+  };
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
   const item = {
     schemaVersion: 1,
@@ -37884,9 +37898,36 @@ function appendCleanupEvent(event, details, environment = "local") {
     owner: "local-user",
     details
   };
-  mkdirSync4(dirname4(ledger), { recursive: true });
-  appendFileSync4(ledger, `${JSON.stringify(item)}
-`, { encoding: "utf8", mode: 384 });
+  const ledgerDirectory = dirname4(ledger);
+  const directoryExisted = operations.exists(ledgerDirectory);
+  const ledgerExisted = operations.exists(ledger);
+  const fsyncDirectory = (path) => {
+    const directoryFd = operations.open(path, FS_CONSTANTS.O_RDONLY);
+    try {
+      operations.fsync(directoryFd);
+    } finally {
+      operations.close(directoryFd);
+    }
+  };
+  operations.mkdir(ledgerDirectory, { recursive: true });
+  if (!directoryExisted && platform4() !== "win32") {
+    fsyncDirectory(dirname4(ledgerDirectory));
+  }
+  const payload = Buffer.from(`${JSON.stringify(item)}
+`, "utf8");
+  const fd = operations.open(ledger, FS_CONSTANTS.O_WRONLY | FS_CONSTANTS.O_CREAT | FS_CONSTANTS.O_APPEND, 384);
+  try {
+    let offset = 0;
+    while (offset < payload.length) {
+      const written = operations.write(fd, payload, offset, payload.length - offset);
+      if (!Number.isInteger(written) || written <= 0) throw new Error("Authoritative ledger write made no forward progress");
+      offset += written;
+    }
+    operations.fsync(fd);
+  } finally {
+    operations.close(fd);
+  }
+  if (!ledgerExisted && platform4() !== "win32") fsyncDirectory(ledgerDirectory);
 }
 function localCleanupArgs(asset) {
   if (asset.type === "container") return ["container", "rm", asset.id];
