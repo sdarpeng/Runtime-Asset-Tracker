@@ -7,7 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
-import { collectDashboard, createCleanupPreview, executeCleanup, importPathReconciliation, importReconciliation, runDeepScan, saveSchedule } from "./inventory.mjs";
+import { collectDashboard, createCleanupPreview, createUnifiedAssetTable, executeCleanup, importPathReconciliation, importReconciliation, importUnifiedReconciliation, runDeepScan, saveSchedule } from "./inventory.mjs";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
@@ -22,7 +22,7 @@ function toolResult(structuredContent, text) {
 
 export function createRuntimeAssetServer() {
   const server = new McpServer(
-    { name: "runtime-asset-tracker", version: "0.3.3" },
+    { name: "runtime-asset-tracker", version: "0.4.0" },
     { instructions: "Use open_runtime_dashboard for a visual inventory. Always call preview_cleanup before execute_cleanup. Never infer that an unlabeled volume is disposable." },
   );
 
@@ -103,6 +103,24 @@ export function createRuntimeAssetServer() {
     return toolResult({ reconciliation }, `Imported ${reconciliation.retirementEventsAdded} exact path retirement attestations.`);
   });
 
+  registerAppTool(server, "import_unified_retirement_reconciliation", {
+    title: "Import merged-PR asset retirement reconciliation",
+    description: "Validate a merged-PR reconciliation containing exact containers, images, volumes, and managed remote paths, then append retirement attestations. It never deletes assets.",
+    inputSchema: {
+      reportPath: z.string().min(3).max(1024),
+      source: z.enum(["local", "production", "staging"]),
+      project: z.string().min(3).max(128),
+      groups: z.array(z.string().min(1).max(128)).min(1).max(32),
+      owner: z.string().min(1).max(128).optional(),
+    },
+    outputSchema: { reconciliation: z.record(z.string(), z.unknown()) },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } },
+  }, async (input) => {
+    const reconciliation = importUnifiedReconciliation(input);
+    return toolResult({ reconciliation }, `Imported ${reconciliation.retirementEventsAdded} exact merged-PR asset retirement attestations.`);
+  });
+
   registerAppTool(server, "deep_scan_runtime_lineage", {
     title: "Deep scan runtime asset lineage",
     description: "Read-only analysis of ownership, consumers, retention, expiry, source revision, and recovery evidence for the selected project and environment. It never deletes or relabels assets.",
@@ -119,6 +137,24 @@ export function createRuntimeAssetServer() {
   }, async (input) => {
     const { report, dashboard } = runDeepScan(input);
     return toolResult({ lineage: report, dashboard }, `Read-only lineage scan inspected ${report.scannedCount} assets and found ${report.expiringCount} expiring assets.`);
+  });
+
+  registerAppTool(server, "build_unified_asset_table", {
+    title: "Build unified runtime asset table",
+    description: "Read local, Production, and Staging inventories and correlate them with a GitHub revision/PR authority report. This is read-only and never marks assets disposable by name alone.",
+    inputSchema: {
+      project: z.string().min(3).max(128),
+      sources: z.array(z.enum(["local", "production", "staging"])).min(1).max(3).optional(),
+      authorityReportPath: z.string().min(3).max(1024).optional(),
+      outputPath: z.string().min(3).max(1024).optional(),
+      coolingHours: z.number().int().min(1).max(720).optional(),
+    },
+    outputSchema: { table: z.record(z.string(), z.unknown()) },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } },
+  }, async (input) => {
+    const table = createUnifiedAssetTable(input);
+    return toolResult({ table }, `Unified asset table contains ${table.summary.assetCount} exact assets and ${table.summary.candidateCount} cleanup candidates.`);
   });
 
   registerAppTool(server, "execute_cleanup", {
@@ -199,9 +235,17 @@ async function startHttp() {
         sendJson(response, 200, { reconciliation: importPathReconciliation(await readBody(request)) });
         return;
       }
+      if (request.method === "POST" && url.pathname === "/api/unified-reconciliation-import") {
+        sendJson(response, 200, { reconciliation: importUnifiedReconciliation(await readBody(request)) });
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/api/deep-scan") {
         const { report, dashboard } = runDeepScan(await readBody(request));
         sendJson(response, 200, { lineage: report, dashboard });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/unified-asset-table") {
+        sendJson(response, 200, { table: createUnifiedAssetTable(await readBody(request)) });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/cleanup-execute") {

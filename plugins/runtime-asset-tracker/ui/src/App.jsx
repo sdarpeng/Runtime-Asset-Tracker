@@ -105,7 +105,7 @@ function createBridge() {
     window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
   });
   const ready = request("ui/initialize", {
-    appInfo: { name: "runtime-asset-dashboard", version: "0.3.3" },
+    appInfo: { name: "runtime-asset-dashboard", version: "0.4.0" },
     appCapabilities: {},
     protocolVersion: "2026-01-26",
   }).then(() => window.parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized", params: {} }, "*"));

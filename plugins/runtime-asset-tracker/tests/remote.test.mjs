@@ -185,13 +185,22 @@ describe("remote read-only adapters", () => {
     assert.match(script, /inspect\("image", identifier\) is None/);
     assert.match(script, /com\.codex\.runtime\./);
     assert.doesNotMatch(script, /system.+prune|image.+prune|volume.+prune|\["image", "rm", "--force"|\["volume", "rm", "--force"/i);
-    const encodedPayload = script.match(/items = json\.loads\(base64\.b64decode\("([A-Za-z0-9+/=]+)"\)\)/)?.[1];
+    const encodedPayload = script.match(/payload = json\.loads\(base64\.b64decode\("([A-Za-z0-9+/=]+)"\)\)/)?.[1];
     assert.ok(encodedPayload);
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64").toString("utf8"));
-    assert.deepEqual(payload[0].tags, ["example/api:retired"]);
-    assert.equal(payload[0].retirementEvidence.reportSha256, "b".repeat(64));
-    assert.deepEqual(payload[0].retirementEvidence.approvedTags, ["example/api:retired"]);
-    assert.equal(payload[0].retirementEvidence.revision, "a".repeat(40));
+    assert.deepEqual(payload.items[0].tags, ["example/api:retired"]);
+    assert.equal(payload.items[0].retirementEvidence.reportSha256, "b".repeat(64));
+    assert.deepEqual(payload.items[0].retirementEvidence.approvedTags, ["example/api:retired"]);
+    assert.equal(payload.items[0].retirementEvidence.revision, "a".repeat(40));
+  });
+
+  it("removes an exact merged-PR container without deleting its volumes and gates managed paths", () => {
+    const script = awsDockerCleanupScript([{ type: "container", id: "a".repeat(64), project: "owner/cms", retirementEvidence: { reportSha256: "b".repeat(64), assetType: "container", expectedName: "cms-pr28-api", expectedState: "running", expectedImageId: `sha256:${"c".repeat(64)}`, expectedComposeProject: "cms-pr28", expectedMounts: [], preserveVolumes: true, stopBeforeRemoval: true, lifecycle: { state: "MERGED", coolingComplete: true } } }], { managedPaths: [{ path: "/home/ec2-user/apps/cms-evals" }], activeLink: "/home/ec2-user/apps/cms" });
+    assert.match(script, /\["stop", "--time", "30", identifier\]/);
+    assert.match(script, /\["container", "rm", identifier\]/);
+    assert.doesNotMatch(script, /container", "rm", "-v"|container", "rm", "--volumes"/);
+    assert.match(script, /metadata_fingerprint/);
+    assert.match(script, /path_is_referenced/);
   });
 
   it("drops Docker pseudo-tags whose repository or tag is none", () => {

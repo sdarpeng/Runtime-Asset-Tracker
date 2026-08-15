@@ -173,11 +173,44 @@ function normalizedTags(tags) {
 }
 
 export function validateRemoteRetirementApproval(requested, current, sourceConfig = {}) {
-  if (!requested || !current || requested.type !== "image" || current.type !== "image" || requested.id !== current.id) return false;
+  if (!requested || !current || requested.type !== current.type || requested.id !== current.id) return false;
   if (String(requested.project || "") !== String(sourceConfig.projectId || requested.project || "")) return false;
-  if ((current.lineage?.consumers || []).length > 0) return false;
   const evidence = requested.retirementEvidence;
   if (!/^[0-9a-f]{64}$/i.test(String(evidence?.reportSha256 || ""))) return false;
+  if (evidence?.lifecycle && (evidence.lifecycle.state !== "MERGED" || evidence.lifecycle.coolingComplete !== true)) return false;
+  if (requested.type === "container") {
+    const normalizedMounts = (mounts) => (mounts || []).map((mount) => ({
+      type: String(mount?.type || ""), name: String(mount?.name || ""), source: String(mount?.source || ""), destination: String(mount?.destination || ""),
+    })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+    const expectedState = String(evidence?.expectedState || "");
+    const currentState = String(current.status || "");
+    const stateMatches = expectedState === currentState || (expectedState === "running" && currentState === "exited");
+    return evidence?.assetType === "container"
+      && evidence?.preserveVolumes === true
+      && stateMatches
+      && current.name === evidence.expectedName
+      && current.lineage?.imageId === evidence.expectedImageId
+      && current.lineage?.composeProject === evidence.expectedComposeProject
+      && JSON.stringify(normalizedMounts(current.lineage?.mounts)) === JSON.stringify(normalizedMounts(evidence.expectedMounts));
+  }
+  if (["host_artifact", "worktree"].includes(requested.type)) {
+    const managedRoots = [...(sourceConfig.managedPaths || []).map((item) => String(item.path || "")), String(sourceConfig.releaseRoot || "")].filter(Boolean);
+    const root = String(evidence?.managedRoot || "").replace(/\/+$/, "");
+    const path = String(current.id || "").replace(/\/+$/, "");
+    return evidence?.assetType === requested.type
+      && managedRoots.includes(root)
+      && path.startsWith(`${root}/`)
+      && !(current.lineage?.consumers || []).length
+      && Number(current.sizeBytes || 0) === Number(evidence.expectedSizeBytes || 0)
+      && String(current.lineage?.fingerprint || "") === String(evidence.fingerprint || "");
+  }
+  if (requested.type === "volume") {
+    return evidence?.assetType === "volume"
+      && Number(evidence.expectedReferences) === 0
+      && !(current.lineage?.consumers || []).length
+      && Number(current.sizeBytes || 0) === Number(evidence.expectedSizeBytes || 0);
+  }
+  if (requested.type !== "image" || (current.lineage?.consumers || []).length > 0) return false;
   if (!/^[0-9a-f]{40}$/i.test(String(evidence?.revision || ""))) return false;
   if (String(current.lineage?.revision || "").toLowerCase() !== String(evidence.revision).toLowerCase()) return false;
   const liveTags = normalizedTags(current.lineage?.tags);
@@ -201,18 +234,23 @@ export function buildPostCleanupVerification(before, after, results = []) {
     .map((asset) => [asset.id, asset.name]));
   const beforeActive = activeContainers(before);
   const afterActive = activeContainers(after);
-  const missingActiveContainers = [...beforeActive].filter(([id]) => !afterActive.has(id)).map(([id, name]) => ({ id, name }));
+  const intentionallyRemovedContainerIds = new Set(results.filter((item) => item.status === "removed" && item.type === "container").map((item) => item.id));
+  const missingActiveContainers = [...beforeActive].filter(([id]) => !afterActive.has(id) && !intentionallyRemovedContainerIds.has(id)).map(([id, name]) => ({ id, name }));
+  const remainingContainerIds = new Set((after?.assets || []).filter((asset) => asset.type === "container").map((asset) => asset.id));
+  const removedContainersStillPresent = [...intentionallyRemovedContainerIds].filter((id) => remainingContainerIds.has(id));
   const remainingImageIds = new Set((after?.assets || []).filter((asset) => asset.type === "image").map((asset) => asset.id));
   const removedIds = results.filter((item) => item.status === "removed" && item.type === "image").map((item) => item.id);
   const removedImagesStillPresent = removedIds.filter((id) => remainingImageIds.has(id));
   const freeBytesBefore = Number(before?.disk?.freeBytes || 0);
   const freeBytesAfter = Number(after?.disk?.freeBytes || 0);
   return {
-    status: missingActiveContainers.length === 0 && removedImagesStillPresent.length === 0 ? "pass" : "fail",
+    status: missingActiveContainers.length === 0 && removedContainersStillPresent.length === 0 && removedImagesStillPresent.length === 0 ? "pass" : "fail",
     checkedAt: new Date().toISOString(),
     activeContainerCountBefore: beforeActive.size,
     activeContainerCountAfter: afterActive.size,
     missingActiveContainers,
+    intentionallyRemovedContainerIds: [...intentionallyRemovedContainerIds],
+    removedContainersStillPresent,
     removedImagesStillPresent,
     freeBytesBefore,
     freeBytesAfter,
@@ -280,6 +318,24 @@ def disk_usage_bytes(path):
     if code != 0: return 0
     try: return int(value.split()[0])
     except Exception: return 0
+
+def metadata_fingerprint(path, size_bytes):
+    try:
+        stat = os.lstat(path)
+        value = "%s\0%s\0%s\0%s\0%s" % (os.path.realpath(path), int(size_bytes), int(stat.st_mtime_ns), int(stat.st_mode), int(stat.st_ino))
+        return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+    except Exception: return ""
+
+def bind_consumers(path):
+    target = os.path.realpath(path).rstrip("/")
+    consumers = []
+    for item in container_details:
+        for mount in (item.get("Mounts") or []):
+            if mount.get("Type") != "bind" or not mount.get("Source"): continue
+            source = os.path.realpath(str(mount.get("Source"))).rstrip("/")
+            if source == target or source.startswith(target + "/") or target.startswith(source + "/"):
+                consumers.append({"id":item.get("Id"),"name":str(item.get("Name") or "").lstrip("/"),"state":(item.get("State") or {}).get("Status") or "unknown","source":source,"destination":mount.get("Destination")})
+    return consumers
 
 def safe_labels(labels):
     return {k:v for k,v in (labels or {}).items() if k.startswith(PREFIX) or k.startswith("com.docker.compose.") or k in ["org.opencontainers.image.revision", "org.opencontainers.image.source"]}
@@ -494,7 +550,9 @@ if os.path.isdir(release_root):
     for entry in release_entries:
         if not entry.is_dir(follow_symlinks=False): continue
         active = os.path.realpath(entry.path) == active_release
-        assets.append({"id":entry.path,"name":entry.name,"type":"worktree","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"active-release" if active else "retained-release","classification":"active" if active else "retained","sizeBytes":disk_usage_bytes(entry.path),"createdAt":datetime.datetime.fromtimestamp(entry.stat().st_mtime, datetime.timezone.utc).isoformat(),"labels":{},"lineage":{"path":entry.path,"activeLink":active_link},"reason":"当前活动 release" if active else "保留的 release"})
+        size_bytes = disk_usage_bytes(entry.path)
+        consumers = bind_consumers(entry.path)
+        assets.append({"id":entry.path,"name":entry.name,"type":"worktree","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"active-release" if active else "retained-release","classification":"active" if active else "retained","sizeBytes":size_bytes,"createdAt":datetime.datetime.fromtimestamp(entry.stat().st_mtime, datetime.timezone.utc).isoformat(),"labels":{},"lineage":{"path":entry.path,"activeLink":active_link,"managedRoot":release_root,"fingerprint":metadata_fingerprint(entry.path,size_bytes),"consumers":consumers},"reason":"当前活动 release" if active else "保留的 release"})
 
 for managed in CONTEXT.get("managedPaths") or []:
     root = str(managed.get("path") or "")
@@ -504,7 +562,9 @@ for managed in CONTEXT.get("managedPaths") or []:
     for entry in managed_entries:
         if entry.is_symlink(): continue
         kind = str(managed.get("kind") or "managed-host-artifact")
-        assets.append({"id":entry.path,"name":entry.name,"type":"host_artifact","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"retained-host-artifact","classification":"retained","sizeBytes":disk_usage_bytes(entry.path) if entry.is_dir(follow_symlinks=False) else entry.stat(follow_symlinks=False).st_size,"createdAt":datetime.datetime.fromtimestamp(entry.stat(follow_symlinks=False).st_mtime,datetime.timezone.utc).isoformat(),"labels":{},"lineage":{"path":entry.path,"managedRoot":root,"artifactKind":kind,"consumers":[]},"reason":"Managed host artifact awaiting exact retirement evidence"})
+        size_bytes = disk_usage_bytes(entry.path) if entry.is_dir(follow_symlinks=False) else entry.stat(follow_symlinks=False).st_size
+        consumers = bind_consumers(entry.path)
+        assets.append({"id":entry.path,"name":entry.name,"type":"host_artifact","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"retained-host-artifact","classification":"retained","sizeBytes":size_bytes,"createdAt":datetime.datetime.fromtimestamp(entry.stat(follow_symlinks=False).st_mtime,datetime.timezone.utc).isoformat(),"labels":{},"lineage":{"path":entry.path,"managedRoot":root,"artifactKind":kind,"fingerprint":metadata_fingerprint(entry.path,size_bytes),"consumers":consumers},"reason":"Managed host artifact awaiting exact retirement evidence"})
 
 events = []
 for ledger_path in ["/var/lib/runtime-asset-tracker/events.jsonl", os.path.expanduser("~/.local/state/runtime-asset-tracker/events.jsonl")]:
@@ -817,8 +877,14 @@ else
 fi`;
 }
 
-export function awsDockerCleanupScript(allowlist) {
-  const payload = Buffer.from(JSON.stringify(allowlist.map((item) => ({
+export function awsDockerCleanupScript(allowlist, sourceConfig = {}) {
+  const payload = Buffer.from(JSON.stringify({
+    safety: {
+      managedRoots: [...(sourceConfig.managedPaths || []).map((item) => String(item.path || "")), String(sourceConfig.releaseRoot || "")].filter(Boolean),
+      protectedPaths: [...(sourceConfig.protectedPaths || []).map(String), String(sourceConfig.activeLink || "")].filter(Boolean),
+      activeLink: String(sourceConfig.activeLink || ""),
+    },
+    items: allowlist.map((item) => ({
     type: item.type,
     id: item.id,
     name: item.name,
@@ -830,11 +896,27 @@ export function awsDockerCleanupScript(allowlist) {
       group: String(item.retirementEvidence.group || ""),
       approvedTags: Array.isArray(item.retirementEvidence.approvedTags) ? item.retirementEvidence.approvedTags.map(String) : [],
       revision: String(item.retirementEvidence.revision || ""),
+      assetType: String(item.retirementEvidence.assetType || ""),
+      expectedSizeBytes: Number(item.retirementEvidence.expectedSizeBytes || 0),
+      expectedName: String(item.retirementEvidence.expectedName || ""),
+      expectedState: String(item.retirementEvidence.expectedState || ""),
+      expectedImageId: String(item.retirementEvidence.expectedImageId || ""),
+      expectedComposeProject: String(item.retirementEvidence.expectedComposeProject || ""),
+      expectedMounts: Array.isArray(item.retirementEvidence.expectedMounts) ? item.retirementEvidence.expectedMounts : [],
+      preserveVolumes: item.retirementEvidence.preserveVolumes === true,
+      stopBeforeRemoval: item.retirementEvidence.stopBeforeRemoval === true,
+      managedRoot: String(item.retirementEvidence.managedRoot || ""),
+      fingerprint: String(item.retirementEvidence.fingerprint || ""),
+      expectedReferences: Number(item.retirementEvidence.expectedReferences || 0),
+      lifecycle: item.retirementEvidence.lifecycle,
     } : undefined,
-  }))), "utf8").toString("base64");
-  return String.raw`import base64, datetime, gzip, json, re, subprocess
+  })),
+  }), "utf8").toString("base64");
+  return String.raw`import base64, datetime, gzip, hashlib, json, os, re, shutil, subprocess
 
-items = json.loads(base64.b64decode("${payload}"))
+payload = json.loads(base64.b64decode("${payload}"))
+items = payload.get("items") or []
+safety = payload.get("safety") or {}
 
 def run(args, timeout=180):
     result = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
@@ -872,6 +954,44 @@ def future_expiry(labels, created_at=None):
         expires = created + datetime.timedelta(days=ttl_days) if created and ttl_days > 0 else None
     return bool(expires and expires > datetime.datetime.now(datetime.timezone.utc))
 
+def normalized_mounts(mounts):
+    return sorted([{"type":str(mount.get("Type") or mount.get("type") or ""),"name":str(mount.get("Name") or mount.get("name") or ""),"source":str(mount.get("Source") or mount.get("source") or ""),"destination":str(mount.get("Destination") or mount.get("destination") or "")} for mount in (mounts or [])], key=lambda item:json.dumps(item,sort_keys=True))
+
+def evidence_valid(evidence, asset_type):
+    lifecycle = evidence.get("lifecycle") or {}
+    lifecycle_ok = not lifecycle or (lifecycle.get("state") == "MERGED" and lifecycle.get("coolingComplete") is True)
+    return bool(re.match(r"^[0-9a-f]{64}$", str(evidence.get("reportSha256") or ""), re.I) and evidence.get("assetType") == asset_type and lifecycle_ok)
+
+def disk_usage(path):
+    code, out, _ = run(["du", "-sb", "--", path], timeout=180)
+    if code != 0: code, out, _ = run(["sudo", "-n", "du", "-sb", "--", path], timeout=180)
+    try: return int(out.split()[0]) if code == 0 else -1
+    except Exception: return -1
+
+def metadata_fingerprint(path, size_bytes):
+    try:
+        stat = os.lstat(path)
+        value = "%s\0%s\0%s\0%s\0%s" % (os.path.realpath(path), int(size_bytes), int(stat.st_mtime_ns), int(stat.st_mode), int(stat.st_ino))
+        return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+    except Exception: return ""
+
+def path_is_referenced(path):
+    target = os.path.realpath(path).rstrip("/")
+    code, ids, _ = run(docker + ["ps", "-aq"])
+    if code != 0: return True
+    identifiers = ids.split()
+    for start in range(0, len(identifiers), 30):
+        code, out, _ = run(docker + ["container", "inspect"] + identifiers[start:start+30])
+        if code != 0: return True
+        try: details = json.loads(out or "[]")
+        except Exception: return True
+        for detail in details:
+            for mount in detail.get("Mounts") or []:
+                if mount.get("Type") != "bind" or not mount.get("Source"): continue
+                source = os.path.realpath(str(mount.get("Source"))).rstrip("/")
+                if source == target or source.startswith(target + "/") or target.startswith(source + "/"): return True
+    return False
+
 results = []
 for item in items:
     kind = item.get("type")
@@ -882,6 +1002,48 @@ for item in items:
         code, _, error = run(docker + ["builder", "prune", "--all", "--force"])
         results.append({**item, "status":"removed" if code == 0 else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if code == 0 else 0, "reason":"仅清理未使用 Build Cache" if code == 0 else error[-300:]})
         continue
+    evidence = item.get("retirementEvidence") or {}
+    if kind == "container":
+        detail = inspect("container", identifier)
+        if detail and evidence_valid(evidence, "container"):
+            state = str((detail.get("State") or {}).get("Status") or "")
+            expected_state = str(evidence.get("expectedState") or "")
+            state_matches = state == expected_state or (expected_state == "running" and state == "exited")
+            labels = (detail.get("Config") or {}).get("Labels") or {}
+            exact = str(detail.get("Name") or "").lstrip("/") == str(evidence.get("expectedName") or "") and detail.get("Image") == evidence.get("expectedImageId") and labels.get("com.docker.compose.project") == evidence.get("expectedComposeProject") and normalized_mounts(detail.get("Mounts")) == normalized_mounts(evidence.get("expectedMounts"))
+            safe = bool(state_matches and exact and evidence.get("preserveVolumes") is True and (state != "running" or evidence.get("stopBeforeRemoval") is True))
+        if not safe:
+            results.append({**item,"status":"skipped","reclaimedBytes":0,"reason":"Container identity, state, image, Compose project, mount set, or preserve-volumes contract drifted."})
+            continue
+        if state == "running":
+            code, _, error = run(docker + ["stop", "--time", "30", identifier], timeout=60)
+            if code != 0:
+                results.append({**item,"status":"failed","reclaimedBytes":0,"reason":error[-300:]})
+                continue
+        code, _, error = run(docker + ["container", "rm", identifier])
+        removed = code == 0 and inspect("container", identifier) is None
+        results.append({**item,"status":"removed" if removed else "failed","reclaimedBytes":item.get("sizeBytes",0) if removed else 0,"preservedVolumes":True,"reason":"Exact merged-PR container removed without -v." if removed else error[-300:]})
+        continue
+    if kind in ["host_artifact", "worktree"]:
+        path = identifier.rstrip("/")
+        root = str(evidence.get("managedRoot") or "").rstrip("/")
+        managed_roots = [str(value).rstrip("/") for value in (safety.get("managedRoots") or [])]
+        protected_paths = [os.path.realpath(str(value)) for value in (safety.get("protectedPaths") or []) if value]
+        active_link = str(safety.get("activeLink") or "")
+        active_target = os.path.realpath(active_link) if active_link and os.path.exists(active_link) else ""
+        size = disk_usage(path) if os.path.exists(path) else -1
+        expected_size = evidence.get("expectedSizeBytes")
+        safe = bool(evidence_valid(evidence, kind) and root in managed_roots and path.startswith(root + "/") and not os.path.islink(path) and os.path.realpath(path) not in protected_paths and os.path.realpath(path) != active_target and expected_size is not None and size == int(expected_size) and metadata_fingerprint(path,size) == evidence.get("fingerprint") and not path_is_referenced(path))
+        if not safe:
+            results.append({**item,"status":"skipped","reclaimedBytes":0,"reason":"Remote path root, active/protected state, bytes, fingerprint, or bind-mount references drifted."})
+            continue
+        try:
+            shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+            removed = not os.path.lexists(path)
+            results.append({**item,"status":"removed" if removed else "failed","reclaimedBytes":size if removed else 0,"reason":"Exact managed path removed after live revalidation." if removed else "Path still exists after removal."})
+        except Exception as error:
+            results.append({**item,"status":"failed","reclaimedBytes":0,"reason":str(error)[-300:]})
+        continue
     if kind == "image":
         detail = inspect("image", identifier)
         if detail:
@@ -891,7 +1053,6 @@ for item in items:
             digests = detail.get("RepoDigests") or []
             dangling = not tags and not digests
             protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
-            evidence = item.get("retirementEvidence") or {}
             approved_tags = sorted(set(str(tag) for tag in (evidence.get("approvedTags") or []) if tag and not str(tag).startswith("<none>")))
             requested_tags = sorted(set(str(tag) for tag in (item.get("tags") or []) if tag and not str(tag).startswith("<none>")))
             revision = str(labels.get("org.opencontainers.image.revision") or label(labels, "git-sha") or "").lower()
@@ -911,7 +1072,10 @@ for item in items:
             code, refs, _ = run(docker + ["ps", "-aq", "--filter", "volume=" + identifier])
             protected_name = re.search(r"postgres|mysql|maria|redis|valkey|upload|media|assets?|database|db[-_]?data|backup", identifier, re.I)
             protected = bool(protected_name) or label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
-            safe = code == 0 and not refs and not protected and not future_expiry(labels, detail.get("CreatedAt")) and label(labels, "disposable") == "true"
+            expected_references = evidence.get("expectedReferences")
+            expected_size = evidence.get("expectedSizeBytes")
+            attested = evidence_valid(evidence, "volume") and expected_references is not None and int(expected_references) == 0 and expected_size is not None and int(expected_size) == int(item.get("sizeBytes") or -2)
+            safe = code == 0 and not refs and not protected and not future_expiry(labels, detail.get("CreatedAt")) and (label(labels, "disposable") == "true" or attested)
             reason = "未被任何容器挂载且明确 disposable 的卷"
     if not safe:
         results.append({**item, "status":"skipped", "reclaimedBytes":0, "reason":"执行前复核不再满足安全清理条件"})
@@ -981,26 +1145,27 @@ function runSsmMutation(sourceConfig, script, comment) {
 }
 
 function executeAwsDockerCleanup(sourceConfig, allowlist) {
-  const snapshot = collectAwsSnapshot(sourceConfig);
+  const fullSourceConfig = { ...sourceConfig, includeAllAssets: true };
+  const snapshot = collectAwsSnapshot(fullSourceConfig);
   const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
   const approved = [];
   for (const requested of allowlist) {
     const current = currentAssets.get(`${requested.type}:${requested.id}`);
-    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, sourceConfig);
+    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, fullSourceConfig);
     if (!current || !safe) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前快照复核不再满足安全清理条件" });
     else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
   if (!approved.length) return { completedAt: new Date().toISOString(), results: skipped };
-  const script = awsDockerCleanupScript(approved);
+  const script = awsDockerCleanupScript(approved, fullSourceConfig);
   const encoded = gzipSync(Buffer.from(script, "utf8"), { level: 9 }).toString("base64");
-  const invocation = runSsmMutation(sourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, "Runtime Asset Tracker exact safe Docker cleanup");
+  const invocation = runSsmMutation(fullSourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, "Runtime Asset Tracker exact safe Docker cleanup");
   const match = invocation.output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
   if (!match) throw new Error("远程清理没有返回可验证结果");
   const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
   remoteCache.clear();
   const results = [...skipped, ...(payload.results || [])];
-  const after = collectAwsSnapshot(sourceConfig);
+  const after = collectAwsSnapshot(fullSourceConfig);
   return { completedAt: new Date().toISOString(), commandId: invocation.commandId, results, verification: buildPostCleanupVerification(snapshot, after, results) };
 }
 
@@ -1019,24 +1184,25 @@ function runSshMutation(sourceConfig, script) {
 }
 
 function executeSshDockerCleanup(sourceConfig, allowlist) {
-  const snapshot = collectSshSnapshot(sourceConfig);
+  const fullSourceConfig = { ...sourceConfig, includeAllAssets: true };
+  const snapshot = collectSshSnapshot(fullSourceConfig);
   const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
   const approved = [];
   for (const requested of allowlist) {
     const current = currentAssets.get(`${requested.type}:${requested.id}`);
-    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, sourceConfig);
+    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, fullSourceConfig);
     if (!current || !safe) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前快照复核不再满足安全清理条件" });
     else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
   if (!approved.length) return { completedAt: new Date().toISOString(), results: skipped };
-  const output = runSshMutation(sourceConfig, awsDockerCleanupScript(approved));
+  const output = runSshMutation(fullSourceConfig, awsDockerCleanupScript(approved, fullSourceConfig));
   const match = output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
   if (!match) throw new Error("远程清理没有返回可验证结果");
   const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
   remoteCache.clear();
   const results = [...skipped, ...(payload.results || [])];
-  const after = collectSshSnapshot(sourceConfig);
+  const after = collectSshSnapshot(fullSourceConfig);
   return { completedAt: new Date().toISOString(), results, verification: buildPostCleanupVerification(snapshot, after, results) };
 }
 

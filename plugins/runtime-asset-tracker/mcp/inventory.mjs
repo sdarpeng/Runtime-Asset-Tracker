@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { collectRemoteDashboard, executeRemoteCleanup, expiryClassification, resolveExpiry } from "./remote.mjs";
 import { importRetirementReconciliation, retirementAttestations } from "./reconciliation.mjs";
 import { discoverWorktreeAssets, executePathAssetCleanup, importPathRetirementReconciliation } from "./path-assets.mjs";
+import { importUnifiedRetirementReconciliation } from "./lifecycle-reconciliation.mjs";
+import { buildUnifiedAssetTable, loadGithubAuthority, writeUnifiedAssetTable } from "./lifecycle-table.mjs";
 
 const RUNTIME_PREFIX = "com.codex.runtime.";
 const previewStore = new Map();
@@ -545,6 +547,12 @@ export function importPathReconciliation(input) {
   return result;
 }
 
+export function importUnifiedReconciliation(input) {
+  const result = importUnifiedRetirementReconciliation(input);
+  dashboardCache.clear();
+  return result;
+}
+
 function loadConfig() {
   const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join(stateRoot(), "dashboard-config.json");
   if (!existsSync(path)) return { sources: [] };
@@ -653,13 +661,30 @@ function normalizedTags(tags) {
   return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.includes("<none>")))].sort();
 }
 
+export function createUnifiedAssetTable({ project, sources = ["local", "production", "staging"], authorityReportPath, outputPath, coolingHours = 24 } = {}) {
+  const selectedSources = [...new Set(sources)].filter((source) => ["local", "production", "staging"].includes(source));
+  if (!project || project === "all") throw new Error("A registered project is required for a unified asset table.");
+  if (!selectedSources.length) throw new Error("At least one local, production, or staging source is required.");
+  const dashboards = selectedSources.map((source) => ({
+    source,
+    dashboard: collectDashboard({ scope: "project", source, project, includeAllAssets: true }),
+  }));
+  const table = buildUnifiedAssetTable({
+    project: resolveProjectId(project, registeredProjects(loadConfig()), loadConfig()),
+    dashboards,
+    githubAuthority: loadGithubAuthority(authorityReportPath),
+    coolingHours: Math.max(1, Math.min(720, Number(coolingHours) || 24)),
+  });
+  const writtenTo = writeUnifiedAssetTable(table, outputPath);
+  return writtenTo ? { ...table, writtenTo } : table;
+}
+
 export function applyRemoteRetirementGovernance(dashboard, governance) {
   if (!dashboard?.remoteSnapshotAvailable || dashboard.selectedSource === "github") return dashboard;
   const project = String(dashboard.selectedProject || "");
   const environment = String(dashboard.selectedSource || "");
   const assets = (dashboard.assets || []).map((asset) => {
-    if (asset.type !== "image") return asset;
-    const key = `image:${asset.id}`;
+    const key = `${asset.type}:${asset.id}`;
     const protection = governance?.protections?.get(key);
     const retirement = governance?.retirements?.get(key);
     const consumers = Array.isArray(asset.lineage?.consumers) ? asset.lineage.consumers : [];
@@ -674,6 +699,31 @@ export function applyRemoteRetirementGovernance(dashboard, governance) {
       };
     }
     if (!retirement || retirement.project !== project || retirement.environment !== environment) return asset;
+    if (asset.type === "container") {
+      const expectedMounts = JSON.stringify(retirement.expectedMounts || []);
+      const liveMounts = JSON.stringify((asset.lineage?.mounts || []).map((mount) => ({
+        type: String(mount?.type || ""), name: String(mount?.name || ""), source: String(mount?.source || ""), destination: String(mount?.destination || ""),
+      })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))));
+      const identityMatches = asset.name === retirement.expectedName
+        && asset.lineage?.imageId === retirement.expectedImageId
+        && asset.lineage?.composeProject === retirement.expectedComposeProject
+        && liveMounts === expectedMounts
+        && retirement.preserveVolumes === true;
+      if (!identityMatches) return { ...asset, classification: "retained", retirementBlocked: true, lineage: { ...asset.lineage, retirement }, reason: "Container retirement is blocked because its exact name, image, Compose project, mount set, or volume-preservation contract drifted." };
+      return { ...asset, classification: "reclaimable", labels: { ...(asset.labels || {}), ...retirement.labels }, lineage: { ...asset.lineage, retirement }, reason: retirement.stopBeforeRemoval ? "Merged-PR container has exact retirement evidence; execution may stop it before removal and must preserve every volume." : "Stopped merged-PR container has exact retirement evidence and all volumes must be preserved." };
+    }
+    if (["host_artifact", "worktree"].includes(asset.type)) {
+      const fingerprintMatches = String(asset.lineage?.fingerprint || "") === retirement.fingerprint;
+      const rootMatches = String(asset.lineage?.managedRoot || "") === retirement.managedRoot;
+      const sizeMatches = Number(asset.sizeBytes || 0) === Number(retirement.expectedSizeBytes || 0);
+      if (consumers.length || !fingerprintMatches || !rootMatches || !sizeMatches) return { ...asset, classification: consumers.length ? "active" : "retained", retirementBlocked: true, lineage: { ...asset.lineage, retirement }, reason: consumers.length ? "Remote path retirement is blocked by a live or stopped container bind mount." : "Remote path retirement is blocked because its managed root, byte count, or metadata fingerprint drifted." };
+      return { ...asset, classification: "reclaimable", labels: { ...(asset.labels || {}), ...retirement.labels }, lineage: { ...asset.lineage, retirement }, reason: "Merged-PR remote path has exact retirement evidence, zero bind-mount consumers, matching bytes, and matching metadata fingerprint." };
+    }
+    if (asset.type === "volume") {
+      if (consumers.length || Number(retirement.expectedReferences) !== 0 || Number(asset.sizeBytes || 0) !== Number(retirement.expectedSizeBytes || 0)) return { ...asset, classification: consumers.length ? "active" : "review", retirementBlocked: true, lineage: { ...asset.lineage, retirement }, reason: "Volume retirement is blocked because references or expected bytes drifted." };
+      return { ...asset, classification: "reclaimable", labels: { ...(asset.labels || {}), ...retirement.labels }, lineage: { ...asset.lineage, retirement }, reason: "Exact retirement evidence confirms zero references and matching bytes; recovery evidence remains bound." };
+    }
+    if (asset.type !== "image") return asset;
     const liveTags = normalizedTags(asset.lineage?.tags);
     const approvedTags = normalizedTags(retirement.approvedTags);
     const tagSetMatches = liveTags.length === approvedTags.length && liveTags.every((tag, index) => tag === approvedTags[index]);
@@ -956,7 +1006,7 @@ export function createCleanupPreview({ source = "local", project = "all", types 
     if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
     return selectedSource === "github"
       ? ["artifact", "actions_cache"].includes(asset.type)
-      : ["image", "volume", "cache", "worktree", "worktree_residual", "host_artifact"].includes(asset.type);
+      : ["container", "image", "volume", "cache", "worktree", "host_artifact"].includes(asset.type);
   }).map((asset) => ({
     type: asset.type,
     id: asset.id,
@@ -972,6 +1022,19 @@ export function createCleanupPreview({ source = "local", project = "all", types 
       group: asset.lineage.retirement.group,
       approvedTags: normalizedTags(asset.lineage.retirement.approvedTags),
       revision: asset.lineage.retirement.revision,
+      assetType: asset.lineage.retirement.assetType,
+      expectedSizeBytes: asset.lineage.retirement.expectedSizeBytes,
+      expectedName: asset.lineage.retirement.expectedName,
+      expectedState: asset.lineage.retirement.expectedState,
+      expectedImageId: asset.lineage.retirement.expectedImageId,
+      expectedComposeProject: asset.lineage.retirement.expectedComposeProject,
+      expectedMounts: asset.lineage.retirement.expectedMounts,
+      preserveVolumes: asset.lineage.retirement.preserveVolumes,
+      stopBeforeRemoval: asset.lineage.retirement.stopBeforeRemoval,
+      managedRoot: asset.lineage.retirement.managedRoot,
+      fingerprint: asset.lineage.retirement.fingerprint,
+      expectedReferences: asset.lineage.retirement.expectedReferences,
+      lifecycle: asset.lineage.retirement.lifecycle,
     } : undefined,
     remoteKind: asset.remoteKind,
   }));

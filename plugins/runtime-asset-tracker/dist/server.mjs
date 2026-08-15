@@ -18086,7 +18086,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve4.call(this, root, ref);
+      let _sch = resolve6.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -18113,7 +18113,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve4(root, ref) {
+    function resolve6(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -18744,7 +18744,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve4(baseURI, relativeURI, options) {
+    function resolve6(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
       const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
@@ -19028,7 +19028,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve4,
+      resolve: resolve6,
       resolveComponent,
       equal,
       serialize,
@@ -22123,8 +22123,8 @@ var require_content_type = __commonJS({
 
 // mcp/server.mjs
 import { createServer } from "node:http";
-import { readFileSync as readFileSync4 } from "node:fs";
-import { dirname as dirname4, join as join4 } from "node:path";
+import { readFileSync as readFileSync6 } from "node:fs";
+import { dirname as dirname5, join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // node_modules/zod/v3/helpers/util.js
@@ -29586,7 +29586,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
+        await new Promise((resolve6) => setTimeout(resolve6, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error51) {
@@ -29603,7 +29603,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve6, reject) => {
       const earlyReject = (error51) => {
         reject(error51);
       };
@@ -29681,7 +29681,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve4(parseResult.data);
+            resolve6(parseResult.data);
           }
         } catch (error51) {
           reject(error51);
@@ -29942,12 +29942,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve6, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve4, interval);
+      const timeoutId = setTimeout(resolve6, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -31042,7 +31042,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
+      await new Promise((resolve6) => setTimeout(resolve6, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -31706,12 +31706,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve4) => {
+    return new Promise((resolve6) => {
       const json3 = serializeMessage(message);
       if (this._stdout.write(json3)) {
-        resolve4();
+        resolve6();
       } else {
-        this._stdout.once("drain", resolve4);
+        this._stdout.once("drain", resolve6);
       }
     });
   }
@@ -32000,7 +32000,7 @@ var readBodyDirect = (request) => {
     request[bodyBufferKey] = buffered;
     return Promise.resolve(buffered);
   }
-  const promise2 = new Promise((resolve4, reject) => {
+  const promise2 = new Promise((resolve6, reject) => {
     const chunks2 = [];
     let settled = false;
     const finish = (callback) => {
@@ -32018,7 +32018,7 @@ var readBodyDirect = (request) => {
         else if (recovered === void 0) reject(error51 ?? normalizeAbortError(request, incoming));
         else {
           request[bodyBufferKey] = recovered;
-          resolve4(recovered);
+          resolve6(recovered);
         }
       });
       return true;
@@ -32030,7 +32030,7 @@ var readBodyDirect = (request) => {
       finish(() => {
         const buffer = chunks2.length === 1 ? chunks2[0] : Buffer.concat(chunks2);
         request[bodyBufferKey] = buffer;
-        resolve4(buffer);
+        resolve6(buffer);
       });
     };
     const onError = (error51) => {
@@ -32552,7 +32552,7 @@ var responseViaResponseObject = async (res, outgoing, options = {}) => {
         });
         if (!chunk) {
           if (i === 1) {
-            await new Promise((resolve4) => setTimeout(resolve4));
+            await new Promise((resolve6) => setTimeout(resolve6));
             maxReadCount = 3;
             continue;
           }
@@ -33232,9 +33232,9 @@ data:
       const initRequest = messages.find((m2) => isInitializeRequest(m2));
       const clientProtocolVersion = initRequest ? initRequest.params.protocolVersion : req.headers.get("mcp-protocol-version") ?? DEFAULT_NEGOTIATED_PROTOCOL_VERSION;
       if (this._enableJsonResponse) {
-        return new Promise((resolve4) => {
+        return new Promise((resolve6) => {
           this._streamMapping.set(streamId, {
-            resolveJson: resolve4,
+            resolveJson: resolve6,
             cleanup: () => {
               this._streamMapping.delete(streamId);
             }
@@ -33719,10 +33719,10 @@ function N3(Z, $, J, X, V) {
 
 // mcp/inventory.mjs
 import { execFileSync as execFileSync3 } from "node:child_process";
-import { appendFileSync as appendFileSync3, closeSync, existsSync as existsSync3, mkdirSync as mkdirSync3, openSync, readFileSync as readFileSync3, readSync, statfsSync, statSync, writeFileSync } from "node:fs";
-import { homedir as homedir3, hostname as hostname5, platform as platform3 } from "node:os";
-import { dirname as dirname3, join as join3, parse as parse3, resolve as resolve3 } from "node:path";
-import { randomUUID as randomUUID4 } from "node:crypto";
+import { appendFileSync as appendFileSync4, closeSync, existsSync as existsSync4, mkdirSync as mkdirSync4, openSync, readFileSync as readFileSync5, readSync, statfsSync, statSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { homedir as homedir4, hostname as hostname6, platform as platform4 } from "node:os";
+import { dirname as dirname4, join as join4, parse as parse3, resolve as resolve5 } from "node:path";
+import { randomUUID as randomUUID5 } from "node:crypto";
 
 // mcp/remote.mjs
 import { execFileSync } from "node:child_process";
@@ -33849,11 +33849,33 @@ function normalizedTags(tags) {
   return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.includes("<none>")))].sort();
 }
 function validateRemoteRetirementApproval(requested, current, sourceConfig = {}) {
-  if (!requested || !current || requested.type !== "image" || current.type !== "image" || requested.id !== current.id) return false;
+  if (!requested || !current || requested.type !== current.type || requested.id !== current.id) return false;
   if (String(requested.project || "") !== String(sourceConfig.projectId || requested.project || "")) return false;
-  if ((current.lineage?.consumers || []).length > 0) return false;
   const evidence = requested.retirementEvidence;
   if (!/^[0-9a-f]{64}$/i.test(String(evidence?.reportSha256 || ""))) return false;
+  if (evidence?.lifecycle && (evidence.lifecycle.state !== "MERGED" || evidence.lifecycle.coolingComplete !== true)) return false;
+  if (requested.type === "container") {
+    const normalizedMounts2 = (mounts) => (mounts || []).map((mount) => ({
+      type: String(mount?.type || ""),
+      name: String(mount?.name || ""),
+      source: String(mount?.source || ""),
+      destination: String(mount?.destination || "")
+    })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+    const expectedState = String(evidence?.expectedState || "");
+    const currentState = String(current.status || "");
+    const stateMatches = expectedState === currentState || expectedState === "running" && currentState === "exited";
+    return evidence?.assetType === "container" && evidence?.preserveVolumes === true && stateMatches && current.name === evidence.expectedName && current.lineage?.imageId === evidence.expectedImageId && current.lineage?.composeProject === evidence.expectedComposeProject && JSON.stringify(normalizedMounts2(current.lineage?.mounts)) === JSON.stringify(normalizedMounts2(evidence.expectedMounts));
+  }
+  if (["host_artifact", "worktree"].includes(requested.type)) {
+    const managedRoots = [...(sourceConfig.managedPaths || []).map((item) => String(item.path || "")), String(sourceConfig.releaseRoot || "")].filter(Boolean);
+    const root = String(evidence?.managedRoot || "").replace(/\/+$/, "");
+    const path = String(current.id || "").replace(/\/+$/, "");
+    return evidence?.assetType === requested.type && managedRoots.includes(root) && path.startsWith(`${root}/`) && !(current.lineage?.consumers || []).length && Number(current.sizeBytes || 0) === Number(evidence.expectedSizeBytes || 0) && String(current.lineage?.fingerprint || "") === String(evidence.fingerprint || "");
+  }
+  if (requested.type === "volume") {
+    return evidence?.assetType === "volume" && Number(evidence.expectedReferences) === 0 && !(current.lineage?.consumers || []).length && Number(current.sizeBytes || 0) === Number(evidence.expectedSizeBytes || 0);
+  }
+  if (requested.type !== "image" || (current.lineage?.consumers || []).length > 0) return false;
   if (!/^[0-9a-f]{40}$/i.test(String(evidence?.revision || ""))) return false;
   if (String(current.lineage?.revision || "").toLowerCase() !== String(evidence.revision).toLowerCase()) return false;
   const liveTags = normalizedTags(current.lineage?.tags);
@@ -33865,18 +33887,23 @@ function buildPostCleanupVerification(before, after, results = []) {
   const activeContainers = (snapshot) => new Map((snapshot?.assets || []).filter((asset) => asset.type === "container" && asset.classification === "active").map((asset) => [asset.id, asset.name]));
   const beforeActive = activeContainers(before);
   const afterActive = activeContainers(after);
-  const missingActiveContainers = [...beforeActive].filter(([id]) => !afterActive.has(id)).map(([id, name]) => ({ id, name }));
+  const intentionallyRemovedContainerIds = new Set(results.filter((item) => item.status === "removed" && item.type === "container").map((item) => item.id));
+  const missingActiveContainers = [...beforeActive].filter(([id]) => !afterActive.has(id) && !intentionallyRemovedContainerIds.has(id)).map(([id, name]) => ({ id, name }));
+  const remainingContainerIds = new Set((after?.assets || []).filter((asset) => asset.type === "container").map((asset) => asset.id));
+  const removedContainersStillPresent = [...intentionallyRemovedContainerIds].filter((id) => remainingContainerIds.has(id));
   const remainingImageIds = new Set((after?.assets || []).filter((asset) => asset.type === "image").map((asset) => asset.id));
   const removedIds = results.filter((item) => item.status === "removed" && item.type === "image").map((item) => item.id);
   const removedImagesStillPresent = removedIds.filter((id) => remainingImageIds.has(id));
   const freeBytesBefore = Number(before?.disk?.freeBytes || 0);
   const freeBytesAfter = Number(after?.disk?.freeBytes || 0);
   return {
-    status: missingActiveContainers.length === 0 && removedImagesStillPresent.length === 0 ? "pass" : "fail",
+    status: missingActiveContainers.length === 0 && removedContainersStillPresent.length === 0 && removedImagesStillPresent.length === 0 ? "pass" : "fail",
     checkedAt: (/* @__PURE__ */ new Date()).toISOString(),
     activeContainerCountBefore: beforeActive.size,
     activeContainerCountAfter: afterActive.size,
     missingActiveContainers,
+    intentionallyRemovedContainerIds: [...intentionallyRemovedContainerIds],
+    removedContainersStillPresent,
     removedImagesStillPresent,
     freeBytesBefore,
     freeBytesAfter,
@@ -33943,6 +33970,24 @@ def disk_usage_bytes(path):
     if code != 0: return 0
     try: return int(value.split()[0])
     except Exception: return 0
+
+def metadata_fingerprint(path, size_bytes):
+    try:
+        stat = os.lstat(path)
+        value = "%s\0%s\0%s\0%s\0%s" % (os.path.realpath(path), int(size_bytes), int(stat.st_mtime_ns), int(stat.st_mode), int(stat.st_ino))
+        return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+    except Exception: return ""
+
+def bind_consumers(path):
+    target = os.path.realpath(path).rstrip("/")
+    consumers = []
+    for item in container_details:
+        for mount in (item.get("Mounts") or []):
+            if mount.get("Type") != "bind" or not mount.get("Source"): continue
+            source = os.path.realpath(str(mount.get("Source"))).rstrip("/")
+            if source == target or source.startswith(target + "/") or target.startswith(source + "/"):
+                consumers.append({"id":item.get("Id"),"name":str(item.get("Name") or "").lstrip("/"),"state":(item.get("State") or {}).get("Status") or "unknown","source":source,"destination":mount.get("Destination")})
+    return consumers
 
 def safe_labels(labels):
     return {k:v for k,v in (labels or {}).items() if k.startswith(PREFIX) or k.startswith("com.docker.compose.") or k in ["org.opencontainers.image.revision", "org.opencontainers.image.source"]}
@@ -34157,7 +34202,9 @@ if os.path.isdir(release_root):
     for entry in release_entries:
         if not entry.is_dir(follow_symlinks=False): continue
         active = os.path.realpath(entry.path) == active_release
-        assets.append({"id":entry.path,"name":entry.name,"type":"worktree","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"active-release" if active else "retained-release","classification":"active" if active else "retained","sizeBytes":disk_usage_bytes(entry.path),"createdAt":datetime.datetime.fromtimestamp(entry.stat().st_mtime, datetime.timezone.utc).isoformat(),"labels":{},"lineage":{"path":entry.path,"activeLink":active_link},"reason":"当前活动 release" if active else "保留的 release"})
+        size_bytes = disk_usage_bytes(entry.path)
+        consumers = bind_consumers(entry.path)
+        assets.append({"id":entry.path,"name":entry.name,"type":"worktree","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"active-release" if active else "retained-release","classification":"active" if active else "retained","sizeBytes":size_bytes,"createdAt":datetime.datetime.fromtimestamp(entry.stat().st_mtime, datetime.timezone.utc).isoformat(),"labels":{},"lineage":{"path":entry.path,"activeLink":active_link,"managedRoot":release_root,"fingerprint":metadata_fingerprint(entry.path,size_bytes),"consumers":consumers},"reason":"当前活动 release" if active else "保留的 release"})
 
 for managed in CONTEXT.get("managedPaths") or []:
     root = str(managed.get("path") or "")
@@ -34167,7 +34214,9 @@ for managed in CONTEXT.get("managedPaths") or []:
     for entry in managed_entries:
         if entry.is_symlink(): continue
         kind = str(managed.get("kind") or "managed-host-artifact")
-        assets.append({"id":entry.path,"name":entry.name,"type":"host_artifact","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"retained-host-artifact","classification":"retained","sizeBytes":disk_usage_bytes(entry.path) if entry.is_dir(follow_symlinks=False) else entry.stat(follow_symlinks=False).st_size,"createdAt":datetime.datetime.fromtimestamp(entry.stat(follow_symlinks=False).st_mtime,datetime.timezone.utc).isoformat(),"labels":{},"lineage":{"path":entry.path,"managedRoot":root,"artifactKind":kind,"consumers":[]},"reason":"Managed host artifact awaiting exact retirement evidence"})
+        size_bytes = disk_usage_bytes(entry.path) if entry.is_dir(follow_symlinks=False) else entry.stat(follow_symlinks=False).st_size
+        consumers = bind_consumers(entry.path)
+        assets.append({"id":entry.path,"name":entry.name,"type":"host_artifact","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"retained-host-artifact","classification":"retained","sizeBytes":size_bytes,"createdAt":datetime.datetime.fromtimestamp(entry.stat(follow_symlinks=False).st_mtime,datetime.timezone.utc).isoformat(),"labels":{},"lineage":{"path":entry.path,"managedRoot":root,"artifactKind":kind,"fingerprint":metadata_fingerprint(entry.path,size_bytes),"consumers":consumers},"reason":"Managed host artifact awaiting exact retirement evidence"})
 
 events = []
 for ledger_path in ["/var/lib/runtime-asset-tracker/events.jsonl", os.path.expanduser("~/.local/state/runtime-asset-tracker/events.jsonl")]:
@@ -34472,24 +34521,46 @@ function collectGithubSnapshot(sourceConfig) {
     repository
   };
 }
-function awsDockerCleanupScript(allowlist) {
-  const payload = Buffer.from(JSON.stringify(allowlist.map((item) => ({
-    type: item.type,
-    id: item.id,
-    name: item.name,
-    sizeBytes: Number(item.sizeBytes || 0),
-    tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
-    revision: item.revision ? String(item.revision) : void 0,
-    retirementEvidence: item.retirementEvidence ? {
-      reportSha256: String(item.retirementEvidence.reportSha256 || ""),
-      group: String(item.retirementEvidence.group || ""),
-      approvedTags: Array.isArray(item.retirementEvidence.approvedTags) ? item.retirementEvidence.approvedTags.map(String) : [],
-      revision: String(item.retirementEvidence.revision || "")
-    } : void 0
-  }))), "utf8").toString("base64");
-  return String.raw`import base64, datetime, gzip, json, re, subprocess
+function awsDockerCleanupScript(allowlist, sourceConfig = {}) {
+  const payload = Buffer.from(JSON.stringify({
+    safety: {
+      managedRoots: [...(sourceConfig.managedPaths || []).map((item) => String(item.path || "")), String(sourceConfig.releaseRoot || "")].filter(Boolean),
+      protectedPaths: [...(sourceConfig.protectedPaths || []).map(String), String(sourceConfig.activeLink || "")].filter(Boolean),
+      activeLink: String(sourceConfig.activeLink || "")
+    },
+    items: allowlist.map((item) => ({
+      type: item.type,
+      id: item.id,
+      name: item.name,
+      sizeBytes: Number(item.sizeBytes || 0),
+      tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
+      revision: item.revision ? String(item.revision) : void 0,
+      retirementEvidence: item.retirementEvidence ? {
+        reportSha256: String(item.retirementEvidence.reportSha256 || ""),
+        group: String(item.retirementEvidence.group || ""),
+        approvedTags: Array.isArray(item.retirementEvidence.approvedTags) ? item.retirementEvidence.approvedTags.map(String) : [],
+        revision: String(item.retirementEvidence.revision || ""),
+        assetType: String(item.retirementEvidence.assetType || ""),
+        expectedSizeBytes: Number(item.retirementEvidence.expectedSizeBytes || 0),
+        expectedName: String(item.retirementEvidence.expectedName || ""),
+        expectedState: String(item.retirementEvidence.expectedState || ""),
+        expectedImageId: String(item.retirementEvidence.expectedImageId || ""),
+        expectedComposeProject: String(item.retirementEvidence.expectedComposeProject || ""),
+        expectedMounts: Array.isArray(item.retirementEvidence.expectedMounts) ? item.retirementEvidence.expectedMounts : [],
+        preserveVolumes: item.retirementEvidence.preserveVolumes === true,
+        stopBeforeRemoval: item.retirementEvidence.stopBeforeRemoval === true,
+        managedRoot: String(item.retirementEvidence.managedRoot || ""),
+        fingerprint: String(item.retirementEvidence.fingerprint || ""),
+        expectedReferences: Number(item.retirementEvidence.expectedReferences || 0),
+        lifecycle: item.retirementEvidence.lifecycle
+      } : void 0
+    }))
+  }), "utf8").toString("base64");
+  return String.raw`import base64, datetime, gzip, hashlib, json, os, re, shutil, subprocess
 
-items = json.loads(base64.b64decode("${payload}"))
+payload = json.loads(base64.b64decode("${payload}"))
+items = payload.get("items") or []
+safety = payload.get("safety") or {}
 
 def run(args, timeout=180):
     result = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
@@ -34527,6 +34598,44 @@ def future_expiry(labels, created_at=None):
         expires = created + datetime.timedelta(days=ttl_days) if created and ttl_days > 0 else None
     return bool(expires and expires > datetime.datetime.now(datetime.timezone.utc))
 
+def normalized_mounts(mounts):
+    return sorted([{"type":str(mount.get("Type") or mount.get("type") or ""),"name":str(mount.get("Name") or mount.get("name") or ""),"source":str(mount.get("Source") or mount.get("source") or ""),"destination":str(mount.get("Destination") or mount.get("destination") or "")} for mount in (mounts or [])], key=lambda item:json.dumps(item,sort_keys=True))
+
+def evidence_valid(evidence, asset_type):
+    lifecycle = evidence.get("lifecycle") or {}
+    lifecycle_ok = not lifecycle or (lifecycle.get("state") == "MERGED" and lifecycle.get("coolingComplete") is True)
+    return bool(re.match(r"^[0-9a-f]{64}$", str(evidence.get("reportSha256") or ""), re.I) and evidence.get("assetType") == asset_type and lifecycle_ok)
+
+def disk_usage(path):
+    code, out, _ = run(["du", "-sb", "--", path], timeout=180)
+    if code != 0: code, out, _ = run(["sudo", "-n", "du", "-sb", "--", path], timeout=180)
+    try: return int(out.split()[0]) if code == 0 else -1
+    except Exception: return -1
+
+def metadata_fingerprint(path, size_bytes):
+    try:
+        stat = os.lstat(path)
+        value = "%s\0%s\0%s\0%s\0%s" % (os.path.realpath(path), int(size_bytes), int(stat.st_mtime_ns), int(stat.st_mode), int(stat.st_ino))
+        return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+    except Exception: return ""
+
+def path_is_referenced(path):
+    target = os.path.realpath(path).rstrip("/")
+    code, ids, _ = run(docker + ["ps", "-aq"])
+    if code != 0: return True
+    identifiers = ids.split()
+    for start in range(0, len(identifiers), 30):
+        code, out, _ = run(docker + ["container", "inspect"] + identifiers[start:start+30])
+        if code != 0: return True
+        try: details = json.loads(out or "[]")
+        except Exception: return True
+        for detail in details:
+            for mount in detail.get("Mounts") or []:
+                if mount.get("Type") != "bind" or not mount.get("Source"): continue
+                source = os.path.realpath(str(mount.get("Source"))).rstrip("/")
+                if source == target or source.startswith(target + "/") or target.startswith(source + "/"): return True
+    return False
+
 results = []
 for item in items:
     kind = item.get("type")
@@ -34537,6 +34646,48 @@ for item in items:
         code, _, error = run(docker + ["builder", "prune", "--all", "--force"])
         results.append({**item, "status":"removed" if code == 0 else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if code == 0 else 0, "reason":"仅清理未使用 Build Cache" if code == 0 else error[-300:]})
         continue
+    evidence = item.get("retirementEvidence") or {}
+    if kind == "container":
+        detail = inspect("container", identifier)
+        if detail and evidence_valid(evidence, "container"):
+            state = str((detail.get("State") or {}).get("Status") or "")
+            expected_state = str(evidence.get("expectedState") or "")
+            state_matches = state == expected_state or (expected_state == "running" and state == "exited")
+            labels = (detail.get("Config") or {}).get("Labels") or {}
+            exact = str(detail.get("Name") or "").lstrip("/") == str(evidence.get("expectedName") or "") and detail.get("Image") == evidence.get("expectedImageId") and labels.get("com.docker.compose.project") == evidence.get("expectedComposeProject") and normalized_mounts(detail.get("Mounts")) == normalized_mounts(evidence.get("expectedMounts"))
+            safe = bool(state_matches and exact and evidence.get("preserveVolumes") is True and (state != "running" or evidence.get("stopBeforeRemoval") is True))
+        if not safe:
+            results.append({**item,"status":"skipped","reclaimedBytes":0,"reason":"Container identity, state, image, Compose project, mount set, or preserve-volumes contract drifted."})
+            continue
+        if state == "running":
+            code, _, error = run(docker + ["stop", "--time", "30", identifier], timeout=60)
+            if code != 0:
+                results.append({**item,"status":"failed","reclaimedBytes":0,"reason":error[-300:]})
+                continue
+        code, _, error = run(docker + ["container", "rm", identifier])
+        removed = code == 0 and inspect("container", identifier) is None
+        results.append({**item,"status":"removed" if removed else "failed","reclaimedBytes":item.get("sizeBytes",0) if removed else 0,"preservedVolumes":True,"reason":"Exact merged-PR container removed without -v." if removed else error[-300:]})
+        continue
+    if kind in ["host_artifact", "worktree"]:
+        path = identifier.rstrip("/")
+        root = str(evidence.get("managedRoot") or "").rstrip("/")
+        managed_roots = [str(value).rstrip("/") for value in (safety.get("managedRoots") or [])]
+        protected_paths = [os.path.realpath(str(value)) for value in (safety.get("protectedPaths") or []) if value]
+        active_link = str(safety.get("activeLink") or "")
+        active_target = os.path.realpath(active_link) if active_link and os.path.exists(active_link) else ""
+        size = disk_usage(path) if os.path.exists(path) else -1
+        expected_size = evidence.get("expectedSizeBytes")
+        safe = bool(evidence_valid(evidence, kind) and root in managed_roots and path.startswith(root + "/") and not os.path.islink(path) and os.path.realpath(path) not in protected_paths and os.path.realpath(path) != active_target and expected_size is not None and size == int(expected_size) and metadata_fingerprint(path,size) == evidence.get("fingerprint") and not path_is_referenced(path))
+        if not safe:
+            results.append({**item,"status":"skipped","reclaimedBytes":0,"reason":"Remote path root, active/protected state, bytes, fingerprint, or bind-mount references drifted."})
+            continue
+        try:
+            shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+            removed = not os.path.lexists(path)
+            results.append({**item,"status":"removed" if removed else "failed","reclaimedBytes":size if removed else 0,"reason":"Exact managed path removed after live revalidation." if removed else "Path still exists after removal."})
+        except Exception as error:
+            results.append({**item,"status":"failed","reclaimedBytes":0,"reason":str(error)[-300:]})
+        continue
     if kind == "image":
         detail = inspect("image", identifier)
         if detail:
@@ -34546,7 +34697,6 @@ for item in items:
             digests = detail.get("RepoDigests") or []
             dangling = not tags and not digests
             protected = label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
-            evidence = item.get("retirementEvidence") or {}
             approved_tags = sorted(set(str(tag) for tag in (evidence.get("approvedTags") or []) if tag and not str(tag).startswith("<none>")))
             requested_tags = sorted(set(str(tag) for tag in (item.get("tags") or []) if tag and not str(tag).startswith("<none>")))
             revision = str(labels.get("org.opencontainers.image.revision") or label(labels, "git-sha") or "").lower()
@@ -34566,7 +34716,10 @@ for item in items:
             code, refs, _ = run(docker + ["ps", "-aq", "--filter", "volume=" + identifier])
             protected_name = re.search(r"postgres|mysql|maria|redis|valkey|upload|media|assets?|database|db[-_]?data|backup", identifier, re.I)
             protected = bool(protected_name) or label(labels, "retention") == "protected" or label(labels, "disposable") == "false"
-            safe = code == 0 and not refs and not protected and not future_expiry(labels, detail.get("CreatedAt")) and label(labels, "disposable") == "true"
+            expected_references = evidence.get("expectedReferences")
+            expected_size = evidence.get("expectedSizeBytes")
+            attested = evidence_valid(evidence, "volume") and expected_references is not None and int(expected_references) == 0 and expected_size is not None and int(expected_size) == int(item.get("sizeBytes") or -2)
+            safe = code == 0 and not refs and not protected and not future_expiry(labels, detail.get("CreatedAt")) and (label(labels, "disposable") == "true" or attested)
             reason = "未被任何容器挂载且明确 disposable 的卷"
     if not safe:
         results.append({**item, "status":"skipped", "reclaimedBytes":0, "reason":"执行前复核不再满足安全清理条件"})
@@ -34645,26 +34798,27 @@ function runSsmMutation(sourceConfig, script, comment) {
   throw new Error("\u8FDC\u7A0B\u6E05\u7406\u8D85\u8FC7 185 \u79D2\u4ECD\u672A\u5B8C\u6210");
 }
 function executeAwsDockerCleanup(sourceConfig, allowlist) {
-  const snapshot = collectAwsSnapshot(sourceConfig);
+  const fullSourceConfig = { ...sourceConfig, includeAllAssets: true };
+  const snapshot = collectAwsSnapshot(fullSourceConfig);
   const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
   const approved = [];
   for (const requested of allowlist) {
     const current = currentAssets.get(`${requested.type}:${requested.id}`);
-    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, sourceConfig);
+    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, fullSourceConfig);
     if (!current || !safe) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u5FEB\u7167\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
     else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
   if (!approved.length) return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: skipped };
-  const script = awsDockerCleanupScript(approved);
+  const script = awsDockerCleanupScript(approved, fullSourceConfig);
   const encoded = gzipSync(Buffer.from(script, "utf8"), { level: 9 }).toString("base64");
-  const invocation = runSsmMutation(sourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, "Runtime Asset Tracker exact safe Docker cleanup");
+  const invocation = runSsmMutation(fullSourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, "Runtime Asset Tracker exact safe Docker cleanup");
   const match = invocation.output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
   if (!match) throw new Error("\u8FDC\u7A0B\u6E05\u7406\u6CA1\u6709\u8FD4\u56DE\u53EF\u9A8C\u8BC1\u7ED3\u679C");
   const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
   remoteCache.clear();
   const results = [...skipped, ...payload.results || []];
-  const after = collectAwsSnapshot(sourceConfig);
+  const after = collectAwsSnapshot(fullSourceConfig);
   return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), commandId: invocation.commandId, results, verification: buildPostCleanupVerification(snapshot, after, results) };
 }
 function runSshMutation(sourceConfig, script) {
@@ -34685,24 +34839,25 @@ function runSshMutation(sourceConfig, script) {
   ], { timeout: 21e4, maxBuffer: 32 * 1024 * 1024 });
 }
 function executeSshDockerCleanup(sourceConfig, allowlist) {
-  const snapshot = collectSshSnapshot(sourceConfig);
+  const fullSourceConfig = { ...sourceConfig, includeAllAssets: true };
+  const snapshot = collectSshSnapshot(fullSourceConfig);
   const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
   const approved = [];
   for (const requested of allowlist) {
     const current = currentAssets.get(`${requested.type}:${requested.id}`);
-    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, sourceConfig);
+    const safe = current?.classification === "reclaimable" || validateRemoteRetirementApproval(requested, current, fullSourceConfig);
     if (!current || !safe) skipped.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u5FEB\u7167\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
     else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
   if (!approved.length) return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: skipped };
-  const output = runSshMutation(sourceConfig, awsDockerCleanupScript(approved));
+  const output = runSshMutation(fullSourceConfig, awsDockerCleanupScript(approved, fullSourceConfig));
   const match = output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
   if (!match) throw new Error("\u8FDC\u7A0B\u6E05\u7406\u6CA1\u6709\u8FD4\u56DE\u53EF\u9A8C\u8BC1\u7ED3\u679C");
   const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
   remoteCache.clear();
   const results = [...skipped, ...payload.results || []];
-  const after = collectSshSnapshot(sourceConfig);
+  const after = collectSshSnapshot(fullSourceConfig);
   return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results, verification: buildPostCleanupVerification(snapshot, after, results) };
 }
 function executeGithubCleanup(sourceConfig, allowlist) {
@@ -34855,8 +35010,10 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 var RECONCILIATION_SCHEMA = "sparkling.runtime-image-retirement-reconciliation/v1";
 var RUNTIME_PREFIX = "com.codex.runtime.";
 var IMAGE_ID = /^sha256:[0-9a-f]{64}$/i;
+var CONTAINER_ID = /^[0-9a-f]{64}$/i;
 var COMMIT = /^[0-9a-f]{40}$/i;
 var REPORT_SHA = /^[0-9a-f]{64}$/i;
+var RETIREMENT_TYPES = /* @__PURE__ */ new Set(["image", "container", "volume", "host_artifact", "worktree"]);
 function defaultStateRoot() {
   if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve(process.env.RUNTIME_ASSET_STATE_DIR);
   if (platform() === "win32") return join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "RuntimeAssetTracker");
@@ -34936,8 +35093,10 @@ function retirementAttestations(events) {
   for (const event of events || []) {
     const type = String(event?.asset?.type || "");
     const id = String(event?.asset?.id || "");
-    if (type !== "image" || !IMAGE_ID.test(id)) continue;
-    const key = `image:${id}`;
+    if (!RETIREMENT_TYPES.has(type) || !id) continue;
+    if (type === "image" && !IMAGE_ID.test(id)) continue;
+    if (type === "container" && !CONTAINER_ID.test(id)) continue;
+    const key = `${type}:${id}`;
     if (event.event === "asset.retirement.revoked") {
       retirements.delete(key);
       continue;
@@ -34963,7 +35122,10 @@ function retirementAttestations(events) {
     const owner = String(event.owner || "");
     const recoverySource = String(details.recoverySource || "");
     if (String(details.disposable).toLowerCase() !== "true" || String(details.retention).toLowerCase() !== "retired") continue;
-    if (!approvedTags.length || !REPORT_SHA.test(reportSha256) || !COMMIT.test(revision) || !project || !environment || !owner || !recoverySource) continue;
+    if (!REPORT_SHA.test(reportSha256) || !project || !environment || !owner || !recoverySource) continue;
+    if (type === "image" && (!approvedTags.length || !COMMIT.test(revision))) continue;
+    if (type === "container" && (!String(details.expectedName || "") || !IMAGE_ID.test(String(details.expectedImageId || "")) || String(details.preserveVolumes) !== "true")) continue;
+    if (["host_artifact", "worktree"].includes(type) && (!String(details.managedRoot || "").startsWith("/home/") || !/^sha256:[0-9a-f]{64}$/i.test(String(details.fingerprint || "")))) continue;
     retirements.set(key, {
       project,
       environment,
@@ -34975,11 +35137,24 @@ function retirementAttestations(events) {
       reportSha256,
       group: String(details.group || ""),
       recoverySource,
+      assetType: type,
+      expectedSizeBytes: Number(details.expectedSizeBytes || 0),
+      expectedName: String(details.expectedName || ""),
+      expectedState: String(details.expectedState || ""),
+      expectedImageId: String(details.expectedImageId || ""),
+      expectedComposeProject: String(details.expectedComposeProject || ""),
+      expectedMounts: Array.isArray(details.expectedMounts) ? details.expectedMounts : [],
+      preserveVolumes: String(details.preserveVolumes) === "true",
+      stopBeforeRemoval: String(details.stopBeforeRemoval) === "true",
+      managedRoot: String(details.managedRoot || ""),
+      fingerprint: String(details.fingerprint || ""),
+      expectedReferences: Number(details.expectedReferences || 0),
+      lifecycle: details.lifecycle && typeof details.lifecycle === "object" ? details.lifecycle : void 0,
       labels: {
         [`${RUNTIME_PREFIX}project`]: project,
         [`${RUNTIME_PREFIX}environment`]: environment,
         [`${RUNTIME_PREFIX}owner`]: owner,
-        [`${RUNTIME_PREFIX}asset-kind`]: "image",
+        [`${RUNTIME_PREFIX}asset-kind`]: type,
         [`${RUNTIME_PREFIX}retention`]: "retired",
         [`${RUNTIME_PREFIX}disposable`]: "true",
         [`${RUNTIME_PREFIX}recovery-source`]: recoverySource,
@@ -35527,14 +35702,412 @@ function executePathAssetCleanup(asset) {
   return { removed: true };
 }
 
-// mcp/inventory.mjs
-var RUNTIME_PREFIX2 = "com.codex.runtime.";
-var previewStore = /* @__PURE__ */ new Map();
-var dashboardCache = /* @__PURE__ */ new Map();
+// mcp/lifecycle-reconciliation.mjs
+import { createHash as createHash4, randomUUID as randomUUID4 } from "node:crypto";
+import { appendFileSync as appendFileSync3, existsSync as existsSync3, mkdirSync as mkdirSync3, readFileSync as readFileSync3 } from "node:fs";
+import { homedir as homedir3, hostname as hostname5, platform as platform3 } from "node:os";
+import { dirname as dirname3, isAbsolute as isAbsolute3, join as join3, resolve as resolve3 } from "node:path";
+var UNIFIED_RECONCILIATION_SCHEMA = "sparkling.runtime-unified-retirement-reconciliation/v1";
+var IMAGE_ID2 = /^sha256:[0-9a-f]{64}$/i;
+var CONTAINER_ID2 = /^[0-9a-f]{64}$/i;
+var COMMIT2 = /^[0-9a-f]{40}$/i;
+var FINGERPRINT2 = /^sha256:[0-9a-f]{64}$/i;
+var REMOTE_PATH_TYPES = /* @__PURE__ */ new Set(["host_artifact", "worktree"]);
+var SUPPORTED_TYPES = /* @__PURE__ */ new Set(["container", "image", "volume", ...REMOTE_PATH_TYPES]);
 function stateRoot() {
   if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve3(process.env.RUNTIME_ASSET_STATE_DIR);
   if (platform3() === "win32") return join3(process.env.LOCALAPPDATA || join3(homedir3(), "AppData", "Local"), "RuntimeAssetTracker");
   return join3(process.env.XDG_STATE_HOME || join3(homedir3(), ".local", "state"), "runtime-asset-tracker");
+}
+function stableStrings2(values) {
+  return [...new Set((Array.isArray(values) ? values : values == null ? [] : [values]).map(String).filter(Boolean))].sort();
+}
+function readJson2(path) {
+  const raw = readFileSync3(path);
+  if (raw[0] === 239 && raw[1] === 187 && raw[2] === 191) throw new Error("Reconciliation JSON must not contain a UTF-8 BOM.");
+  return { raw, value: JSON.parse(raw.toString("utf8")) };
+}
+function existingEvents(path) {
+  if (!existsSync3(path)) return [];
+  return readFileSync3(path, "utf8").split(/\r?\n/).filter(Boolean).flatMap((line) => {
+    try {
+      return [JSON.parse(line)];
+    } catch {
+      return [];
+    }
+  });
+}
+function normalizedMounts(mounts) {
+  return (mounts || []).map((mount) => ({
+    type: String(mount?.type || ""),
+    name: String(mount?.name || ""),
+    source: String(mount?.source || ""),
+    destination: String(mount?.destination || "")
+  })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+}
+function pathInsideRoot(path, root) {
+  const cleanPath = String(path || "").replace(/\/+$/, "");
+  const cleanRoot = String(root || "").replace(/\/+$/, "");
+  return cleanPath.startsWith("/") && cleanRoot.startsWith("/home/") && cleanPath !== cleanRoot && cleanPath.startsWith(`${cleanRoot}/`);
+}
+function validateAsset(asset, group, source, managedRoots, protectedKeys, seen, errors) {
+  const type = String(asset?.type || "");
+  const id = String(asset?.id || "");
+  const key = `${type}:${id}`;
+  if (!SUPPORTED_TYPES.has(type)) errors.push(`Group ${group} contains unsupported asset type ${type || "<empty>"}.`);
+  if (!id) errors.push(`Group ${group} contains an asset without an exact ID.`);
+  if (seen.has(key)) errors.push(`Asset ${key} appears in more than one selected group.`);
+  seen.add(key);
+  if (protectedKeys.has(key)) errors.push(`Protected asset ${key} cannot be retired.`);
+  if (asset.disposable !== true || asset.retention !== "retired") errors.push(`Asset ${key} lacks disposable=true and retention=retired.`);
+  if (!String(asset.recoverySource || "").trim()) errors.push(`Asset ${key} lacks an explicit recovery source.`);
+  if (!Number.isFinite(Number(asset.sizeBytes)) || Number(asset.sizeBytes) < 0) errors.push(`Asset ${key} has an invalid byte count.`);
+  if (type === "image") {
+    if (!IMAGE_ID2.test(id)) errors.push(`Image ${id} has an invalid image ID.`);
+    if (!COMMIT2.test(String(asset.revision || ""))) errors.push(`Image ${id} lacks a full Git revision.`);
+    const tags = stableStrings2(asset.tags);
+    if (!tags.length || tags.some((tag) => tag.includes("<none>")) || tags.length !== (asset.tags || []).length) errors.push(`Image ${id} lacks a unique exact tag set.`);
+  }
+  if (type === "container") {
+    if (!CONTAINER_ID2.test(id)) errors.push(`Container ${id} has an invalid container ID.`);
+    if (!String(asset.name || "").trim() || !IMAGE_ID2.test(String(asset.imageId || ""))) errors.push(`Container ${id} lacks an exact name or image ID.`);
+    if (!String(asset.composeProject || "").trim()) errors.push(`Container ${id} lacks an exact Compose project.`);
+    if (!["running", "exited", "created", "dead"].includes(String(asset.state || ""))) errors.push(`Container ${id} has an unsupported expected state.`);
+    if (asset.preserveVolumes !== true) errors.push(`Container ${id} must preserve volumes.`);
+    if (asset.state === "running" && asset.stopBeforeRemoval !== true) errors.push(`Running container ${id} requires stopBeforeRemoval=true.`);
+    if (!Array.isArray(asset.mounts)) errors.push(`Container ${id} lacks an exact mount set.`);
+  }
+  if (type === "volume") {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]+$/.test(id)) errors.push(`Volume ${id} has an invalid exact name.`);
+    if (Number(asset.expectedReferences) !== 0) errors.push(`Volume ${id} must attest zero container references.`);
+  }
+  if (REMOTE_PATH_TYPES.has(type)) {
+    if (source === "local") errors.push(`Use the local path reconciliation schema for ${id}.`);
+    if (!pathInsideRoot(id, asset.managedRoot)) errors.push(`Remote path ${id} is outside its configured managed root.`);
+    if (managedRoots.length && !managedRoots.includes(String(asset.managedRoot || "").replace(/\/+$/, ""))) errors.push(`Remote path ${id} uses a managed root that is not registered for the environment.`);
+    if (!FINGERPRINT2.test(String(asset.fingerprint || ""))) errors.push(`Remote path ${id} lacks an exact metadata fingerprint.`);
+    if (Number(asset.expectedReferences) !== 0) errors.push(`Remote path ${id} must attest zero runtime references.`);
+  }
+}
+function validateUnifiedRetirementReconciliation(report, { project, source, instanceId, groups, managedRoots = [] } = {}) {
+  const errors = [];
+  if (!report || typeof report !== "object" || Array.isArray(report)) return { ok: false, errors: ["Report must be an object."] };
+  if (report.schemaVersion !== UNIFIED_RECONCILIATION_SCHEMA) errors.push("Unsupported unified reconciliation schema.");
+  if (report.readOnly !== true || report.actionTaken !== "none") errors.push("Only a read-only, non-executed reconciliation report can be imported.");
+  if (project && report.target?.project !== project) errors.push("Report project does not match the selected project.");
+  if (source && report.target?.source !== source) errors.push("Report source does not match the selected environment.");
+  if (source && !["local", "production", "staging"].includes(source)) errors.push("Unified retirement imports are limited to local, production, or staging.");
+  if (instanceId && report.target?.instanceId !== instanceId) errors.push("Report instance does not match the registered environment.");
+  const selectedGroups = stableStrings2(groups);
+  if (!selectedGroups.length) errors.push("At least one exact candidate group is required.");
+  const available = new Map((report.candidateGroups || []).map((group) => [String(group.group), group]));
+  const protectedKeys = new Set((report.protectedAssets || []).map((asset) => `${asset.type}:${asset.id}`));
+  const seen = /* @__PURE__ */ new Set();
+  let assetCount = 0;
+  let totalBytes = 0;
+  for (const name of selectedGroups) {
+    const group = available.get(name);
+    if (!group) {
+      errors.push(`Unknown reconciliation group: ${name}.`);
+      continue;
+    }
+    if (!String(group.confidence || "").startsWith("high")) errors.push(`Group ${name} is not high confidence.`);
+    const lifecycle = group.lifecycle || {};
+    if (lifecycle.kind !== "pull_request" || lifecycle.state !== "MERGED" || !Number.isInteger(Number(lifecycle.number)) || Number(lifecycle.number) <= 0) errors.push(`Group ${name} lacks authoritative merged pull-request evidence.`);
+    if (!Number.isFinite(Date.parse(String(lifecycle.mergedAt || "")))) errors.push(`Group ${name} lacks a valid merge timestamp.`);
+    if (lifecycle.coolingComplete !== true) errors.push(`Group ${name} has not completed its cooling period.`);
+    if (!Array.isArray(group.assets) || group.assets.length !== Number(group.assetCount)) errors.push(`Group ${name} asset count is inconsistent.`);
+    let groupBytes = 0;
+    for (const asset of group.assets || []) {
+      assetCount += 1;
+      groupBytes += Number(asset.sizeBytes || 0);
+      totalBytes += Number(asset.sizeBytes || 0);
+      validateAsset(asset, name, source, stableStrings2(managedRoots).map((root) => root.replace(/\/+$/, "")), protectedKeys, seen, errors);
+    }
+    if (groupBytes !== Number(group.totalBytes)) errors.push(`Group ${name} byte total is inconsistent.`);
+  }
+  return { ok: errors.length === 0, errors, selectedGroups, assetCount, totalBytes, protectedKeys: [...protectedKeys] };
+}
+function importUnifiedRetirementReconciliation({ reportPath, source, project, groups, owner = "platform-engineering" } = {}) {
+  if (!isAbsolute3(String(reportPath || ""))) throw new Error("Unified reconciliation report path must be absolute.");
+  const { raw, value: report } = readJson2(reportPath);
+  const root = stateRoot();
+  const configPath = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join3(root, "dashboard-config.json");
+  const config2 = existsSync3(configPath) ? JSON.parse(readFileSync3(configPath, "utf8")) : { projects: [] };
+  const registeredProject = (config2.projects || []).find((item) => String(item.id || item.repository) === String(project));
+  const environment = source === "local" ? { id: "local" } : registeredProject?.environments?.find((item) => item.id === source);
+  if (!registeredProject || !environment) throw new Error("Selected project/environment is not registered in Tracker configuration.");
+  const managedRoots = [
+    ...(environment.managedPaths || []).map((item) => item.path),
+    environment.releaseRoot
+  ].filter(Boolean);
+  const validation = validateUnifiedRetirementReconciliation(report, { project, source, instanceId: environment.instanceId, groups, managedRoots });
+  if (!validation.ok) throw new Error(`Unified reconciliation report is invalid: ${validation.errors.join("; ")}`);
+  const reportSha256 = createHash4("sha256").update(raw).digest("hex");
+  const ledgerPath = process.env.RUNTIME_ASSET_LEDGER_FILE || join3(root, "events.jsonl");
+  const existing = existingEvents(ledgerPath);
+  const existingKeys = new Set(existing.filter((event) => event.event === "asset.retired").map((event) => `${event.asset?.type}:${event.asset?.id}\0${event.details?.reportSha256}\0${event.details?.group}`));
+  const selected = new Set(validation.selectedGroups);
+  const events = [];
+  for (const group of report.candidateGroups || []) {
+    if (!selected.has(group.group)) continue;
+    for (const asset of group.assets) {
+      const key = `${asset.type}:${asset.id}\0${reportSha256}\0${group.group}`;
+      if (existingKeys.has(key)) continue;
+      events.push({
+        schemaVersion: 1,
+        eventId: randomUUID4(),
+        occurredAt: (/* @__PURE__ */ new Date()).toISOString(),
+        event: "asset.retired",
+        host: hostname5(),
+        project,
+        environment: source,
+        release: `merged-pr-${group.lifecycle.number}`,
+        gitSha: COMMIT2.test(String(asset.revision || "")) ? String(asset.revision).toLowerCase() : "unknown",
+        owner,
+        asset: { type: asset.type, id: asset.id, service: String(asset.service || "") },
+        status: "retired",
+        details: {
+          disposable: "true",
+          retention: "retired",
+          recoverySource: String(asset.recoverySource),
+          reportSha256,
+          reportPath,
+          group: group.group,
+          confidence: group.confidence,
+          lifecycle: group.lifecycle,
+          expectedSizeBytes: Number(asset.sizeBytes || 0),
+          expectedName: asset.name,
+          expectedState: asset.state,
+          expectedImageId: asset.imageId,
+          expectedComposeProject: asset.composeProject,
+          expectedMounts: normalizedMounts(asset.mounts),
+          preserveVolumes: asset.preserveVolumes === true,
+          stopBeforeRemoval: asset.stopBeforeRemoval === true,
+          approvedTags: stableStrings2(asset.tags),
+          revision: asset.revision,
+          managedRoot: asset.managedRoot,
+          fingerprint: asset.fingerprint,
+          expectedReferences: Number(asset.expectedReferences || 0)
+        }
+      });
+    }
+  }
+  if (events.length) {
+    mkdirSync3(dirname3(ledgerPath), { recursive: true });
+    appendFileSync3(ledgerPath, `${events.map((event) => JSON.stringify(event)).join("\n")}
+`, { encoding: "utf8", mode: 384 });
+  }
+  return {
+    importedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    reportPath,
+    reportSha256,
+    source,
+    project,
+    groups: validation.selectedGroups,
+    candidateAssetCount: validation.assetCount,
+    candidateBytes: validation.totalBytes,
+    retirementEventsAdded: events.length,
+    idempotentSkipCount: validation.assetCount - events.length
+  };
+}
+
+// mcp/lifecycle-table.mjs
+import { createHash as createHash5 } from "node:crypto";
+import { readFileSync as readFileSync4, writeFileSync } from "node:fs";
+import { resolve as resolve4 } from "node:path";
+var UNIFIED_ASSET_TABLE_SCHEMA = "sparkling.runtime-unified-asset-table/v1";
+var RUNTIME_PREFIX2 = "com.codex.runtime.";
+var REMOVABLE_TYPES = /* @__PURE__ */ new Set(["container", "image", "volume", "worktree", "worktree_residual", "host_artifact", "cache"]);
+function normalizeSha(value) {
+  const sha = String(value || "").trim().toLowerCase().replace(/^sha256:/, "");
+  return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
+}
+function runtimeLabel2(asset, name) {
+  return asset?.labels?.[`${RUNTIME_PREFIX2}${name}`];
+}
+function assetRevision(asset) {
+  const direct = [
+    asset?.lineage?.revision,
+    runtimeLabel2(asset, "git-sha"),
+    asset?.labels?.["org.opencontainers.image.revision"],
+    asset?.gitSha
+  ].map(normalizeSha).find(Boolean);
+  if (direct) return direct;
+  const text = [asset?.id, asset?.name, ...asset?.lineage?.tags || []].filter(Boolean).join(" ");
+  return normalizeSha(text.match(/(?:^|[^0-9a-f])([0-9a-f]{40})(?:$|[^0-9a-f])/i)?.[1]);
+}
+function pullRequestHint(asset) {
+  const label = Number(runtimeLabel2(asset, "pull-request"));
+  if (Number.isInteger(label) && label > 0) return { number: label, source: "runtime-label" };
+  const text = [asset?.id, asset?.name, runtimeLabel2(asset, "release"), asset?.lineage?.composeProject, ...asset?.lineage?.tags || []].filter(Boolean).join(" ");
+  const match = text.match(/(?:^|[-_/])pr-?(\d{1,7})(?:$|[-_/])/i);
+  return match ? { number: Number(match[1]), source: "name-hint" } : null;
+}
+function githubLineage(authority = {}) {
+  return authority.lineage && typeof authority.lineage === "object" ? authority.lineage : authority;
+}
+function authorityMaps(authority = {}) {
+  const byRevision = /* @__PURE__ */ new Map();
+  const byPullRequest = /* @__PURE__ */ new Map();
+  for (const [revision, value] of Object.entries(githubLineage(authority))) {
+    const normalized = normalizeSha(revision);
+    if (!normalized) continue;
+    const pullRequests = Array.isArray(value?.pullRequests) ? value.pullRequests : [];
+    const record2 = { revision: normalized, ...value, pullRequests };
+    byRevision.set(normalized, record2);
+    for (const pullRequest of pullRequests) {
+      const number4 = Number(pullRequest?.number);
+      if (!Number.isInteger(number4) || number4 <= 0) continue;
+      const existing = byPullRequest.get(number4) || [];
+      existing.push({ revision: normalized, ...pullRequest });
+      byPullRequest.set(number4, existing);
+    }
+  }
+  return { byRevision, byPullRequest };
+}
+function uniquePrefixRecord(revision, byRevision) {
+  if (!revision) return null;
+  if (byRevision.has(revision)) return { record: byRevision.get(revision), match: "exact" };
+  const matches = [...byRevision.entries()].filter(([candidate]) => candidate.startsWith(revision) || revision.startsWith(candidate));
+  return matches.length === 1 ? { record: matches[0][1], match: "unique-prefix" } : null;
+}
+function lifecycleAuthority(asset, maps, now, coolingHours) {
+  const revision = assetRevision(asset);
+  const revisionAuthority = uniquePrefixRecord(revision, maps.byRevision);
+  const hint = pullRequestHint(asset);
+  let pullRequests = revisionAuthority?.record?.pullRequests || [];
+  let binding = revisionAuthority ? revisionAuthority.match : "none";
+  if (!pullRequests.length && hint?.source === "runtime-label") {
+    pullRequests = maps.byPullRequest.get(hint.number) || [];
+    binding = pullRequests.length ? "runtime-label" : "none";
+  }
+  const merged = pullRequests.filter((item) => String(item?.state || "").toUpperCase() === "MERGED" && item?.mergedAt);
+  const open = pullRequests.filter((item) => String(item?.state || "").toUpperCase() === "OPEN");
+  const selected = merged.sort((left, right) => String(right.mergedAt).localeCompare(String(left.mergedAt)))[0] || open[0] || null;
+  const mergedAtMs = selected?.mergedAt ? Date.parse(selected.mergedAt) : Number.NaN;
+  const coolingComplete = Boolean(selected && String(selected.state).toUpperCase() === "MERGED" && Number.isFinite(mergedAtMs) && now - mergedAtMs >= coolingHours * 36e5);
+  return {
+    revision: revision || null,
+    revisionExists: revisionAuthority?.record?.existsOnGitHub ?? null,
+    binding,
+    pullRequest: selected ? { number: Number(selected.number), state: String(selected.state).toUpperCase(), mergedAt: selected.mergedAt || null, url: selected.url || null } : hint ? { number: hint.number, state: "UNVERIFIED", mergedAt: null, url: null } : null,
+    coolingHours,
+    coolingComplete,
+    conflictingOpenPullRequest: open.length > 0
+  };
+}
+function consumers(asset) {
+  return Array.isArray(asset?.lineage?.consumers) ? asset.lineage.consumers : [];
+}
+function isProtected(asset, source) {
+  const reason = String(asset?.lineage?.protection?.reason || asset?.reason || "").toLowerCase();
+  const name = String(asset?.name || "").toLowerCase();
+  const running = String(asset?.status || "").toLowerCase() === "running" || consumers(asset).some((item) => item?.state === "running");
+  if (["active", "protected"].includes(asset?.classification) && /(current|rollback|release|recovery)/.test(reason)) return true;
+  if (asset?.retirementBlocked && /(current|rollback|release)/.test(reason)) return true;
+  if (source === "production" && running && /(?:^|[-_])prod(?:uction)?(?:$|[-_])/.test(name)) return true;
+  return runtimeLabel2(asset, "disposable") === "false" && runtimeLabel2(asset, "retention") === "protected";
+}
+function decisionFor(asset, source, lifecycle) {
+  const refs = consumers(asset);
+  if (!REMOVABLE_TYPES.has(asset.type)) return { decision: "inventory-only", reason: "Asset type is not supported by an exact cleanup executor." };
+  if (isProtected(asset, source)) return { decision: "protected", reason: "Current, rollback, recovery, or explicitly protected runtime binding." };
+  if (lifecycle.conflictingOpenPullRequest) return { decision: "review", reason: "GitHub authority still reports an open pull request for the bound revision." };
+  if (asset.classification === "reclaimable") return { decision: "candidate-existing-attestation", reason: "Tracker already has exact retirement evidence; live state must still be revalidated at execution." };
+  if (lifecycle.pullRequest?.state !== "MERGED") return { decision: "review", reason: lifecycle.pullRequest ? "Pull-request hint is not authoritatively merged." : "No authoritative merged-PR binding." };
+  if (!lifecycle.coolingComplete) return { decision: "retained-cooling", reason: "Merged PR has not completed the configured cooling period." };
+  if (!["exact", "unique-prefix", "runtime-label"].includes(lifecycle.binding)) return { decision: "review", reason: "Lifecycle relationship is inferred only from a name and is not authoritative." };
+  if (asset.type === "image" && refs.length) return { decision: "blocked-referenced", reason: "One or more containers still reference this image." };
+  if (["host_artifact", "worktree"].includes(asset.type) && refs.length) return { decision: "blocked-referenced", reason: "A container bind mount still references this managed path." };
+  if (asset.type === "volume" && refs.length) return { decision: "blocked-referenced", reason: "One or more containers still reference this volume." };
+  if (["host_artifact", "worktree"].includes(asset.type) && (!asset?.lineage?.managedRoot || !asset?.lineage?.fingerprint)) return { decision: "review", reason: "Managed-root or metadata-fingerprint evidence is incomplete." };
+  if (asset.type === "container") {
+    const state = String(asset.status || "unknown").toLowerCase();
+    return state === "running" ? { decision: "candidate-stop-then-remove", reason: "Merged-PR container may be stopped and removed only with an exact mount contract; volumes remain preserved." } : { decision: "candidate-remove", reason: "Stopped merged-PR container can be removed with an exact identity and mount contract; volumes remain preserved." };
+  }
+  return { decision: "candidate-retirement", reason: "Authoritatively merged, cooling complete, unprotected, and zero runtime references." };
+}
+function exactIdentity(asset) {
+  return {
+    id: String(asset.id || ""),
+    name: String(asset.name || ""),
+    tags: [...asset?.lineage?.tags || []].map(String).sort(),
+    imageId: asset?.lineage?.imageId || null,
+    composeProject: asset?.lineage?.composeProject || null,
+    mounts: [...asset?.lineage?.mounts || []],
+    managedRoot: asset?.lineage?.managedRoot || null,
+    fingerprint: asset?.lineage?.fingerprint || null,
+    references: consumers(asset),
+    sizeBytes: Number(asset.sizeBytes || 0)
+  };
+}
+function summarize(rows) {
+  const summary = { assetCount: rows.length, bytes: 0, decisions: {}, environments: {}, types: {} };
+  for (const row of rows) {
+    summary.bytes += row.exactIdentity.sizeBytes;
+    summary.decisions[row.decision] = (summary.decisions[row.decision] || 0) + 1;
+    summary.environments[row.source] = (summary.environments[row.source] || 0) + 1;
+    summary.types[row.type] = (summary.types[row.type] || 0) + 1;
+  }
+  summary.candidateCount = rows.filter((row) => row.decision.startsWith("candidate-")).length;
+  summary.candidateBytesUpperBound = rows.filter((row) => row.decision.startsWith("candidate-")).reduce((total, row) => total + row.exactIdentity.sizeBytes, 0);
+  return summary;
+}
+function buildUnifiedAssetTable({ project, dashboards = [], githubAuthority = {}, generatedAt = (/* @__PURE__ */ new Date()).toISOString(), coolingHours = 24 } = {}) {
+  if (!project) throw new Error("project is required");
+  if (!Array.isArray(dashboards) || dashboards.length === 0) throw new Error("At least one environment dashboard is required");
+  const now = Date.parse(generatedAt);
+  if (!Number.isFinite(now)) throw new Error("generatedAt must be an ISO timestamp");
+  const maps = authorityMaps(githubAuthority);
+  const rows = dashboards.flatMap(({ source, dashboard }) => (dashboard?.assets || []).map((asset) => {
+    const lifecycle = lifecycleAuthority(asset, maps, now, coolingHours);
+    const decision = decisionFor(asset, source, lifecycle);
+    return {
+      key: `${source}:${asset.type}:${asset.id}`,
+      project,
+      source,
+      type: asset.type,
+      classification: asset.classification || "unknown",
+      ...decision,
+      lifecycle,
+      exactIdentity: exactIdentity(asset),
+      recoverySource: runtimeLabel2(asset, "recovery-source") || asset?.lineage?.source || (lifecycle.revision ? `git:${project}@${lifecycle.revision}` : null)
+    };
+  })).sort((left, right) => left.key.localeCompare(right.key));
+  const authorityDigest = createHash5("sha256").update(JSON.stringify(githubAuthority)).digest("hex");
+  return {
+    schemaVersion: UNIFIED_ASSET_TABLE_SCHEMA,
+    generatedAt,
+    readOnly: true,
+    actionTaken: "none",
+    project,
+    policy: { coolingHours, mergedDoesNotImplyDisposable: true, unknownOwnershipBlocksCleanup: true, volumesPreservedByDefault: true },
+    authority: { kind: "github-revision-pull-request-lineage", sha256: authorityDigest },
+    summary: summarize(rows),
+    assets: rows
+  };
+}
+function loadGithubAuthority(authorityReportPath) {
+  if (!authorityReportPath) return {};
+  return JSON.parse(readFileSync4(resolve4(authorityReportPath), "utf8"));
+}
+function writeUnifiedAssetTable(table, outputPath) {
+  if (!outputPath) return null;
+  const absolutePath = resolve4(outputPath);
+  writeFileSync(absolutePath, `${JSON.stringify(table, null, 2)}
+`, "utf8");
+  return absolutePath;
+}
+
+// mcp/inventory.mjs
+var RUNTIME_PREFIX3 = "com.codex.runtime.";
+var previewStore = /* @__PURE__ */ new Map();
+var dashboardCache = /* @__PURE__ */ new Map();
+function stateRoot2() {
+  if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve5(process.env.RUNTIME_ASSET_STATE_DIR);
+  if (platform4() === "win32") return join4(process.env.LOCALAPPDATA || join4(homedir4(), "AppData", "Local"), "RuntimeAssetTracker");
+  return join4(process.env.XDG_STATE_HOME || join4(homedir4(), ".local", "state"), "runtime-asset-tracker");
 }
 function run(command, args, options = {}) {
   try {
@@ -35583,10 +36156,10 @@ function inspectMany(kind, identifiers) {
   });
 }
 function safeLabels(labels) {
-  return Object.fromEntries(Object.entries(labels || {}).filter(([key]) => key.startsWith(RUNTIME_PREFIX2) || key.startsWith("com.docker.compose.") || ["org.opencontainers.image.revision", "org.opencontainers.image.source"].includes(key)));
+  return Object.fromEntries(Object.entries(labels || {}).filter(([key]) => key.startsWith(RUNTIME_PREFIX3) || key.startsWith("com.docker.compose.") || ["org.opencontainers.image.revision", "org.opencontainers.image.source"].includes(key)));
 }
 function labelValue(labels, key) {
-  return labels?.[`${RUNTIME_PREFIX2}${key}`];
+  return labels?.[`${RUNTIME_PREFIX3}${key}`];
 }
 function classification({ labels = {}, active = false, dangling = false, knownProtected = false, assetType = "generic", createdAt, expiresAt, now = Date.now() }) {
   if (active) return "active";
@@ -35844,7 +36417,7 @@ function publicConnection(source) {
 }
 function projectSourceCards(config2, projects, selectedProject, dockerAvailable) {
   if (selectedProject === "all") {
-    const diskRoot2 = process.env.RUNTIME_ASSET_DISK_ROOT || (platform3() === "win32" ? "D:\\" : "/");
+    const diskRoot2 = process.env.RUNTIME_ASSET_DISK_ROOT || (platform4() === "win32" ? "D:\\" : "/");
     return [{
       id: "local",
       label: `Local ${diskRoot2}`,
@@ -35854,7 +36427,7 @@ function projectSourceCards(config2, projects, selectedProject, dockerAvailable)
     }];
   }
   const project = projects.find((item) => item.id === selectedProject);
-  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform3() === "win32" ? "D:\\" : "/");
+  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform4() === "win32" ? "D:\\" : "/");
   return projectSourceConfigs(config2, selectedProject).map((source) => {
     if (source.id === "local") {
       return { id: "local", label: `Local ${diskRoot}`, kind: "local", status: dockerAvailable ? "connected" : "unavailable", detail: project?.label || selectedProject };
@@ -35904,8 +36477,8 @@ function readLedger(limit = 24) {
   }));
 }
 function readRawLedgerEvents(maxBytes = 8 * 1024 * 1024) {
-  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join3(stateRoot(), "events.jsonl");
-  if (!existsSync3(ledger)) return [];
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
+  if (!existsSync4(ledger)) return [];
   const stats = statSync(ledger);
   const length = Math.min(stats.size, maxBytes);
   const buffer = Buffer.alloc(length);
@@ -35945,19 +36518,19 @@ function retirementOverrideLabels(events) {
     if (!recoverySource || !project || project === "unknown" || !owner || owner === "unknown") continue;
     if (type === "volume" && (dataClassification !== "synthetic-test-fixture" || !/^sha256:[0-9a-f]{64}$/i.test(contentFingerprint))) continue;
     const labels = {
-      [`${RUNTIME_PREFIX2}project`]: project,
-      [`${RUNTIME_PREFIX2}environment`]: String(event.environment || "local"),
-      [`${RUNTIME_PREFIX2}owner`]: owner,
-      [`${RUNTIME_PREFIX2}asset-kind`]: type,
-      [`${RUNTIME_PREFIX2}retention`]: "retired",
-      [`${RUNTIME_PREFIX2}disposable`]: "true",
-      [`${RUNTIME_PREFIX2}recovery-source`]: recoverySource
+      [`${RUNTIME_PREFIX3}project`]: project,
+      [`${RUNTIME_PREFIX3}environment`]: String(event.environment || "local"),
+      [`${RUNTIME_PREFIX3}owner`]: owner,
+      [`${RUNTIME_PREFIX3}asset-kind`]: type,
+      [`${RUNTIME_PREFIX3}retention`]: "retired",
+      [`${RUNTIME_PREFIX3}disposable`]: "true",
+      [`${RUNTIME_PREFIX3}recovery-source`]: recoverySource
     };
-    if (event.release && event.release !== "unknown") labels[`${RUNTIME_PREFIX2}release`] = String(event.release);
-    if (event.gitSha && event.gitSha !== "unknown") labels[`${RUNTIME_PREFIX2}git-sha`] = String(event.gitSha);
+    if (event.release && event.release !== "unknown") labels[`${RUNTIME_PREFIX3}release`] = String(event.release);
+    if (event.gitSha && event.gitSha !== "unknown") labels[`${RUNTIME_PREFIX3}git-sha`] = String(event.gitSha);
     if (type === "volume") {
-      labels[`${RUNTIME_PREFIX2}data-classification`] = dataClassification;
-      labels[`${RUNTIME_PREFIX2}content-fingerprint`] = contentFingerprint;
+      labels[`${RUNTIME_PREFIX3}data-classification`] = dataClassification;
+      labels[`${RUNTIME_PREFIX3}content-fingerprint`] = contentFingerprint;
     }
     overrides.set(key, labels);
   }
@@ -35979,17 +36552,22 @@ function importPathReconciliation(input) {
   dashboardCache.clear();
   return result;
 }
+function importUnifiedReconciliation(input) {
+  const result = importUnifiedRetirementReconciliation(input);
+  dashboardCache.clear();
+  return result;
+}
 function loadConfig() {
-  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join3(stateRoot(), "dashboard-config.json");
-  if (!existsSync3(path)) return { sources: [] };
+  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join4(stateRoot2(), "dashboard-config.json");
+  if (!existsSync4(path)) return { sources: [] };
   try {
-    return JSON.parse(readFileSync3(path, "utf8"));
+    return JSON.parse(readFileSync5(path, "utf8"));
   } catch {
     return { sources: [] };
   }
 }
 function saveSchedule(schedule) {
-  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join3(stateRoot(), "dashboard-config.json");
+  const path = process.env.RUNTIME_ASSET_DASHBOARD_CONFIG || join4(stateRoot2(), "dashboard-config.json");
   const config2 = loadConfig();
   const next = {
     ...config2,
@@ -36002,8 +36580,8 @@ function saveSchedule(schedule) {
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     }
   };
-  mkdirSync3(dirname3(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(next, null, 2)}
+  mkdirSync4(dirname4(path), { recursive: true });
+  writeFileSync2(path, `${JSON.stringify(next, null, 2)}
 `, { encoding: "utf8", mode: 384 });
   dashboardCache.clear();
   return next.schedule;
@@ -36050,7 +36628,7 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
   const allAssets = [...worktrees, ...docker.assets].map((asset) => ({ ...asset, project: canonicalProjectId(asset.project, projects) }));
   const hostScope = selectedProject === "all";
   const filtered = hostScope ? allAssets : allAssets.filter((asset) => asset.project === selectedProject);
-  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform3() === "win32" ? "D:\\" : "/");
+  const diskRoot = process.env.RUNTIME_ASSET_DISK_ROOT || (platform4() === "win32" ? "D:\\" : "/");
   let disk = { totalBytes: 0, freeBytes: 0 };
   try {
     const stats = statfsSync(diskRoot);
@@ -36071,7 +36649,7 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
     hostScope,
     selectedSource,
     selectedProject,
-    host: hostname5(),
+    host: hostname6(),
     dockerAvailable: docker.available,
     disk,
     bars,
@@ -36088,17 +36666,33 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
 function normalizedTags2(tags) {
   return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.includes("<none>")))].sort();
 }
+function createUnifiedAssetTable({ project, sources = ["local", "production", "staging"], authorityReportPath, outputPath, coolingHours = 24 } = {}) {
+  const selectedSources = [...new Set(sources)].filter((source) => ["local", "production", "staging"].includes(source));
+  if (!project || project === "all") throw new Error("A registered project is required for a unified asset table.");
+  if (!selectedSources.length) throw new Error("At least one local, production, or staging source is required.");
+  const dashboards = selectedSources.map((source) => ({
+    source,
+    dashboard: collectDashboard({ scope: "project", source, project, includeAllAssets: true })
+  }));
+  const table = buildUnifiedAssetTable({
+    project: resolveProjectId(project, registeredProjects(loadConfig()), loadConfig()),
+    dashboards,
+    githubAuthority: loadGithubAuthority(authorityReportPath),
+    coolingHours: Math.max(1, Math.min(720, Number(coolingHours) || 24))
+  });
+  const writtenTo = writeUnifiedAssetTable(table, outputPath);
+  return writtenTo ? { ...table, writtenTo } : table;
+}
 function applyRemoteRetirementGovernance(dashboard, governance) {
   if (!dashboard?.remoteSnapshotAvailable || dashboard.selectedSource === "github") return dashboard;
   const project = String(dashboard.selectedProject || "");
   const environment = String(dashboard.selectedSource || "");
   const assets = (dashboard.assets || []).map((asset) => {
-    if (asset.type !== "image") return asset;
-    const key = `image:${asset.id}`;
+    const key = `${asset.type}:${asset.id}`;
     const protection = governance?.protections?.get(key);
     const retirement = governance?.retirements?.get(key);
-    const consumers = Array.isArray(asset.lineage?.consumers) ? asset.lineage.consumers : [];
-    const referenced = consumers.length > 0;
+    const consumers2 = Array.isArray(asset.lineage?.consumers) ? asset.lineage.consumers : [];
+    const referenced = consumers2.length > 0;
     if (protection && protection.project === project && protection.environment === environment) {
       return {
         ...asset,
@@ -36109,10 +36703,34 @@ function applyRemoteRetirementGovernance(dashboard, governance) {
       };
     }
     if (!retirement || retirement.project !== project || retirement.environment !== environment) return asset;
+    if (asset.type === "container") {
+      const expectedMounts = JSON.stringify(retirement.expectedMounts || []);
+      const liveMounts = JSON.stringify((asset.lineage?.mounts || []).map((mount) => ({
+        type: String(mount?.type || ""),
+        name: String(mount?.name || ""),
+        source: String(mount?.source || ""),
+        destination: String(mount?.destination || "")
+      })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))));
+      const identityMatches = asset.name === retirement.expectedName && asset.lineage?.imageId === retirement.expectedImageId && asset.lineage?.composeProject === retirement.expectedComposeProject && liveMounts === expectedMounts && retirement.preserveVolumes === true;
+      if (!identityMatches) return { ...asset, classification: "retained", retirementBlocked: true, lineage: { ...asset.lineage, retirement }, reason: "Container retirement is blocked because its exact name, image, Compose project, mount set, or volume-preservation contract drifted." };
+      return { ...asset, classification: "reclaimable", labels: { ...asset.labels || {}, ...retirement.labels }, lineage: { ...asset.lineage, retirement }, reason: retirement.stopBeforeRemoval ? "Merged-PR container has exact retirement evidence; execution may stop it before removal and must preserve every volume." : "Stopped merged-PR container has exact retirement evidence and all volumes must be preserved." };
+    }
+    if (["host_artifact", "worktree"].includes(asset.type)) {
+      const fingerprintMatches = String(asset.lineage?.fingerprint || "") === retirement.fingerprint;
+      const rootMatches = String(asset.lineage?.managedRoot || "") === retirement.managedRoot;
+      const sizeMatches = Number(asset.sizeBytes || 0) === Number(retirement.expectedSizeBytes || 0);
+      if (consumers2.length || !fingerprintMatches || !rootMatches || !sizeMatches) return { ...asset, classification: consumers2.length ? "active" : "retained", retirementBlocked: true, lineage: { ...asset.lineage, retirement }, reason: consumers2.length ? "Remote path retirement is blocked by a live or stopped container bind mount." : "Remote path retirement is blocked because its managed root, byte count, or metadata fingerprint drifted." };
+      return { ...asset, classification: "reclaimable", labels: { ...asset.labels || {}, ...retirement.labels }, lineage: { ...asset.lineage, retirement }, reason: "Merged-PR remote path has exact retirement evidence, zero bind-mount consumers, matching bytes, and matching metadata fingerprint." };
+    }
+    if (asset.type === "volume") {
+      if (consumers2.length || Number(retirement.expectedReferences) !== 0 || Number(asset.sizeBytes || 0) !== Number(retirement.expectedSizeBytes || 0)) return { ...asset, classification: consumers2.length ? "active" : "review", retirementBlocked: true, lineage: { ...asset.lineage, retirement }, reason: "Volume retirement is blocked because references or expected bytes drifted." };
+      return { ...asset, classification: "reclaimable", labels: { ...asset.labels || {}, ...retirement.labels }, lineage: { ...asset.lineage, retirement }, reason: "Exact retirement evidence confirms zero references and matching bytes; recovery evidence remains bound." };
+    }
+    if (asset.type !== "image") return asset;
     const liveTags = normalizedTags2(asset.lineage?.tags);
     const approvedTags = normalizedTags2(retirement.approvedTags);
     const tagSetMatches = liveTags.length === approvedTags.length && liveTags.every((tag, index) => tag === approvedTags[index]);
-    const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX2}git-sha`] || "").toLowerCase();
+    const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX3}git-sha`] || "").toLowerCase();
     const revisionMatches = revision === retirement.revision;
     if (referenced) {
       return {
@@ -36189,7 +36807,7 @@ function rebuildAnalyzedBars(bars, assets) {
 function lineageFinding(asset, dashboard) {
   const labels = asset.labels || {};
   const lineage = asset.lineage || {};
-  const consumers = Array.isArray(lineage.consumers) ? lineage.consumers : [];
+  const consumers2 = Array.isArray(lineage.consumers) ? lineage.consumers : [];
   const owner = labelValue(labels, "owner");
   const recoverySource = labelValue(labels, "recovery-source") || lineage.source || lineage.remote || (asset.type === "cache" ? "\u53EF\u7531\u6784\u5EFA\u91CD\u65B0\u751F\u6210" : void 0);
   const revision = labelValue(labels, "git-sha") || lineage.revision || asset.gitSha;
@@ -36198,7 +36816,7 @@ function lineageFinding(asset, dashboard) {
   const matchingEvents = (dashboard.events || []).filter((event) => String(event.assetId || "") === String(asset.id || ""));
   const evidence = [
     owner && `\u5F52\u5C5E\uFF1A${owner}`,
-    consumers.length > 0 ? `\u6D88\u8D39\u8005\uFF1A${consumers.length} \u4E2A` : lineage.consumers ? "\u6D88\u8D39\u8005\uFF1A0 \u4E2A" : void 0,
+    consumers2.length > 0 ? `\u6D88\u8D39\u8005\uFF1A${consumers2.length} \u4E2A` : lineage.consumers ? "\u6D88\u8D39\u8005\uFF1A0 \u4E2A" : void 0,
     revision && `\u7248\u672C\uFF1A${String(revision).slice(0, 12)}`,
     release && `Release\uFF1A${release}`,
     retention && `\u4FDD\u7559\u7B56\u7565\uFF1A${retention}`,
@@ -36223,7 +36841,7 @@ function lineageFinding(asset, dashboard) {
     sizeBytes: Number(asset.sizeBytes || 0),
     expiresAt: asset.expiresAt,
     reason: asset.reason,
-    consumerCount: consumers.length,
+    consumerCount: consumers2.length,
     evidence,
     missing,
     suggestedLabels
@@ -36233,7 +36851,7 @@ function detectSupersededBuildChains(assets) {
   const families = /* @__PURE__ */ new Map();
   for (const asset of assets || []) {
     if (asset.type !== "image" || (asset.lineage?.consumers || []).length > 0) continue;
-    const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX2}git-sha`] || "").toLowerCase();
+    const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX3}git-sha`] || "").toLowerCase();
     const tags = normalizedTags2(asset.lineage?.tags);
     const service = tags.some((tag) => /(?:^|[-_:])ocr(?:[-_:]|$)/i.test(tag)) ? "ocr" : tags.some((tag) => /(?:^|[-_:])ai[-_]?worker(?:[-_:]|$)/i.test(tag)) ? "ai-worker" : tags.some((tag) => /(?:^|[-_:])transcode[-_]?worker(?:[-_:]|$)/i.test(tag)) ? "transcode-worker" : tags.some((tag) => /(?:^|[-_:])amazon[-_]?service(?:[-_:]|$)/i.test(tag)) ? "amazon-service" : tags.some((tag) => /(?:^|[-_:])web(?:[-_:]|$)/i.test(tag)) ? "web" : tags.some((tag) => /(?:^|[-_:])(?:api|migrate)(?:[-_:]|$)/i.test(tag)) ? "api" : tags.some((tag) => /(?:^|[-_:])worker(?:[-_:]|$)/i.test(tag)) ? "worker" : "other";
     const attestedGroup = asset.lineage?.retirement?.group;
@@ -36369,8 +36987,8 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
   const allowlist = dashboard.assets.filter((asset) => {
     if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
     if (requestedIds && !requestedIds.has(String(asset.id))) return false;
-    if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX2}disposable`] === "true";
-    return selectedSource === "github" ? ["artifact", "actions_cache"].includes(asset.type) : ["image", "volume", "cache", "worktree", "worktree_residual", "host_artifact"].includes(asset.type);
+    if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX3}disposable`] === "true";
+    return selectedSource === "github" ? ["artifact", "actions_cache"].includes(asset.type) : ["container", "image", "volume", "cache", "worktree", "host_artifact"].includes(asset.type);
   }).map((asset) => ({
     type: asset.type,
     id: asset.id,
@@ -36385,7 +37003,20 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
       reportSha256: asset.lineage.retirement.reportSha256,
       group: asset.lineage.retirement.group,
       approvedTags: normalizedTags2(asset.lineage.retirement.approvedTags),
-      revision: asset.lineage.retirement.revision
+      revision: asset.lineage.retirement.revision,
+      assetType: asset.lineage.retirement.assetType,
+      expectedSizeBytes: asset.lineage.retirement.expectedSizeBytes,
+      expectedName: asset.lineage.retirement.expectedName,
+      expectedState: asset.lineage.retirement.expectedState,
+      expectedImageId: asset.lineage.retirement.expectedImageId,
+      expectedComposeProject: asset.lineage.retirement.expectedComposeProject,
+      expectedMounts: asset.lineage.retirement.expectedMounts,
+      preserveVolumes: asset.lineage.retirement.preserveVolumes,
+      stopBeforeRemoval: asset.lineage.retirement.stopBeforeRemoval,
+      managedRoot: asset.lineage.retirement.managedRoot,
+      fingerprint: asset.lineage.retirement.fingerprint,
+      expectedReferences: asset.lineage.retirement.expectedReferences,
+      lifecycle: asset.lineage.retirement.lifecycle
     } : void 0,
     remoteKind: asset.remoteKind
   }));
@@ -36407,7 +37038,7 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
       });
     }
   }
-  const token = randomUUID4();
+  const token = randomUUID5();
   const preview = {
     token,
     source: selectedSource,
@@ -36424,13 +37055,13 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
   return preview;
 }
 function appendCleanupEvent(event, details, environment = "local") {
-  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join3(stateRoot(), "events.jsonl");
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
   const item = {
     schemaVersion: 1,
-    eventId: randomUUID4(),
+    eventId: randomUUID5(),
     occurredAt: (/* @__PURE__ */ new Date()).toISOString(),
     event,
-    host: hostname5(),
+    host: hostname6(),
     project: "runtime-asset-tracker",
     environment,
     release: "dashboard",
@@ -36438,8 +37069,8 @@ function appendCleanupEvent(event, details, environment = "local") {
     owner: "local-user",
     details
   };
-  mkdirSync3(dirname3(ledger), { recursive: true });
-  appendFileSync3(ledger, `${JSON.stringify(item)}
+  mkdirSync4(dirname4(ledger), { recursive: true });
+  appendFileSync4(ledger, `${JSON.stringify(item)}
 `, { encoding: "utf8", mode: 384 });
 }
 function localCleanupArgs(asset) {
@@ -36532,9 +37163,9 @@ function executeCleanup({ token, confirmed = false }) {
 }
 
 // mcp/server.mjs
-var moduleDirectory = dirname4(fileURLToPath(import.meta.url));
+var moduleDirectory = dirname5(fileURLToPath(import.meta.url));
 var DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
-var dashboardHtml = readFileSync4(join4(moduleDirectory, "dashboard.html"), "utf8");
+var dashboardHtml = readFileSync6(join5(moduleDirectory, "dashboard.html"), "utf8");
 function toolResult(structuredContent, text) {
   return {
     structuredContent,
@@ -36543,7 +37174,7 @@ function toolResult(structuredContent, text) {
 }
 function createRuntimeAssetServer() {
   const server = new McpServer(
-    { name: "runtime-asset-tracker", version: "0.3.3" },
+    { name: "runtime-asset-tracker", version: "0.4.0" },
     { instructions: "Use open_runtime_dashboard for a visual inventory. Always call preview_cleanup before execute_cleanup. Never infer that an unlabeled volume is disposable." }
   );
   N3(server, "Runtime Asset Dashboard", DASHBOARD_URI, {
@@ -36618,6 +37249,23 @@ function createRuntimeAssetServer() {
     const reconciliation = importPathReconciliation(input);
     return toolResult({ reconciliation }, `Imported ${reconciliation.retirementEventsAdded} exact path retirement attestations.`);
   });
+  K3(server, "import_unified_retirement_reconciliation", {
+    title: "Import merged-PR asset retirement reconciliation",
+    description: "Validate a merged-PR reconciliation containing exact containers, images, volumes, and managed remote paths, then append retirement attestations. It never deletes assets.",
+    inputSchema: {
+      reportPath: external_exports.string().min(3).max(1024),
+      source: external_exports.enum(["local", "production", "staging"]),
+      project: external_exports.string().min(3).max(128),
+      groups: external_exports.array(external_exports.string().min(1).max(128)).min(1).max(32),
+      owner: external_exports.string().min(1).max(128).optional()
+    },
+    outputSchema: { reconciliation: external_exports.record(external_exports.string(), external_exports.unknown()) },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } }
+  }, async (input) => {
+    const reconciliation = importUnifiedReconciliation(input);
+    return toolResult({ reconciliation }, `Imported ${reconciliation.retirementEventsAdded} exact merged-PR asset retirement attestations.`);
+  });
   K3(server, "deep_scan_runtime_lineage", {
     title: "Deep scan runtime asset lineage",
     description: "Read-only analysis of ownership, consumers, retention, expiry, source revision, and recovery evidence for the selected project and environment. It never deletes or relabels assets.",
@@ -36634,6 +37282,23 @@ function createRuntimeAssetServer() {
   }, async (input) => {
     const { report, dashboard } = runDeepScan(input);
     return toolResult({ lineage: report, dashboard }, `Read-only lineage scan inspected ${report.scannedCount} assets and found ${report.expiringCount} expiring assets.`);
+  });
+  K3(server, "build_unified_asset_table", {
+    title: "Build unified runtime asset table",
+    description: "Read local, Production, and Staging inventories and correlate them with a GitHub revision/PR authority report. This is read-only and never marks assets disposable by name alone.",
+    inputSchema: {
+      project: external_exports.string().min(3).max(128),
+      sources: external_exports.array(external_exports.enum(["local", "production", "staging"])).min(1).max(3).optional(),
+      authorityReportPath: external_exports.string().min(3).max(1024).optional(),
+      outputPath: external_exports.string().min(3).max(1024).optional(),
+      coolingHours: external_exports.number().int().min(1).max(720).optional()
+    },
+    outputSchema: { table: external_exports.record(external_exports.string(), external_exports.unknown()) },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } }
+  }, async (input) => {
+    const table = createUnifiedAssetTable(input);
+    return toolResult({ table }, `Unified asset table contains ${table.summary.assetCount} exact assets and ${table.summary.candidateCount} cleanup candidates.`);
   });
   K3(server, "execute_cleanup", {
     title: "Execute exact runtime asset cleanup",
@@ -36708,9 +37373,17 @@ async function startHttp() {
         sendJson(response, 200, { reconciliation: importPathReconciliation(await readBody(request)) });
         return;
       }
+      if (request.method === "POST" && url2.pathname === "/api/unified-reconciliation-import") {
+        sendJson(response, 200, { reconciliation: importUnifiedReconciliation(await readBody(request)) });
+        return;
+      }
       if (request.method === "POST" && url2.pathname === "/api/deep-scan") {
         const { report, dashboard } = runDeepScan(await readBody(request));
         sendJson(response, 200, { lineage: report, dashboard });
+        return;
+      }
+      if (request.method === "POST" && url2.pathname === "/api/unified-asset-table") {
+        sendJson(response, 200, { table: createUnifiedAssetTable(await readBody(request)) });
         return;
       }
       if (request.method === "POST" && url2.pathname === "/api/cleanup-execute") {

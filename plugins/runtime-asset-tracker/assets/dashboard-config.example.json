@@ -34,6 +34,11 @@
           "region": "us-east-2",
           "availabilityZone": "us-east-2a",
           "instanceId": "i-example-production",
+          "activeLink": "/home/ec2-user/apps/my-project",
+          "releaseRoot": "/home/ec2-user/apps/my-project-releases",
+          "managedPaths": [
+            { "path": "/home/ec2-user/apps/my-project-evaluations", "kind": "evaluation-artifact" }
+          ],
           "accountId": "123456789012",
           "iamPrincipal": "deployment-operator",
           "awsProfile": "my-project-prod",

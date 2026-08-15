@@ -1,6 +1,6 @@
 {
   "name": "runtime-asset-tracker",
-  "version": "0.3.3+codex.20260814-path-scan-project-safety",
+  "version": "0.4.0+codex.20260814-unified-lifecycle",
   "description": "Track Docker assets, Git worktrees, residual directories, and host artifacts with portable labels and an append-only JSONL ledger.",
   "author": {
     "name": "SparklingPlay Engineering"
@@ -36,7 +36,11 @@
       "Post-cleanup runtime and disk verification",
       "Real-byte Git worktree and residual inventory",
       "No-follow host artifact scanning",
-      "Fingerprint-bound exact path retirement"
+      "Fingerprint-bound exact path retirement",
+      "Unified local, Production, and Staging asset table",
+      "Merged pull-request lifecycle retirement",
+      "Exact volume-preserving container retirement",
+      "Exact managed remote-path retirement"
     ],
     "brandColor": "#20B8EC",
     "screenshots": [
