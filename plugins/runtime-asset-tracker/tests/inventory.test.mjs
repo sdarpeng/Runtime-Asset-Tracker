@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { canonicalProjectId, collectDashboard, createCleanupPreview, localBuildCacheBar, localCleanupArgs, localCleanupTimeoutMs, normalizeGithubRepository, parseBytes, projectSourceConfigs, registeredProjects, resolveProjectId, retirementOverrideLabels } from "../mcp/inventory.mjs";
+import { canonicalProjectId, cleanupSourceSupportsType, collectDashboard, createCleanupPreview, localBuildCacheBar, localCleanupArgs, localCleanupTimeoutMs, normalizeGithubRepository, parseBytes, projectSourceConfigs, registeredProjects, resolveProjectId, retirementOverrideLabels } from "../mcp/inventory.mjs";
 
 function withIsolatedDashboard(callback) {
   const sandbox = mkdtempSync(join(tmpdir(), "tracker-dashboard-"));
@@ -48,6 +48,12 @@ describe("runtime asset dashboard inventory", () => {
   it("allows a bounded long timeout for a large local Build Cache prune", () => {
     assert.equal(localCleanupTimeoutMs({ type: "cache", id: "docker-build-cache" }), 15 * 60_000);
     assert.equal(localCleanupTimeoutMs({ type: "image", id: "sha256:test" }), 30_000);
+  });
+
+  it("allows exact local residual paths through the cleanup preview safety gate", () => {
+    assert.equal(cleanupSourceSupportsType("local", "worktree_residual"), true);
+    assert.equal(cleanupSourceSupportsType("production", "worktree_residual"), false);
+    assert.equal(cleanupSourceSupportsType("github", "worktree_residual"), false);
   });
 
   it("uses registered GitHub repositories as project authority", () => {

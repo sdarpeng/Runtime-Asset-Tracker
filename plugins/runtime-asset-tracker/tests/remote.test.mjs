@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { gzipSync } from "node:zlib";
-import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, remoteSnapshotScript, resolveExpiry, ssmMutationCommand } from "../mcp/remote.mjs";
+import { assetInSelectedProjectScope, awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, executeRemoteCleanup, findExactSsmCommandId, limitDashboardAssets, remoteImageRemovalArgs, remoteSnapshotScript, resolveExpiry, runSsmMutation, ssmMutationCommand } from "../mcp/remote.mjs";
 
 describe("remote read-only adapters", () => {
   it("keeps the EC2 collector free of cleanup and service mutation commands", () => {
@@ -27,19 +27,60 @@ describe("remote read-only adapters", () => {
     assert.equal(context.activeLink, "/home/ubuntu/apps/finportex");
     assert.equal(context.releaseRoot, "");
     assert.match(script, /"project":DEFAULT_PROJECT/);
-    assert.match(script, /return label\(labels, "project"\) or DEFAULT_PROJECT or fallback or "unknown"/);
+    assert.match(script, /def inferred_project\(candidates\):/);
+    assert.match(script, /compose_project = labels\.get\("com\.docker\.compose\.project"\)/);
     assert.match(script, /"composeProject":labels\.get\("com\.docker\.compose\.project"\)/);
   });
 
+  it("measures remote releases and configured host artifacts without making them disposable", () => {
+    const script = remoteSnapshotScript({
+      projectId: "owner/cms",
+      managedPaths: [{ path: "/home/ec2-user/apps/cms-transfer", kind: "release-transfer" }],
+    });
+    assert.match(script, /def disk_usage_bytes\(path\):/);
+    assert.match(script, /CONTEXT\.get\("managedPaths"\)/);
+    assert.match(script, /"type":"host_artifact"/);
+    assert.match(script, /"classification":"retained"/);
+    assert.match(script, /"source":mount\.get\("Source"\)/);
+  });
+
+  it("does not truncate a requested full remote inventory", () => {
+    const assets = Array.from({ length: 400 }, (_, index) => ({ id: index }));
+    assert.equal(limitDashboardAssets(assets, false).length, 320);
+    assert.equal(limitDashboardAssets(assets, true).length, 400);
+    const fullScript = remoteSnapshotScript({ includeAllAssets: true });
+    const encoded = fullScript.match(/CONTEXT = json\.loads\(base64\.b64decode\("([^"]+)"\)\)/)?.[1];
+    assert.ok(encoded);
+    const context = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+    assert.equal(context.includeAllAssets, true);
+    assert.match(fullScript, /if not CONTEXT\.get\("includeAllAssets"\): release_entries = release_entries\[:60\]/);
+    assert.match(fullScript, /asset_types = \["container", "image", "volume", "worktree", "host_artifact", "cache"\]/);
+    assert.match(fullScript, /if CONTEXT\.get\("includeAllAssets"\) else/);
+  });
+
+  it("keeps sibling host assets outside the selected project while retaining shared dependencies", () => {
+    const selected = "owner/SparklingCMS";
+    assert.equal(assetInSelectedProjectScope({ project: selected }, selected), true);
+    assert.equal(assetInSelectedProjectScope({ project: "plane" }, selected), false);
+    assert.equal(assetInSelectedProjectScope({ project: "shared", lineage: { projects: ["plane", selected] } }, selected), true);
+    assert.equal(assetInSelectedProjectScope({ project: "unknown", lineage: { projects: [] } }, selected), false);
+  });
+
   it("stages oversized SSM snapshots in a private file for checksum-verified chunk reads", () => {
-    const script = remoteSnapshotScript({ transportPath: "/tmp/runtime-asset-tracker-test.b64" });
+    const script = remoteSnapshotScript({ transportPath: "/tmp/runtime-asset-tracker-test/snapshot.b64" });
     assert.match(script, /len\(encoded_payload\) > 16000/);
-    assert.match(script, /os\.O_WRONLY \| os\.O_CREAT \| os\.O_TRUNC, 0o600/);
-    assert.match(script, /RAT2:%d:%s/);
+    assert.match(script, /os\.mkdir\(transport_dir, 0o700\)/);
+    assert.match(script, /os\.O_WRONLY \| os\.O_CREAT \| os\.O_EXCL \| os\.O_NOFOLLOW, 0o600/);
+    assert.doesNotMatch(script, /os\.O_TRUNC/);
+    assert.match(script, /staged_info\.st_nlink != 1/);
+    assert.match(script, /RAT2:%d:%s:%d:%d:%d/);
     assert.match(script, /hashlib\.sha256/);
     const source = readFileSync(new URL("../mcp/remote.mjs", import.meta.url), "utf8");
     assert.match(source, /const chunkSize = 16_000/);
-    assert.match(source, /os\.path\.exists\(p\) and os\.remove\(p\)/);
+    assert.match(source, /safeStagedFileReadCommand/);
+    assert.match(source, /os\.O_RDONLY\|os\.O_NOFOLLOW/);
+    assert.match(source, /s\.st_dev==int\(C\["dev"\]\)/);
+    assert.match(source, /safeStagedFileCleanupCommand/);
     assert.doesNotMatch(source, /snapshot temp cleanup[^\n]+\brm\b/);
   });
 
@@ -150,13 +191,26 @@ describe("remote read-only adapters", () => {
     assert.match(script, /inspect\("image", identifier\) is None/);
     assert.match(script, /com\.codex\.runtime\./);
     assert.doesNotMatch(script, /system.+prune|image.+prune|volume.+prune|\["image", "rm", "--force"|\["volume", "rm", "--force"/i);
-    const encodedPayload = script.match(/items = json\.loads\(base64\.b64decode\("([A-Za-z0-9+/=]+)"\)\)/)?.[1];
+    const encodedPayload = script.match(/payload = json\.loads\(base64\.b64decode\("([A-Za-z0-9+/=]+)"\)\)/)?.[1];
     assert.ok(encodedPayload);
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64").toString("utf8"));
-    assert.deepEqual(payload[0].tags, ["example/api:retired"]);
-    assert.equal(payload[0].retirementEvidence.reportSha256, "b".repeat(64));
-    assert.deepEqual(payload[0].retirementEvidence.approvedTags, ["example/api:retired"]);
-    assert.equal(payload[0].retirementEvidence.revision, "a".repeat(40));
+    assert.deepEqual(payload.items[0].tags, ["example/api:retired"]);
+    assert.equal(payload.items[0].retirementEvidence.reportSha256, "b".repeat(64));
+    assert.deepEqual(payload.items[0].retirementEvidence.approvedTags, ["example/api:retired"]);
+    assert.equal(payload.items[0].retirementEvidence.revision, "a".repeat(40));
+  });
+
+  it("removes an exact merged-PR container without deleting its volumes and gates managed paths", () => {
+    const script = awsDockerCleanupScript([{ type: "container", id: "a".repeat(64), project: "owner/cms", retirementEvidence: { reportSha256: "b".repeat(64), assetType: "container", expectedName: "cms-pr28-api", expectedState: "running", expectedImageId: `sha256:${"c".repeat(64)}`, expectedComposeProject: "cms-pr28", expectedMounts: [], preserveVolumes: true, stopBeforeRemoval: true, lifecycle: { state: "MERGED", coolingComplete: true } } }], { managedPaths: [{ path: "/home/ec2-user/apps/cms-evals" }], activeLink: "/home/ec2-user/apps/cms" });
+    assert.match(script, /\["stop", "--time", "30", identifier\]/);
+    assert.match(script, /\["container", "rm", identifier\]/);
+    assert.doesNotMatch(script, /container", "rm", "-v"|container", "rm", "--volumes"/);
+    assert.match(script, /metadata_fingerprint/);
+    assert.match(script, /path_is_referenced/);
+  });
+
+  it("drops Docker pseudo-tags whose repository or tag is none", () => {
+    assert.deepEqual(remoteImageRemovalArgs({ tags: ["repo:<none>", "<none>:<none>", "repo:valid"] }), ["image", "rm", "repo:valid"]);
   });
 
   it("gzip-bounds a 29-image retirement command below the SSM command safety limit", () => {
@@ -178,6 +232,84 @@ describe("remote read-only adapters", () => {
     const inner = ssmMutationCommand(`echo '${Buffer.from(python).toString("base64")}' | base64 -d | python3`);
     assert.ok(Buffer.byteLength(inner, "utf8") < 20_000, `compressed command was ${Buffer.byteLength(inner, "utf8")} bytes`);
     assert.match(inner, /gzip -d \| bash$/);
+  });
+
+  it("binds SSM recovery to one exact operation comment and rejects ambiguity", () => {
+    const commands = [
+      { CommandId: "11111111-1111-4111-8111-111111111111", Comment: "RAT operation-a", InstanceIds: ["i-one"] },
+      { CommandId: "22222222-2222-4222-8222-222222222222", Comment: "RAT operation-b", InstanceIds: ["i-one"] },
+    ];
+    assert.equal(findExactSsmCommandId(commands, { comment: "RAT operation-a", instanceId: "i-one" }), commands[0].CommandId);
+    assert.equal(findExactSsmCommandId(commands, { comment: "RAT missing", instanceId: "i-one" }), null);
+    assert.throws(() => findExactSsmCommandId([...commands, { ...commands[0], CommandId: "33333333-3333-4333-8333-333333333333" }], { comment: "RAT operation-a", instanceId: "i-one" }), /ambiguous recovery/);
+  });
+
+  it("reserves and stages every cleanup result with a checksum marker", () => {
+    const script = awsDockerCleanupScript([], { cleanupResultPath: "/tmp/rat-cleanup-operation/result.b64" });
+    assert.match(script, /RATCLEAN2:%d:%s:%d:%d:%d/);
+    assert.match(script, /os\.mkdir\(result_dir, 0o700\)/);
+    assert.match(script, /os\.O_WRONLY \| os\.O_CREAT \| os\.O_EXCL \| os\.O_NOFOLLOW, 0o600/);
+    assert.doesNotMatch(script, /os\.O_TRUNC/);
+    assert.match(script, /staged_info\.st_nlink != 1/);
+    assert.match(script, /hashlib\.sha256/);
+    assert.ok(script.indexOf("os.mkdir(result_dir, 0o700)") < script.indexOf("results = []"));
+    assert.match(script, /os\.fsync\(result_descriptor\)/);
+  });
+
+  it("treats every post-send terminal SSM failure as outcome unknown and keeps resume reconciliation", () => {
+    const source = readFileSync(new URL("../mcp/remote.mjs", import.meta.url), "utf8");
+    assert.match(source, /SSM cleanup status:[^\n]+"outcome_unknown"/);
+    assert.match(source, /allowlist = \[\]/);
+    assert.match(source, /live reconciliation is required/);
+    assert.match(source, /without resending/);
+  });
+
+  for (const transport of [
+    { kind: "aws-ssm", collector: "collectAwsSnapshot", mutation: "runSsmMutation", source: "production" },
+    { kind: "ssh", collector: "collectSshSnapshot", mutation: "runSshMutation", source: "staging" },
+    { kind: "github", collector: "collectGithubSnapshot", mutation: "runGithubMutation", source: "github" },
+  ]) it(`classifies ${transport.kind} pre-mutation snapshot failure as not_sent`, () => {
+    let sends = 0;
+    let caught;
+    try {
+      executeRemoteCleanup({ source: transport.source, sourceConfig: { kind: transport.kind, instanceId: "i-test", sshProfile: "test", repository: "owner/repo" }, allowlist: [] }, {
+        [transport.collector]() { throw new Error("injected snapshot failure"); },
+        [transport.mutation]() { sends += 1; throw new Error("must not execute"); },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    assert.equal(caught?.mutationState, "not_sent");
+    assert.equal(sends, 0);
+  });
+
+  for (const condition of ["describe-error", "offline"]) it(`sends zero SSM commands when the instance check is ${condition}`, () => {
+    let sends = 0;
+    let caught;
+    try {
+      runSsmMutation({ instanceId: "i-test" }, "echo safe", "RAT test-operation", {
+        runJson(_command, args) {
+          if (args.includes("send-command")) sends += 1;
+          if (condition === "describe-error") throw new Error("injected describe failure");
+          return { InstanceInformationList: [{ InstanceId: "i-test", PingStatus: "Offline" }] };
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    assert.equal(caught?.mutationState, "not_sent");
+    assert.equal(sends, 0);
+  });
+
+  it("resume logic never calls the cleanup send path", () => {
+    const source = readFileSync(new URL("../mcp/remote.mjs", import.meta.url), "utf8");
+    const start = source.indexOf("export function resumeAwsCleanup");
+    const end = source.indexOf("function runSshMutation", start);
+    const resumeSource = source.slice(start, end);
+    assert.ok(start > 0 && end > start);
+    assert.doesNotMatch(resumeSource, /runSsmMutation|ssmMutationCommand|"send-command"/);
+    assert.match(resumeSource, /pollExistingSsmMutation/);
+    assert.match(resumeSource, /reconcileSsmCommandId/);
   });
 
   it("only classifies expired artifacts, closed PR caches, and 30-day stale caches as safe", () => {

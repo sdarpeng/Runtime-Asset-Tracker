@@ -33,6 +33,16 @@ const classifications = {
   reclaimable: { label: "可安全清理", color: "var(--reclaimable)" },
 };
 
+const retirementStates = {
+  "suspected-retired": { label: "疑似已退休", classification: "expiring" },
+  "blocked-candidate": { label: "候选·有阻塞", classification: "retained" },
+  "executable-candidate": { label: "候选·可执行", classification: "reclaimable" },
+};
+
+function displayState(asset) {
+  return retirementStates[asset?.retirementState] || { label: classifications[asset?.classification]?.label || asset?.classification, classification: asset?.classification };
+}
+
 const barMeta = {
   worktree: { label: "Git Worktrees", caption: "已登记工作树的真实磁盘占用", Icon: GitBranch },
   worktree_residual: { label: "Worktree Residuals", caption: "未被 Git 登记的疑似残留目录", Icon: GitBranch },
@@ -105,7 +115,7 @@ function createBridge() {
     window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
   });
   const ready = request("ui/initialize", {
-    appInfo: { name: "runtime-asset-dashboard", version: "0.3.3" },
+    appInfo: { name: "runtime-asset-dashboard", version: "0.5.0" },
     appCapabilities: {},
     protocolVersion: "2026-01-26",
   }).then(() => window.parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized", params: {} }, "*"));
@@ -232,6 +242,9 @@ function DeepScanModal({ report, onClose }) {
         <p>{report.project} · {report.source} · 扫描 {report.scannedCount} 项资产。检索只补充证据和分类，不会删除资产或更改远程标签。</p>
         <div className="lineage-summary">
           <span><small>明确可清理</small><strong>{formatBytes(report.reclaimableBytes)}</strong></span>
+          <span><small>疑似退休</small><strong>{report.retirementCandidates?.suspectedCount || 0} 项</strong></span>
+          <span><small>候选·有阻塞</small><strong>{report.retirementCandidates?.blockedCount || 0} 项</strong></span>
+          <span><small>候选·可执行</small><strong>{formatBytes(report.retirementCandidates?.executableBytes || 0)}</strong></span>
           <span className="expiring"><small>即将到期</small><strong>{formatBytes(report.expiringBytes)}</strong></span>
           <span><small>本次新增可清理</small><strong>{formatBytes(report.newlyReclaimableBytes)}</strong></span>
           <span><small>缺少证据</small><strong>{report.unresolvedCount} 项</strong></span>
@@ -239,7 +252,7 @@ function DeepScanModal({ report, onClose }) {
         <div className="lineage-list">
           {report.findings.length === 0 ? <div className="preview-empty"><ShieldCheck size={26} />当前资产证据完整，没有待处理发现</div> : report.findings.map((item) => (
             <article className="lineage-row" key={`${item.type}-${item.id}`}>
-              <header><span><strong>{item.name}</strong><small>{item.type} · {item.reason || "按现有证据分类"}</small></span><span className={`lineage-class lineage-class-${item.classification}`}>{classifications[item.classification]?.label || item.classification}</span></header>
+              <header><span><strong>{item.name}</strong><small>{item.type} · {item.reason || "按现有证据分类"}</small></span><span className={`lineage-class lineage-class-${displayState(item).classification}`}>{displayState(item).label}</span></header>
               <div className="lineage-evidence">{item.evidence.length > 0 ? item.evidence.map((entry) => <span key={entry}>{entry}</span>) : <span>尚无足够血统证据</span>}</div>
               {item.missing.length > 0 && <p className="lineage-missing">缺少：{item.missing.join("、")}{item.suggestedLabels.length > 0 ? `；建议补充 ${item.suggestedLabels.join("、")}` : ""}</p>}
             </article>
@@ -335,9 +348,10 @@ export function App() {
     refresh({ project: next, source: "local" });
   };
 
-  const visibleAssets = useMemo(() => (dashboard?.assets || []).filter((asset) => asset.type === selectedType && `${asset.name} ${asset.project} ${asset.status}`.toLowerCase().includes(query.toLowerCase())).slice(0, 18), [dashboard, query, selectedType]);
+  const visibleAssets = useMemo(() => (dashboard?.assets || []).filter((asset) => asset.type === selectedType && `${asset.name} ${asset.project} ${asset.status} ${asset.retirementState || ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 18), [dashboard, query, selectedType]);
   const totalFootprint = (dashboard?.bars || []).filter((item) => item.unit !== "count").reduce((sum, item) => sum + Number(item.totalBytes || 0), 0);
-  const totalReclaimable = (dashboard?.bars || []).reduce((sum, item) => sum + Number(item.reclaimableBytes || 0), 0);
+  const barReclaimable = (dashboard?.bars || []).reduce((sum, item) => sum + Number(item.reclaimableBytes || 0), 0);
+  const totalReclaimable = Math.max(barReclaimable, Number(dashboard?.retirementCandidates?.executableBytes || 0));
   const protectedCount = (dashboard?.assets || []).filter((asset) => asset.classification === "protected").length;
   const openPullCount = (dashboard?.assets || []).filter((asset) => asset.type === "pull_request" && ["open", "draft"].includes(asset.status)).length;
   const selectedSource = dashboard?.sources?.find((item) => item.id === source);
@@ -368,7 +382,7 @@ export function App() {
   };
   const confirmCleanup = async () => {
     setLoading(true);
-    try { acceptResult(await callTool("execute_cleanup", { token: preview.token, confirmed: true })); await refresh(); }
+    try { acceptResult(await callTool("execute_cleanup", { token: preview.token, confirmed: true, confirmationDigest: preview.confirmationDigest })); await refresh(); }
     catch (error) { setNotice(`清理失败：${error.message || error}`); }
     finally { setLoading(false); }
   };
@@ -439,7 +453,7 @@ export function App() {
           <article className="asset-table card">
             <div className="section-heading compact"><div><span className="section-kicker">ASSET DETAIL</span><h2>{barMeta[selectedType]?.label || "资产明细"}</h2></div><label className="search"><MagnifyingGlass size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产或项目" /></label></div>
             <div className="table-head"><span>资产</span><span>项目 / 状态</span><span>分类</span><span>{metricHeading(selectedType)}</span></div>
-            <div className="table-body">{visibleAssets.length === 0 ? <div className="table-empty">当前筛选没有资产</div> : visibleAssets.map((asset) => { const AssetIcon = barMeta[asset.type]?.Icon || Cube; return <div className="table-row" key={`${asset.type}-${asset.id}`}><span><AssetIcon size={17} weight="duotone" /><b>{asset.name}</b></span><span><b>{asset.project}</b><small>{asset.status}{asset.author ? ` · ${asset.author}` : ""}</small></span><span><i className={`classification classification-${asset.classification}`} />{classifications[asset.classification]?.label || asset.classification}</span><strong>{assetMetric(asset)}</strong></div>; })}</div>
+            <div className="table-body">{visibleAssets.length === 0 ? <div className="table-empty">当前筛选没有资产</div> : visibleAssets.map((asset) => { const AssetIcon = barMeta[asset.type]?.Icon || Cube; const state = displayState(asset); return <div className="table-row" key={`${asset.type}-${asset.id}`}><span><AssetIcon size={17} weight="duotone" /><b>{asset.name}</b></span><span><b>{asset.project}</b><small>{asset.status}{asset.author ? ` · ${asset.author}` : ""}</small></span><span title={(asset.retirementCandidate?.blockedBy || []).map((item) => item.type).join(", ")}><i className={`classification classification-${state.classification}`} />{state.label}</span><strong>{assetMetric(asset)}</strong></div>; })}</div>
           </article>
           <article className="ledger card">
             <div className="section-heading compact"><div><span className="section-kicker">EVENT LEDGER</span><h2>最近事件</h2></div><span className="ledger-count">{dashboard?.events?.length || 0}</span></div>

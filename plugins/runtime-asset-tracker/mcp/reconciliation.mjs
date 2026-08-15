@@ -6,8 +6,10 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 export const RECONCILIATION_SCHEMA = "sparkling.runtime-image-retirement-reconciliation/v1";
 const RUNTIME_PREFIX = "com.codex.runtime.";
 const IMAGE_ID = /^sha256:[0-9a-f]{64}$/i;
+const CONTAINER_ID = /^[0-9a-f]{64}$/i;
 const COMMIT = /^[0-9a-f]{40}$/i;
 const REPORT_SHA = /^[0-9a-f]{64}$/i;
+const RETIREMENT_TYPES = new Set(["image", "container", "volume", "host_artifact", "worktree"]);
 
 function defaultStateRoot() {
   if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve(process.env.RUNTIME_ASSET_STATE_DIR);
@@ -16,7 +18,8 @@ function defaultStateRoot() {
 }
 
 function stableStrings(values) {
-  return [...new Set((values || []).map(String).filter(Boolean))].sort();
+  const items = Array.isArray(values) ? values : values == null ? [] : [values];
+  return [...new Set(items.map(String).filter(Boolean))].sort();
 }
 
 function readJson(path) {
@@ -83,16 +86,24 @@ export function validateRetirementReconciliation(report, { project, source, inst
   return { ok: errors.length === 0, errors, selectedGroups, imageCount, uniqueBytes, protectedIds: [...protectedIds] };
 }
 
-export function retirementAttestations(events) {
+export function retirementAttestations(events, { project: selectedProject, environment: selectedEnvironment } = {}) {
   const retirements = new Map();
   const protections = new Map();
   for (const event of events || []) {
+    if (selectedProject && String(event?.project || "") !== String(selectedProject)) continue;
+    if (selectedEnvironment && String(event?.environment || "") !== String(selectedEnvironment)) continue;
     const type = String(event?.asset?.type || "");
     const id = String(event?.asset?.id || "");
-    if (type !== "image" || !IMAGE_ID.test(id)) continue;
-    const key = `image:${id}`;
+    if (!RETIREMENT_TYPES.has(type) || !id) continue;
+    if (type === "image" && !IMAGE_ID.test(id)) continue;
+    if (type === "container" && !CONTAINER_ID.test(id)) continue;
+    const key = `${type}:${id}`;
     if (event.event === "asset.retirement.revoked") {
       retirements.delete(key);
+      continue;
+    }
+    if (event.event === "asset.protection.revoked") {
+      protections.delete(key);
       continue;
     }
     if (event.event === "asset.protection.bound" && event.status === "protected") {
@@ -116,7 +127,10 @@ export function retirementAttestations(events) {
     const owner = String(event.owner || "");
     const recoverySource = String(details.recoverySource || "");
     if (String(details.disposable).toLowerCase() !== "true" || String(details.retention).toLowerCase() !== "retired") continue;
-    if (!approvedTags.length || !REPORT_SHA.test(reportSha256) || !COMMIT.test(revision) || !project || !environment || !owner || !recoverySource) continue;
+    if (!REPORT_SHA.test(reportSha256) || !project || !environment || !owner || !recoverySource) continue;
+    if (type === "image" && (!approvedTags.length || !COMMIT.test(revision))) continue;
+    if (type === "container" && (!String(details.expectedName || "") || !IMAGE_ID.test(String(details.expectedImageId || "")) || String(details.preserveVolumes) !== "true")) continue;
+    if (["host_artifact", "worktree"].includes(type) && (!String(details.managedRoot || "").startsWith("/home/") || !/^sha256:[0-9a-f]{64}$/i.test(String(details.fingerprint || "")))) continue;
     retirements.set(key, {
       project,
       environment,
@@ -128,11 +142,24 @@ export function retirementAttestations(events) {
       reportSha256,
       group: String(details.group || ""),
       recoverySource,
+      assetType: type,
+      expectedSizeBytes: Number(details.expectedSizeBytes || 0),
+      expectedName: String(details.expectedName || ""),
+      expectedState: String(details.expectedState || ""),
+      expectedImageId: String(details.expectedImageId || ""),
+      expectedComposeProject: String(details.expectedComposeProject || ""),
+      expectedMounts: Array.isArray(details.expectedMounts) ? details.expectedMounts : [],
+      preserveVolumes: String(details.preserveVolumes) === "true",
+      stopBeforeRemoval: String(details.stopBeforeRemoval) === "true",
+      managedRoot: String(details.managedRoot || ""),
+      fingerprint: String(details.fingerprint || ""),
+      expectedReferences: Number(details.expectedReferences || 0),
+      lifecycle: details.lifecycle && typeof details.lifecycle === "object" ? details.lifecycle : undefined,
       labels: {
         [`${RUNTIME_PREFIX}project`]: project,
         [`${RUNTIME_PREFIX}environment`]: environment,
         [`${RUNTIME_PREFIX}owner`]: owner,
-        [`${RUNTIME_PREFIX}asset-kind`]: "image",
+        [`${RUNTIME_PREFIX}asset-kind`]: type,
         [`${RUNTIME_PREFIX}retention`]: "retired",
         [`${RUNTIME_PREFIX}disposable`]: "true",
         [`${RUNTIME_PREFIX}recovery-source`]: recoverySource,

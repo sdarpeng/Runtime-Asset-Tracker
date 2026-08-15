@@ -1,15 +1,25 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statfsSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants as FS_CONSTANTS, existsSync, fstatSync, fsyncSync, mkdirSync, openSync, readFileSync, readSync, statfsSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { homedir, hostname, platform } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
-import { collectRemoteDashboard, executeRemoteCleanup, expiryClassification, resolveExpiry } from "./remote.mjs";
+import { createHash, randomUUID } from "node:crypto";
+import { StringDecoder } from "node:string_decoder";
+import { collectRemoteDashboard, executeRemoteCleanup, expiryClassification, resolveExpiry, resumeAwsCleanup } from "./remote.mjs";
 import { importRetirementReconciliation, retirementAttestations } from "./reconciliation.mjs";
 import { discoverWorktreeAssets, executePathAssetCleanup, importPathRetirementReconciliation } from "./path-assets.mjs";
+import { importUnifiedRetirementReconciliation } from "./lifecycle-reconciliation.mjs";
+import { buildUnifiedAssetTable, loadGithubAuthority, writeUnifiedAssetTable } from "./lifecycle-table.mjs";
+import { discoverRetirementCandidates } from "./candidate-policy.mjs";
 
 const RUNTIME_PREFIX = "com.codex.runtime.";
 const previewStore = new Map();
 const dashboardCache = new Map();
+const ledgerAuthorityCache = new Map();
+const RUNTIME_INSTANCE_ID = randomUUID();
+
+export function runtimeInstanceId() {
+  return RUNTIME_INSTANCE_ID;
+}
 
 export function stateRoot() {
   if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve(process.env.RUNTIME_ASSET_STATE_DIR);
@@ -136,10 +146,10 @@ export function localBuildCacheBar(summary = {}) {
   };
 }
 
-function dockerInventory() {
+function dockerInventory(selectedProject = "all", authorityEvents = []) {
   const available = Boolean(run("docker", ["version", "--format", "{{.Server.Version}}"]));
   if (!available) return { available: false, assets: [], summary: {} };
-  const retirementOverrides = readRetirementOverrides();
+  const retirementOverrides = selectedProject === "all" ? new Map() : retirementOverrideLabels(authorityEvents, { project: selectedProject, environment: "local" });
 
   const containerRows = jsonLines(run("docker", ["ps", "-a", "--size", "--no-trunc", "--format", "{{json .}}"]));
   const containerDetails = inspectMany("container", containerRows.map((item) => item.ID));
@@ -281,6 +291,7 @@ export function registeredProjects(config = loadConfig()) {
       repository,
       label: String(item.label || repository.split("/").at(-1)),
       aliases: [...new Set([...(item.aliases || []), item.id, item.label, repository.split("/").at(-1)].filter(Boolean).map(String))],
+      assetPrefixes: [...new Set((item.assetPrefixes || []).filter(Boolean).map(String))],
       gitRoots: [...new Set((item.gitRoots || []).filter(Boolean).map(String))],
       environments: (item.environments || []).filter((source) => source?.id && source?.kind),
     });
@@ -319,7 +330,12 @@ export function projectSourceConfigs(config, project) {
       : [];
   return [
     { id: "local", kind: "local" },
-    ...configuredEnvironments.map((source) => ({ ...source, projectId: selectedProject })),
+    ...configuredEnvironments.map((source) => ({
+      ...source,
+      projectId: selectedProject,
+      projectAliases: registered?.aliases || [],
+      assetPrefixes: registered?.assetPrefixes || [],
+    })),
     { id: "github", kind: "github", repository: selectedProject },
   ];
 }
@@ -439,12 +455,29 @@ function legacyWorktreeInventory(config, projects) {
   });
 }
 
-function worktreeInventory(config, projects) {
-  return discoverWorktreeAssets(config, projects, readRawLedgerEvents());
+function worktreeInventory(config, projects, authorityEvents = readAuthoritativeLedgerEvents()) {
+  return discoverWorktreeAssets(config, projects, authorityEvents);
+}
+
+function runMutation(command, args, options = {}) {
+  try {
+    const output = execFileSync(command, args, {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: options.timeout || 30_000,
+      maxBuffer: options.maxBuffer || 32 * 1024 * 1024,
+      cwd: options.cwd,
+      env: { ...process.env, ...(options.env || {}) },
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    return { ok: true, output, error: "" };
+  } catch (error) {
+    return { ok: false, output: String(error.stdout || "").trim(), error: String(error.stderr || error.message || "mutation failed").trim().slice(-1000) };
+  }
 }
 
 function readLedger(limit = 24) {
-  return readRawLedgerEvents().slice(-limit).reverse().map((item) => ({
+  return readRecentLedgerEvents().slice(-limit).reverse().map((item) => ({
     id: item.eventId,
     occurredAt: item.occurredAt,
     event: item.event,
@@ -456,7 +489,7 @@ function readLedger(limit = 24) {
   }));
 }
 
-function readRawLedgerEvents(maxBytes = 8 * 1024 * 1024) {
+function readRecentLedgerEvents(maxBytes = 8 * 1024 * 1024) {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
   if (!existsSync(ledger)) return [];
   const stats = statSync(ledger);
@@ -474,15 +507,167 @@ function readRawLedgerEvents(maxBytes = 8 * 1024 * 1024) {
   });
 }
 
-export function retirementOverrideLabels(events) {
-  const overrides = new Map();
+function emptyAuthorityState() {
+  return { retirements: new Map(), protections: new Map(), lifecycle: new Map(), orders: new Map(), parsedEventCount: 0 };
+}
+
+function scopedAssetKey(event) {
+  const project = String(event?.project || "").trim();
+  const environment = String(event?.environment || "").trim();
+  const type = String(event?.asset?.type || "").trim();
+  const id = String(event?.asset?.id || "").trim();
+  return project && environment && type && id ? `${project}\0${environment}\0${type}\0${id}` : "";
+}
+
+export function reduceAuthoritativeLedgerEvents(events, initialState = emptyAuthorityState()) {
+  const state = initialState;
+  if (!state.orders) state.orders = new Map();
   for (const event of events || []) {
+    state.parsedEventCount += 1;
+    const appendOrdinal = state.parsedEventCount;
+    const assetKey = scopedAssetKey(event);
+    if (assetKey && event.event === "asset.retirement.revoked") {
+      state.retirements.delete(assetKey);
+      state.orders.delete(`retirement\0${assetKey}`);
+      continue;
+    }
+    if (assetKey && event.event === "asset.protection.revoked") {
+      state.protections.delete(assetKey);
+      state.orders.delete(`protection\0${assetKey}`);
+      continue;
+    }
+    if (assetKey && event.event === "asset.protection.bound" && event.status === "protected") {
+      state.protections.set(assetKey, event);
+      state.orders.set(`protection\0${assetKey}`, appendOrdinal);
+      continue;
+    }
+    if (assetKey && event.event === "asset.retired" && event.status === "retired") {
+      state.retirements.set(assetKey, event);
+      state.orders.set(`retirement\0${assetKey}`, appendOrdinal);
+      continue;
+    }
+    if (/^(?:build|compose|deployment|task|outcome|pull_request|cleanup)\./.test(String(event?.event || ""))) {
+      const eventName = String(event?.event || "");
+      const lifecycleFamily = /^(?:build\.failed|build\.completed|build\.succeeded)$/.test(eventName) ? "build.terminal-state" : eventName;
+      const lifecycleKey = [event.project, event.environment, lifecycleFamily, event.asset?.type, event.asset?.id, event.details?.outcomeId, event.details?.threadId, event.details?.operationId].map((value) => String(value || "")).join("\0");
+      state.lifecycle.set(lifecycleKey, event);
+      state.orders.set(`lifecycle\0${lifecycleKey}`, appendOrdinal);
+    }
+  }
+  return state;
+}
+
+function authorityStateEvents(state) {
+  const ordered = [
+    ...[...state.retirements].map(([key, event]) => ({ event, order: state.orders.get(`retirement\0${key}`) || 0 })),
+    ...[...state.protections].map(([key, event]) => ({ event, order: state.orders.get(`protection\0${key}`) || 0 })),
+    ...[...state.lifecycle].map(([key, event]) => ({ event, order: state.orders.get(`lifecycle\0${key}`) || 0 })),
+  ];
+  return ordered.sort((left, right) => left.order - right.order).map((item) => item.event);
+}
+
+function ledgerFileIdentity(stats) {
+  return `${String(stats.dev)}:${String(stats.ino)}`;
+}
+
+function scanLedgerAuthority(ledger) {
+  const state = emptyAuthorityState();
+  const fd = openSync(ledger, "r");
+  const decoder = new StringDecoder("utf8");
+  const buffer = Buffer.alloc(4 * 1024 * 1024);
+  const digest = createHash("sha256");
+  const openedStats = fstatSync(fd);
+  const snapshotSize = openedStats.size;
+  let position = 0;
+  let carry = "";
+  try {
+    while (position < snapshotSize) {
+      const requested = Math.min(buffer.length, snapshotSize - position);
+      const bytesRead = readSync(fd, buffer, 0, requested, position);
+      if (bytesRead === 0) throw new Error(`Authoritative ledger changed while reading at byte ${position}`);
+      digest.update(buffer.subarray(0, bytesRead));
+      position += bytesRead;
+      const text = carry + decoder.write(buffer.subarray(0, bytesRead));
+      const lines = text.split(/\r?\n/);
+      carry = lines.pop() || "";
+      for (const line of lines) {
+        if (!line) continue;
+        try { reduceAuthoritativeLedgerEvents([JSON.parse(line)], state); }
+        catch (error) { throw new Error(`Authoritative ledger integrity failure at byte ${position - bytesRead}: ${error.message}`); }
+      }
+    }
+    carry += decoder.end();
+    if (carry.trim()) {
+      try { reduceAuthoritativeLedgerEvents([JSON.parse(carry)], state); }
+      catch (error) { throw new Error(`Authoritative ledger has a malformed or truncated final record: ${error.message}`); }
+    }
+  } finally {
+    closeSync(fd);
+  }
+  return {
+    state,
+    size: position,
+    identity: ledgerFileIdentity(openedStats),
+    mtimeMs: openedStats.mtimeMs,
+    ctimeMs: openedStats.ctimeMs,
+    digest: digest.digest("hex"),
+  };
+}
+
+export function readAuthoritativeLedgerEvents(io = {}) {
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
+  if (!existsSync(ledger)) {
+    ledgerAuthorityCache.delete(ledger);
+    return [];
+  }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const scanned = scanLedgerAuthority(ledger);
+    io.afterScan?.({ attempt, ledger, scanned });
+    const current = statSync(ledger);
+    const stable = ledgerFileIdentity(current) === scanned.identity
+      && current.size === scanned.size
+      && current.mtimeMs === scanned.mtimeMs
+      && current.ctimeMs === scanned.ctimeMs;
+    if (!stable) continue;
+    const events = authorityStateEvents(scanned.state);
+    ledgerAuthorityCache.set(ledger, { ...scanned, state: scanned.state, events });
+    return events;
+  }
+  throw new Error("Authoritative ledger changed during verification; refusing to use an unstable authority snapshot");
+}
+
+export function ledgerAuthorityStatus() {
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
+  if (!existsSync(ledger)) return { path: ledger, exists: false, integrity: "empty", bytes: 0, effectiveEvents: 0 };
+  const events = readAuthoritativeLedgerEvents();
+  const cache = ledgerAuthorityCache.get(ledger);
+  return { path: ledger, exists: true, integrity: "verified-full-history", bytes: cache?.size || 0, digest: cache?.digest, parsedEventCount: cache?.state?.parsedEventCount || 0, effectiveEvents: events.length };
+}
+
+export function retirementOverrideLabels(events, { project, environment } = {}) {
+  const retirements = new Map();
+  const protections = new Map();
+  for (const event of events || []) {
+    if (project && String(event?.project || "") !== String(project)) continue;
+    if (environment && String(event?.environment || "") !== String(environment)) continue;
     const type = String(event?.asset?.type || "");
     const id = String(event?.asset?.id || "");
     if (!id || !["image", "container", "volume"].includes(type)) continue;
     const key = `${type}:${id}`;
     if (event.event === "asset.retirement.revoked") {
-      overrides.delete(key);
+      retirements.delete(key);
+      continue;
+    }
+    if (event.event === "asset.protection.revoked") { protections.delete(key); continue; }
+    if (event.event === "asset.protection.bound" && event.status === "protected") {
+      protections.set(key, {
+        [`${RUNTIME_PREFIX}project`]: String(event.project),
+        [`${RUNTIME_PREFIX}environment`]: String(event.environment),
+        [`${RUNTIME_PREFIX}owner`]: String(event.owner || "authority"),
+        [`${RUNTIME_PREFIX}asset-kind`]: type,
+        [`${RUNTIME_PREFIX}retention`]: "protected",
+        [`${RUNTIME_PREFIX}disposable`]: "false",
+      });
       continue;
     }
     if (event.event !== "asset.retired" || event.status !== "retired") continue;
@@ -490,17 +675,17 @@ export function retirementOverrideLabels(events) {
     const recoverySource = String(details.recoverySource || "").trim();
     const dataClassification = String(details.dataClassification || "").trim();
     const contentFingerprint = String(details.contentFingerprint || "").trim();
-    const project = String(event.project || "").trim();
+    const eventProject = String(event.project || "").trim();
     const owner = String(event.owner || "").trim();
     if (String(details.disposable).toLowerCase() !== "true") continue;
     if (String(details.retention).toLowerCase() !== "retired") continue;
-    if (!recoverySource || !project || project === "unknown" || !owner || owner === "unknown") continue;
+    if (!recoverySource || !eventProject || eventProject === "unknown" || !owner || owner === "unknown") continue;
     if (type === "volume" && (
       dataClassification !== "synthetic-test-fixture"
       || !/^sha256:[0-9a-f]{64}$/i.test(contentFingerprint)
     )) continue;
     const labels = {
-      [`${RUNTIME_PREFIX}project`]: project,
+      [`${RUNTIME_PREFIX}project`]: eventProject,
       [`${RUNTIME_PREFIX}environment`]: String(event.environment || "local"),
       [`${RUNTIME_PREFIX}owner`]: owner,
       [`${RUNTIME_PREFIX}asset-kind`]: type,
@@ -514,17 +699,19 @@ export function retirementOverrideLabels(events) {
       labels[`${RUNTIME_PREFIX}data-classification`] = dataClassification;
       labels[`${RUNTIME_PREFIX}content-fingerprint`] = contentFingerprint;
     }
-    overrides.set(key, labels);
+    retirements.set(key, labels);
   }
+  const overrides = new Map(retirements);
+  for (const [key, labels] of protections) overrides.set(key, labels);
   return overrides;
 }
 
-function readRetirementOverrides() {
-  return retirementOverrideLabels(readRawLedgerEvents());
+function readRetirementOverrides(project, environment = "local") {
+  return retirementOverrideLabels(readAuthoritativeLedgerEvents(), { project, environment });
 }
 
-export function readRetirementGovernance() {
-  return retirementAttestations(readRawLedgerEvents());
+export function readRetirementGovernance(project, environment) {
+  return retirementAttestations(readAuthoritativeLedgerEvents(), { project, environment });
 }
 
 export function importReconciliation(input) {
@@ -535,6 +722,12 @@ export function importReconciliation(input) {
 
 export function importPathReconciliation(input) {
   const result = importPathRetirementReconciliation(input);
+  dashboardCache.clear();
+  return result;
+}
+
+export function importUnifiedReconciliation(input) {
+  const result = importUnifiedRetirementReconciliation(input);
   dashboardCache.clear();
   return result;
 }
@@ -598,13 +791,23 @@ export function collectDashboard({ scope = "project", source = "local", project 
   const cached = dashboardCache.get(cacheKey);
   if (cached && Date.now() - cached.createdAt < 20_000) return { ...cached.value, generatedAt: new Date().toISOString(), cached: true };
   const sources = projectSourceCards(config, projects, selectedProject, true);
+  const authorityEvents = readAuthoritativeLedgerEvents();
   if (selectedSource !== "local") {
     const scopedConfig = { ...config, sources: sourceConfigs.filter((item) => item.id !== "local") };
-    const dashboard = collectRemoteDashboard({ source: selectedSource, scope: "project", project: selectedProject, config: scopedConfig, sources });
-    return applyRemoteRetirementGovernance(dashboard, readRetirementGovernance());
+    const dashboard = collectRemoteDashboard({ source: selectedSource, scope: "project", project: selectedProject, config: scopedConfig, sources, includeAllAssets });
+    const governed = applyRemoteRetirementGovernance(dashboard, retirementAttestations(authorityEvents, { project: selectedProject, environment: selectedSource }));
+    const candidateAnalysis = discoverRetirementCandidates(governed.assets || [], {
+      source: selectedSource,
+      project: selectedProject,
+      environment: selectedSource,
+      disk: governed.disk,
+      events: authorityEvents,
+      policy: config.capacityPolicy || {},
+    });
+    return { ...governed, assets: candidateAnalysis.assets, retirementCandidates: candidateAnalysis.summary, capacityPressure: candidateAnalysis.pressure, ledgerAuthority: ledgerAuthorityStatus() };
   }
-  const docker = dockerInventory();
-  const worktrees = worktreeInventory(config, projects);
+  const docker = dockerInventory(selectedProject, authorityEvents);
+  const worktrees = worktreeInventory(config, projects, authorityEvents);
   const allAssets = [...worktrees, ...docker.assets].map((asset) => ({ ...asset, project: canonicalProjectId(asset.project, projects) }));
   const hostScope = selectedProject === "all";
   const filtered = hostScope ? allAssets : allAssets.filter((asset) => asset.project === selectedProject);
@@ -614,12 +817,21 @@ export function collectDashboard({ scope = "project", source = "local", project 
     const stats = statfsSync(diskRoot);
     disk = { totalBytes: Number(stats.blocks) * Number(stats.bsize), freeBytes: Number(stats.bavail) * Number(stats.bsize) };
   } catch { /* disk metrics are optional */ }
+  const candidateAnalysis = discoverRetirementCandidates(filtered, {
+    source: "local",
+    project: selectedProject,
+    environment: "local",
+    disk,
+    events: authorityEvents,
+    policy: config.capacityPolicy || {},
+  });
+  const analyzedAssets = candidateAnalysis.assets;
   const bars = [
-    aggregate("worktree", filtered),
-    aggregate("worktree_residual", filtered),
-    aggregate("host_artifact", filtered),
-    aggregate("image", filtered),
-    aggregate("volume", filtered),
+    aggregate("worktree", analyzedAssets),
+    aggregate("worktree_residual", analyzedAssets),
+    aggregate("host_artifact", analyzedAssets),
+    aggregate("image", analyzedAssets),
+    aggregate("volume", analyzedAssets),
     localBuildCacheBar(docker.summary),
   ];
   const dashboard = {
@@ -635,16 +847,52 @@ export function collectDashboard({ scope = "project", source = "local", project 
     sources: projectSourceCards(config, projects, selectedProject, docker.available),
     projects: projects.map((item) => item.id),
     projectOptions: publicProjectOptions(projects),
-    assets: filtered.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, includeAllAssets ? undefined : 320),
+    assets: analyzedAssets.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, includeAllAssets ? undefined : 320),
     events: hostScope ? readLedger() : readLedger().filter((event) => canonicalProjectId(event.project, projects) === selectedProject),
     schedule: config.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" },
+    retirementCandidates: candidateAnalysis.summary,
+    capacityPressure: candidateAnalysis.pressure,
+    ledgerAuthority: ledgerAuthorityStatus(),
   };
   dashboardCache.set(cacheKey, { createdAt: Date.now(), value: dashboard });
   return dashboard;
 }
 
 function normalizedTags(tags) {
-  return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.startsWith("<none>")))].sort();
+  return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.includes("<none>")))].sort();
+}
+
+export function automaticRetirementEvidenceMatches(requested = {}, current = {}) {
+  return String(requested.createdAt || "") === String(current.createdAt || "")
+    && JSON.stringify(normalizedTags(requested.tags)) === JSON.stringify(normalizedTags(current?.lineage?.tags))
+    && (!requested.automaticRetirement || (
+      requested.automaticRetirement.schemaVersion === current?.lineage?.automaticRetirement?.schemaVersion
+      && requested.automaticRetirement.basis === current?.lineage?.automaticRetirement?.basis
+      && requested.automaticRetirement.family === current?.lineage?.automaticRetirement?.family
+      && requested.automaticRetirement.successorImageId === current?.lineage?.automaticRetirement?.successorImageId
+      && String(requested.automaticRetirement.successorCreatedAt || "") === String(current?.lineage?.automaticRetirement?.successorCreatedAt || "")
+      && JSON.stringify(normalizedTags(requested.automaticRetirement.successorTags)) === JSON.stringify(normalizedTags(current?.lineage?.automaticRetirement?.successorTags))
+      && requested.automaticRetirement.successorSuccessful === (current?.lineage?.automaticRetirement?.successorSuccessful === true)
+      && String(requested.automaticRetirement.recoverySource || "") === String(current?.lineage?.automaticRetirement?.recoverySource || "")
+    ));
+}
+
+export function createUnifiedAssetTable({ project, sources = ["local", "production", "staging"], authorityReportPath, outputPath, coolingHours = 24 } = {}) {
+  const selectedSources = [...new Set(sources)].filter((source) => ["local", "production", "staging"].includes(source));
+  if (!project || project === "all") throw new Error("A registered project is required for a unified asset table.");
+  if (!selectedSources.length) throw new Error("At least one local, production, or staging source is required.");
+  const dashboards = selectedSources.map((source) => ({
+    source,
+    dashboard: collectDashboard({ scope: "project", source, project, includeAllAssets: true }),
+  }));
+  const table = buildUnifiedAssetTable({
+    project: resolveProjectId(project, registeredProjects(loadConfig()), loadConfig()),
+    dashboards,
+    githubAuthority: loadGithubAuthority(authorityReportPath),
+    coolingHours: Math.max(1, Math.min(720, Number(coolingHours) || 24)),
+  });
+  const writtenTo = writeUnifiedAssetTable(table, outputPath);
+  return writtenTo ? { ...table, writtenTo } : table;
 }
 
 export function applyRemoteRetirementGovernance(dashboard, governance) {
@@ -652,8 +900,7 @@ export function applyRemoteRetirementGovernance(dashboard, governance) {
   const project = String(dashboard.selectedProject || "");
   const environment = String(dashboard.selectedSource || "");
   const assets = (dashboard.assets || []).map((asset) => {
-    if (asset.type !== "image") return asset;
-    const key = `image:${asset.id}`;
+    const key = `${asset.type}:${asset.id}`;
     const protection = governance?.protections?.get(key);
     const retirement = governance?.retirements?.get(key);
     const consumers = Array.isArray(asset.lineage?.consumers) ? asset.lineage.consumers : [];
@@ -668,6 +915,31 @@ export function applyRemoteRetirementGovernance(dashboard, governance) {
       };
     }
     if (!retirement || retirement.project !== project || retirement.environment !== environment) return asset;
+    if (asset.type === "container") {
+      const expectedMounts = JSON.stringify(retirement.expectedMounts || []);
+      const liveMounts = JSON.stringify((asset.lineage?.mounts || []).map((mount) => ({
+        type: String(mount?.type || ""), name: String(mount?.name || ""), source: String(mount?.source || ""), destination: String(mount?.destination || ""),
+      })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))));
+      const identityMatches = asset.name === retirement.expectedName
+        && asset.lineage?.imageId === retirement.expectedImageId
+        && asset.lineage?.composeProject === retirement.expectedComposeProject
+        && liveMounts === expectedMounts
+        && retirement.preserveVolumes === true;
+      if (!identityMatches) return { ...asset, classification: "retained", retirementBlocked: true, lineage: { ...asset.lineage, retirement }, reason: "Container retirement is blocked because its exact name, image, Compose project, mount set, or volume-preservation contract drifted." };
+      return { ...asset, classification: "reclaimable", labels: { ...(asset.labels || {}), ...retirement.labels }, lineage: { ...asset.lineage, retirement }, reason: retirement.stopBeforeRemoval ? "Merged-PR container has exact retirement evidence; execution may stop it before removal and must preserve every volume." : "Stopped merged-PR container has exact retirement evidence and all volumes must be preserved." };
+    }
+    if (["host_artifact", "worktree"].includes(asset.type)) {
+      const fingerprintMatches = String(asset.lineage?.fingerprint || "") === retirement.fingerprint;
+      const rootMatches = String(asset.lineage?.managedRoot || "") === retirement.managedRoot;
+      const sizeMatches = Number(asset.sizeBytes || 0) === Number(retirement.expectedSizeBytes || 0);
+      if (consumers.length || !fingerprintMatches || !rootMatches || !sizeMatches) return { ...asset, classification: consumers.length ? "active" : "retained", retirementBlocked: true, lineage: { ...asset.lineage, retirement }, reason: consumers.length ? "Remote path retirement is blocked by a live or stopped container bind mount." : "Remote path retirement is blocked because its managed root, byte count, or metadata fingerprint drifted." };
+      return { ...asset, classification: "reclaimable", labels: { ...(asset.labels || {}), ...retirement.labels }, lineage: { ...asset.lineage, retirement }, reason: "Merged-PR remote path has exact retirement evidence, zero bind-mount consumers, matching bytes, and matching metadata fingerprint." };
+    }
+    if (asset.type === "volume") {
+      if (consumers.length || Number(retirement.expectedReferences) !== 0 || Number(asset.sizeBytes || 0) !== Number(retirement.expectedSizeBytes || 0)) return { ...asset, classification: consumers.length ? "active" : "review", retirementBlocked: true, lineage: { ...asset.lineage, retirement }, reason: "Volume retirement is blocked because references or expected bytes drifted." };
+      return { ...asset, classification: "reclaimable", labels: { ...(asset.labels || {}), ...retirement.labels }, lineage: { ...asset.lineage, retirement }, reason: "Exact retirement evidence confirms zero references and matching bytes; recovery evidence remains bound." };
+    }
+    if (asset.type !== "image") return asset;
     const liveTags = normalizedTags(asset.lineage?.tags);
     const approvedTags = normalizedTags(retirement.approvedTags);
     const tagSetMatches = liveTags.length === approvedTags.length && liveTags.every((tag, index) => tag === approvedTags[index]);
@@ -758,6 +1030,7 @@ function lineageFinding(asset, dashboard) {
   const release = labelValue(labels, "release");
   const retention = labelValue(labels, "retention");
   const matchingEvents = (dashboard.events || []).filter((event) => String(event.assetId || "") === String(asset.id || ""));
+  const retirementCandidate = asset.retirementCandidate || {};
   const evidence = [
     owner && `归属：${owner}`,
     consumers.length > 0 ? `消费者：${consumers.length} 个` : lineage.consumers ? "消费者：0 个" : undefined,
@@ -767,6 +1040,8 @@ function lineageFinding(asset, dashboard) {
     asset.expiresAt && `到期：${asset.expiresAt}`,
     recoverySource && `恢复来源：${recoverySource}`,
     matchingEvents.length > 0 && `事件账本：${matchingEvents.length} 条`,
+    retirementCandidate.reasons?.length > 0 && `候选依据：${retirementCandidate.reasons.join("、")}`,
+    retirementCandidate.blockedBy?.length > 0 && `执行阻塞：${retirementCandidate.blockedBy.map((item) => item.type).join("、")}`,
   ].filter(Boolean);
   const missing = [];
   if (!owner && !["pull_request", "artifact", "actions_cache", "workflow_run", "cache", "worktree", "worktree_residual", "host_artifact"].includes(asset.type)) missing.push("owner");
@@ -782,6 +1057,9 @@ function lineageFinding(asset, dashboard) {
     name: asset.name,
     type: asset.type,
     classification: asset.classification,
+    retirementState: asset.retirementState || "retained",
+    candidateReasons: retirementCandidate.reasons || [],
+    blockedBy: retirementCandidate.blockedBy || [],
     sizeBytes: Number(asset.sizeBytes || 0),
     expiresAt: asset.expiresAt,
     reason: asset.reason,
@@ -919,9 +1197,11 @@ export function runDeepScan({ source = "local", project = "all" } = {}) {
     newlyReclaimableCount: newlyReclaimable.length,
     expiringCount: findings.filter((item) => item.classification === "expiring").length,
     unresolvedCount: findings.filter((item) => item.missing.length > 0).length,
+    retirementCandidates: dashboard.retirementCandidates || { suspectedCount: 0, blockedCount: 0, executableCount: 0, candidateBytes: 0, blockedBytes: 0, executableBytes: 0 },
+    capacityPressure: dashboard.capacityPressure,
     supersededBuildChains: detectSupersededBuildChains(assets),
     findings: findings
-      .filter((item) => item.classification === "expiring" || item.classification === "reclaimable" || item.missing.length > 0)
+      .filter((item) => ["suspected-retired", "blocked-candidate", "executable-candidate"].includes(item.retirementState) || item.classification === "expiring" || item.classification === "reclaimable" || item.missing.length > 0)
       .sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0))
       .slice(0, 80),
   };
@@ -937,7 +1217,13 @@ export function runDeepScan({ source = "local", project = "all" } = {}) {
   };
 }
 
-export function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact", "artifact", "actions_cache"], assetIds } = {}) {
+export function cleanupSourceSupportsType(source, type) {
+  if (source === "github") return ["artifact", "actions_cache"].includes(type);
+  if (source === "local") return ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact"].includes(type);
+  return ["container", "image", "volume", "cache", "worktree", "host_artifact"].includes(type);
+}
+
+export function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact", "artifact", "actions_cache"], assetIds } = {}, context = {}) {
   const dashboard = collectDashboard({ source, project, includeAllAssets: true });
   const selectedSource = dashboard.selectedSource || source;
   if (dashboard.releaseRuntimeDrift?.cleanupBlocked) throw new Error("Cleanup is blocked by an unacknowledged release/runtime image revision drift.");
@@ -945,18 +1231,17 @@ export function createCleanupPreview({ source = "local", project = "all", types 
   if (dashboard.selectedProject === "all" && !requestedIds) throw new Error("Host-wide cleanup preview requires exact assetIds; broad all-project cleanup is not allowed.");
   if (selectedSource !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${selectedSource} 快照不可用`);
   const allowlist = dashboard.assets.filter((asset) => {
-    if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
+    if (!types.includes(asset.type) || asset.retirementState !== "executable-candidate") return false;
     if (requestedIds && !requestedIds.has(String(asset.id))) return false;
     if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
-    return selectedSource === "github"
-      ? ["artifact", "actions_cache"].includes(asset.type)
-      : ["image", "volume", "cache", "worktree", "worktree_residual", "host_artifact"].includes(asset.type);
+    return cleanupSourceSupportsType(selectedSource, asset.type);
   }).map((asset) => ({
     type: asset.type,
     id: asset.id,
     name: asset.name,
     project: asset.project,
     sizeBytes: asset.sizeBytes,
+    createdAt: asset.createdAt,
     reason: asset.reason,
     recoverySource: labelValue(asset.labels || {}, "recovery-source") || asset.lineage?.source || asset.lineage?.remote,
     tags: asset.type === "image" ? normalizedTags(asset.lineage?.tags) : undefined,
@@ -966,6 +1251,33 @@ export function createCleanupPreview({ source = "local", project = "all", types 
       group: asset.lineage.retirement.group,
       approvedTags: normalizedTags(asset.lineage.retirement.approvedTags),
       revision: asset.lineage.retirement.revision,
+      assetType: asset.lineage.retirement.assetType,
+      expectedSizeBytes: asset.lineage.retirement.expectedSizeBytes,
+      expectedName: asset.lineage.retirement.expectedName,
+      expectedState: asset.lineage.retirement.expectedState,
+      expectedImageId: asset.lineage.retirement.expectedImageId,
+      expectedComposeProject: asset.lineage.retirement.expectedComposeProject,
+      expectedMounts: asset.lineage.retirement.expectedMounts,
+      preserveVolumes: asset.lineage.retirement.preserveVolumes,
+      stopBeforeRemoval: asset.lineage.retirement.stopBeforeRemoval,
+      managedRoot: asset.lineage.retirement.managedRoot,
+      fingerprint: asset.lineage.retirement.fingerprint,
+      expectedReferences: asset.lineage.retirement.expectedReferences,
+      lifecycle: asset.lineage.retirement.lifecycle,
+    } : undefined,
+    automaticRetirement: asset.lineage?.automaticRetirement ? {
+      schemaVersion: asset.lineage.automaticRetirement.schemaVersion,
+      basis: asset.lineage.automaticRetirement.basis,
+      observedAt: asset.lineage.automaticRetirement.observedAt,
+      imageId: asset.lineage.automaticRetirement.imageId,
+      tags: normalizedTags(asset.lineage.automaticRetirement.tags),
+      revision: asset.lineage.automaticRetirement.revision,
+      recoverySource: asset.lineage.automaticRetirement.recoverySource,
+      family: asset.lineage.automaticRetirement.family,
+      successorImageId: asset.lineage.automaticRetirement.successorImageId,
+      successorCreatedAt: asset.lineage.automaticRetirement.successorCreatedAt,
+      successorTags: normalizedTags(asset.lineage.automaticRetirement.successorTags),
+      successorSuccessful: asset.lineage.automaticRetirement.successorSuccessful === true,
     } : undefined,
     remoteKind: asset.remoteKind,
   }));
@@ -988,13 +1300,21 @@ export function createCleanupPreview({ source = "local", project = "all", types 
     }
   }
   const token = randomUUID();
+  const actorId = String(context.actorId || "internal-direct");
+  const serverInstanceId = String(context.serverInstanceId || RUNTIME_INSTANCE_ID);
+  const operationId = randomUUID();
+  const confirmationDigest = createHash("sha256").update(JSON.stringify({ source: selectedSource, project: dashboard.selectedProject || project, operationId, allowlist })).digest("hex");
   const preview = {
     token,
+    operationId,
+    confirmationDigest,
+    actorId,
+    serverInstanceId,
     source: selectedSource,
     project: dashboard.selectedProject || project,
     policy: selectedSource === "github"
       ? "只删除已过期制品、已关闭 PR 的缓存和超过 30 天未访问的缓存"
-      : selectedSource === "local" ? "只删除未被任何容器引用的悬空/显式 disposable 镜像、未挂载且显式 disposable 的卷，以及 Docker 未使用的 Build Cache"
+      : selectedSource === "local" ? "宽发现所有疑似退休和阻塞资产；执行清单只包含实时零引用、非 current/rollback/recovery、具有机器恢复来源的被替代/失败镜像，严格证明可丢弃的卷，以及 Docker 未使用的 Build Cache"
         : "只删除复核后仍未被容器引用的悬空/显式 disposable 镜像、未挂载且显式 disposable 的卷，以及 Docker 未使用的 Build Cache；容器和 release 永不进入清单",
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
@@ -1007,7 +1327,15 @@ export function createCleanupPreview({ source = "local", project = "all", types 
   return preview;
 }
 
-function appendCleanupEvent(event, details, environment = "local") {
+export function appendCleanupEvent(event, details, environment = "local", io = {}) {
+  const operations = {
+    exists: io.exists || existsSync,
+    mkdir: io.mkdir || mkdirSync,
+    open: io.open || openSync,
+    write: io.write || writeSync,
+    fsync: io.fsync || fsyncSync,
+    close: io.close || closeSync,
+  };
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
   const item = {
     schemaVersion: 1,
@@ -1022,8 +1350,31 @@ function appendCleanupEvent(event, details, environment = "local") {
     owner: "local-user",
     details,
   };
-  mkdirSync(dirname(ledger), { recursive: true });
-  appendFileSync(ledger, `${JSON.stringify(item)}\n`, { encoding: "utf8", mode: 0o600 });
+  const ledgerDirectory = dirname(ledger);
+  const directoryExisted = operations.exists(ledgerDirectory);
+  const ledgerExisted = operations.exists(ledger);
+  const fsyncDirectory = (path) => {
+    const directoryFd = operations.open(path, FS_CONSTANTS.O_RDONLY);
+    try { operations.fsync(directoryFd); } finally { operations.close(directoryFd); }
+  };
+  operations.mkdir(ledgerDirectory, { recursive: true });
+  if (!directoryExisted && platform() !== "win32") {
+    fsyncDirectory(dirname(ledgerDirectory));
+  }
+  const payload = Buffer.from(`${JSON.stringify(item)}\n`, "utf8");
+  const fd = operations.open(ledger, FS_CONSTANTS.O_WRONLY | FS_CONSTANTS.O_CREAT | FS_CONSTANTS.O_APPEND, 0o600);
+  try {
+    let offset = 0;
+    while (offset < payload.length) {
+      const written = operations.write(fd, payload, offset, payload.length - offset);
+      if (!Number.isInteger(written) || written <= 0) throw new Error("Authoritative ledger write made no forward progress");
+      offset += written;
+    }
+    operations.fsync(fd);
+  } finally {
+    operations.close(fd);
+  }
+  if (!ledgerExisted && platform() !== "win32") fsyncDirectory(ledgerDirectory);
 }
 
 export function localCleanupArgs(asset) {
@@ -1041,34 +1392,186 @@ export function localCleanupTimeoutMs(asset) {
   return asset?.type === "cache" && asset?.id === "docker-build-cache" ? 15 * 60_000 : 30_000;
 }
 
-export function executeCleanup({ token, confirmed = false }) {
-  const preview = previewStore.get(token);
+export function consumeCleanupPreview({ token, confirmed = false, confirmationDigest }, context = {}, store = previewStore) {
+  const preview = store.get(token);
   if (!preview) throw new Error("Cleanup preview is missing or expired. Generate a new preview.");
   if (Date.parse(preview.expiresAt) < Date.now()) {
-    previewStore.delete(token);
+    store.delete(token);
     throw new Error("Cleanup preview expired. Generate a new preview.");
   }
   if (!confirmed) throw new Error("Cleanup requires confirmation for the exact preview allowlist.");
+  const actorId = String(context.actorId || "internal-direct");
+  const serverInstanceId = String(context.serverInstanceId || RUNTIME_INSTANCE_ID);
+  if (actorId !== preview.actorId) throw new Error("Cleanup preview belongs to a different authenticated actor.");
+  if (serverInstanceId !== preview.serverInstanceId) throw new Error("Cleanup preview belongs to a different server instance.");
+  if (!/^[0-9a-f]{64}$/i.test(String(confirmationDigest || "")) || String(confirmationDigest).toLowerCase() !== preview.confirmationDigest) throw new Error("Cleanup confirmation digest does not match the exact preview allowlist.");
+  store.delete(token);
+  return preview;
+}
+
+function stableAuthorityValue(value) {
+  if (Array.isArray(value)) return value.map(stableAuthorityValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableAuthorityValue(value[key])]));
+}
+
+function authorityDigest(value) {
+  return createHash("sha256").update(JSON.stringify(stableAuthorityValue(value))).digest("hex");
+}
+
+function remoteRetirementEvidenceBinding(evidence = {}) {
+  return {
+    reportSha256: String(evidence.reportSha256 || ""),
+    group: String(evidence.group || ""),
+    approvedTags: normalizedTags(evidence.approvedTags).sort(),
+    revision: String(evidence.revision || ""),
+    assetType: String(evidence.assetType || ""),
+    expectedSizeBytes: Number(evidence.expectedSizeBytes || 0),
+    expectedName: String(evidence.expectedName || ""),
+    expectedState: String(evidence.expectedState || ""),
+    expectedImageId: String(evidence.expectedImageId || ""),
+    expectedComposeProject: String(evidence.expectedComposeProject || ""),
+    expectedMounts: Array.isArray(evidence.expectedMounts) ? evidence.expectedMounts : [],
+    preserveVolumes: evidence.preserveVolumes === true,
+    stopBeforeRemoval: evidence.stopBeforeRemoval === true,
+    managedRoot: String(evidence.managedRoot || ""),
+    fingerprint: String(evidence.fingerprint || ""),
+    expectedReferences: Number(evidence.expectedReferences || 0),
+    lifecycle: evidence.lifecycle && typeof evidence.lifecycle === "object" ? evidence.lifecycle : undefined,
+  };
+}
+
+export function remoteCleanupAuthoritySnapshot(preview) {
+  const events = readAuthoritativeLedgerEvents();
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
+  const cache = ledgerAuthorityCache.get(ledger);
+  const governed = retirementAttestations(events, { project: preview.project, environment: preview.source });
+  const items = [...new Map((preview.allowlist || []).map((requested) => [`${requested.type}:${requested.id}`, requested])).entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, requested]) => {
+      const protection = governed.protections.get(key);
+      const retirement = governed.retirements.get(key);
+      const state = protection ? "protected" : retirement ? "retired" : "none";
+      const evidenceDigest = retirement ? authorityDigest(remoteRetirementEvidenceBinding(retirement)) : null;
+      const requestedEvidenceDigest = requested.retirementEvidence ? authorityDigest(remoteRetirementEvidenceBinding(requested.retirementEvidence)) : null;
+      const recoverySource = retirement ? String(retirement.recoverySource || "") : null;
+      const requestedRecoverySource = requested.retirementEvidence ? String(requested.recoverySource || "") : null;
+      const valid = state !== "protected" && (!requestedEvidenceDigest || (state === "retired" && requestedEvidenceDigest === evidenceDigest && requestedRecoverySource === recoverySource));
+      return { key, state, evidenceDigest, requestedEvidenceDigest, recoverySource, requestedRecoverySource, valid };
+    });
+  return {
+    ordinal: Number(cache?.state?.parsedEventCount || 0),
+    ledgerDigest: String(cache?.digest || ""),
+    governanceDigest: authorityDigest({ project: preview.project, environment: preview.source, items: items.map(({ key, state, evidenceDigest, recoverySource }) => ({ key, state, evidenceDigest, recoverySource })) }),
+    invalidAssetKeys: items.filter((item) => !item.valid).map((item) => item.key),
+    observedStarted: events.some((event) => event.event === "cleanup.operation.started" && event.details?.operationId === preview.operationId && event.details?.confirmationDigest === preview.confirmationDigest),
+  };
+}
+
+export function executeAuthorityBoundRemoteCleanup({ token, preview, sourceConfig }, io = {}) {
+  const readAuthority = io.readAuthority || remoteCleanupAuthoritySnapshot;
+  const appendEvent = io.appendEvent || appendCleanupEvent;
+  const executeRemote = io.executeRemote || executeRemoteCleanup;
+  let enteredRemoteExecutor = false;
+  try {
+    if (!sourceConfig) throw new Error(`${preview.source} source is not configured; no command was sent.`);
+    const before = readAuthority(preview);
+    appendEvent("cleanup.operation.started", {
+      previewToken: token,
+      operationId: preview.operationId,
+      source: preview.source,
+      project: preview.project,
+      actorId: preview.actorId,
+      serverInstanceId: preview.serverInstanceId,
+      confirmationDigest: preview.confirmationDigest,
+      authorityOrdinal: before.ordinal,
+      authorityDigest: before.governanceDigest,
+      authorityLedgerDigest: before.ledgerDigest,
+      allowlist: preview.allowlist,
+    }, preview.source);
+    const after = readAuthority(preview);
+    const stable = after.observedStarted
+      && after.ordinal === before.ordinal + 1
+      && after.governanceDigest === before.governanceDigest
+      && before.invalidAssetKeys.length === 0
+      && after.invalidAssetKeys.length === 0;
+    if (!stable) {
+      throw Object.assign(new Error("Remote cleanup authority changed after preview or is no longer executable; no command was sent."), {
+        mutationState: "not_sent",
+        authorityBefore: before,
+        authorityAfter: after,
+      });
+    }
+    enteredRemoteExecutor = true;
+    return executeRemote({ source: preview.source, sourceConfig, allowlist: preview.allowlist, operationId: preview.operationId });
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    if (!enteredRemoteExecutor && !failure.mutationState) failure.mutationState = "not_sent";
+    throw failure;
+  }
+}
+
+export function remoteCleanupFailureResult(preview, error) {
+  const mutationState = String(error.mutationState || "outcome_unknown");
+  const resultStatus = ["not_sent", "failed"].includes(mutationState) ? "failed" : "outcome_unknown";
+  const results = Array.isArray(error.partialResults) && error.partialResults.length
+    ? error.partialResults.map((item) => ({ ...item, status: item.status === "removed" ? "outcome_unknown" : item.status, reclaimedBytes: 0, reason: item.status === "removed" ? `Command reported removal; post-cleanup verification is pending. ${error.message}` : item.reason }))
+    : preview.allowlist.map((item) => ({ ...item, status: resultStatus, reclaimedBytes: 0, reason: error.message }));
+  return {
+    mutationState,
+    resultStatus,
+    results,
+    response: {
+      completedAt: new Date().toISOString(),
+      operationId: preview.operationId,
+      commandId: error.commandId || null,
+      resumeToken: resultStatus === "outcome_unknown" ? { commandId: error.commandId || null, operationId: preview.operationId, source: preview.source, project: preview.project } : null,
+      status: resultStatus,
+      results,
+    },
+  };
+}
+
+export function executeCleanup(input, context = {}) {
+  const { token } = input;
+  const preview = consumeCleanupPreview(input, context);
   if (preview.source !== "local") {
     const config = loadConfig();
     const baseSourceConfig = projectSourceConfigs(config, preview.project).find((item) => item.id === preview.source);
     const sourceConfig = preview.source === "github" && preview.project && preview.project !== "all"
       ? { ...baseSourceConfig, repository: preview.project }
       : baseSourceConfig;
-    const cleanup = executeRemoteCleanup({ source: preview.source, sourceConfig, allowlist: preview.allowlist });
-    previewStore.delete(token);
-    dashboardCache.clear();
-    appendCleanupEvent("cleanup.remote.executed", {
-      previewToken: token,
-      source: preview.source,
-      removed: String(cleanup.results.filter((item) => item.status === "removed").length),
-      failed: String(cleanup.results.filter((item) => item.status === "failed").length),
-    }, preview.source);
-    return cleanup;
+    try {
+      const cleanup = executeAuthorityBoundRemoteCleanup({ token, preview, sourceConfig });
+      dashboardCache.clear();
+      const failed = cleanup.results.filter((item) => item.status === "failed").length;
+      const skipped = cleanup.results.filter((item) => item.status === "skipped").length;
+      const status = cleanup.verification?.status === "pass" && failed === 0 && skipped === 0 ? "complete" : cleanup.results.some((item) => item.status === "removed") ? "partial" : "failed";
+      const completed = { ...cleanup, status, operationId: preview.operationId };
+      appendCleanupEvent("cleanup.remote.executed", {
+        previewToken: token,
+        operationId: preview.operationId,
+        source: preview.source,
+        status,
+        removed: String(cleanup.results.filter((item) => item.status === "removed").length),
+        failed: String(failed),
+        skipped: String(skipped),
+      }, preview.source);
+      return completed;
+    } catch (error) {
+      const failure = remoteCleanupFailureResult(preview, error);
+      try {
+        appendCleanupEvent(failure.resultStatus === "outcome_unknown" ? "cleanup.remote.outcome_unknown" : "cleanup.remote.failed", { previewToken: token, operationId: preview.operationId, source: preview.source, mutationState: failure.mutationState, commandId: error.commandId || null, reason: error.message }, preview.source);
+      } catch (ledgerError) {
+        failure.response.auditRecordError = ledgerError.message;
+      }
+      return failure.response;
+    }
   }
+  appendCleanupEvent("cleanup.operation.started", { previewToken: token, operationId: preview.operationId, source: preview.source, project: preview.project, actorId: preview.actorId, serverInstanceId: preview.serverInstanceId, confirmationDigest: preview.confirmationDigest, allowlist: preview.allowlist }, preview.source);
   dashboardCache.clear();
   const current = collectDashboard({ source: "local", project: preview.project, includeAllAssets: true });
-  const safeAssets = new Map(current.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const safeAssets = new Map(current.assets.filter((item) => item.retirementState === "executable-candidate").map((item) => [`${item.type}:${item.id}`, item]));
   const currentCache = current.bars.find((item) => item.type === "cache");
   if (Number(currentCache?.reclaimableBytes || 0) > 0) {
     safeAssets.set("cache:docker-build-cache", {
@@ -1084,6 +1587,12 @@ export function executeCleanup({ token, confirmed = false }) {
     if (!asset) {
       results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "执行前复核不再满足安全清理条件" });
       continue;
+    }
+    if (asset.type === "image") {
+      if (!automaticRetirementEvidenceMatches(requested, asset)) {
+        results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "Image creation time, tags, or automatic retirement successor evidence changed after preview." });
+        continue;
+      }
     }
     if (["worktree", "worktree_residual", "host_artifact"].includes(asset.type)) {
       try {
@@ -1104,17 +1613,39 @@ export function executeCleanup({ token, confirmed = false }) {
         continue;
       }
     }
-    const output = run("docker", args, { timeout: localCleanupTimeoutMs(asset) });
+    const mutation = runMutation("docker", args, { timeout: localCleanupTimeoutMs(asset) });
+    const requestedReferences = asset.type === "image" ? args.slice(2) : [];
+    const removedReferences = asset.type === "image" ? requestedReferences.filter((reference) => !run("docker", ["image", "inspect", reference, "--format", "{{.Id}}"], { timeout: 10_000 })) : undefined;
+    const objectGone = asset.type === "image" ? !run("docker", ["image", "inspect", asset.id, "--format", "{{.Id}}"], { timeout: 10_000 })
+      : asset.type === "container" ? !run("docker", ["container", "inspect", asset.id, "--format", "{{.Id}}"], { timeout: 10_000 })
+        : asset.type === "volume" ? !run("docker", ["volume", "inspect", asset.id, "--format", "{{.Name}}"], { timeout: 10_000 }) : mutation.ok;
+    const removed = mutation.ok && objectGone;
     results.push({
       ...requested,
       sizeBytes: asset.sizeBytes,
-      removedReferences: asset.type === "image" ? args.slice(2) : undefined,
-      status: output ? "removed" : "failed",
-      reclaimedBytes: output ? Number(asset.sizeBytes || 0) : 0,
+      removedReferences,
+      status: removed ? "removed" : "failed",
+      reclaimedBytes: removed ? Number(asset.sizeBytes || 0) : 0,
+      reason: removed ? asset.reason : (mutation.error || "Exact asset still exists after mutation."),
     });
   }
-  previewStore.delete(token);
   dashboardCache.clear();
-  appendCleanupEvent("cleanup.executed", { previewToken: token, removed: String(results.filter((item) => item.status === "removed").length), failed: String(results.filter((item) => item.status === "failed").length) });
-  return { completedAt: new Date().toISOString(), results };
+  const failed = results.filter((item) => item.status === "failed").length;
+  const skipped = results.filter((item) => item.status === "skipped").length;
+  const removed = results.filter((item) => item.status === "removed").length;
+  const status = failed === 0 && skipped === 0 ? "complete" : removed > 0 ? "partial" : "failed";
+  appendCleanupEvent("cleanup.executed", { previewToken: token, operationId: preview.operationId, status, removed: String(removed), failed: String(failed), skipped: String(skipped) });
+  return { completedAt: new Date().toISOString(), operationId: preview.operationId, status, results };
+}
+
+export function resumeCleanup({ source, project, operationId, commandId } = {}) {
+  if (!new Set(["production", "staging"]).has(source)) throw new Error("Only AWS SSM cleanup operations can be resumed through this tool.");
+  const config = loadConfig();
+  const sourceConfig = projectSourceConfigs(config, project).find((item) => item.id === source);
+  if (!sourceConfig || (sourceConfig.transport || "aws-ssm") !== "aws-ssm") throw new Error("The selected project/source is not configured for AWS SSM cleanup recovery.");
+  const started = readAuthoritativeLedgerEvents().filter((event) => event.event === "cleanup.operation.started" && event.details?.operationId === operationId && event.details?.source === source && event.details?.project === project).at(-1);
+  const allowlist = Array.isArray(started?.details?.allowlist) ? started.details.allowlist : [];
+  const result = resumeAwsCleanup({ sourceConfig, operationId, commandId, allowlist });
+  appendCleanupEvent("cleanup.remote.resumed", { source, project, operationId, commandId: result.commandId || null, status: result.status }, source);
+  return result;
 }

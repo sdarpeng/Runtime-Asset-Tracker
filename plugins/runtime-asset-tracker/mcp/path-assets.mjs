@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir, hostname, platform } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const PATH_RECONCILIATION_SCHEMA = "sparkling.runtime-path-retirement-reconciliation/v1";
 const PATH_TYPES = new Set(["worktree", "worktree_residual", "host_artifact"]);
@@ -10,6 +11,24 @@ const FINGERPRINT = /^sha256:[0-9a-f]{64}$/i;
 const ARCHIVE = /(?:\.tar\.gz|\.tar|\.tgz|\.zip|\.gz|\.7z|\.bundle)$/i;
 const ARTIFACT_DIR = /^(?:node_modules|dist|build|coverage|smoke-artifacts|test-results|playwright-report|\.next|\.nuxt|\.turbo|\.cache|\.pytest_cache|__pycache__|\.prod-artifacts|\.codex-(?:execution|artifacts?|deploy|release).*)$/i;
 const scanCache = new Map();
+const moduleDirectory = dirname(fileURLToPath(import.meta.url));
+const pluginRoot = resolve(moduleDirectory, "..");
+
+export function safeDeleteHelperIntegrity() {
+  const helperPath = join(pluginRoot, "scripts", "safe-delete-path.py");
+  const provenancePath = join(pluginRoot, "dist", "build-provenance.json");
+  try {
+    const provenance = JSON.parse(readFileSync(provenancePath, "utf8"));
+    const observedSha256 = createHash("sha256").update(readFileSync(helperPath)).digest("hex");
+    const declaredSha256 = String(provenance.safeDeleteHelperSha256 || "");
+    const stats = statSync(helperPath);
+    const ownerSafe = platform() === "win32" || typeof process.geteuid !== "function" || Number(stats.uid) === Number(process.geteuid());
+    const modeSafe = platform() === "win32" || (Number(stats.mode) & 0o022) === 0;
+    return { ok: /^[0-9a-f]{64}$/.test(declaredSha256) && observedSha256 === declaredSha256 && ownerSafe && modeSafe, helperPath, declaredSha256, observedSha256, ownerSafe, modeSafe };
+  } catch (error) {
+    return { ok: false, helperPath, declaredSha256: null, observedSha256: null, ownerSafe: false, modeSafe: false, reason: error.message };
+  }
+}
 
 function defaultStateRoot() {
   if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve(process.env.RUNTIME_ASSET_STATE_DIR);
@@ -40,6 +59,26 @@ function within(path, root) {
   const parent = resolve(root);
   const rel = relative(parent, child);
   return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+export function canonicalPathContainment(pathValue, rootValue) {
+  const path = resolve(pathValue);
+  const root = resolve(rootValue);
+  if (!existsSync(path) || !existsSync(root) || !within(path, root)) return false;
+  try {
+    if (lstatSync(root).isSymbolicLink()) return false;
+    const rel = relative(root, path);
+    let cursor = root;
+    for (const part of rel.split(sep).filter(Boolean)) {
+      cursor = join(cursor, part);
+      if (lstatSync(cursor).isSymbolicLink()) return false;
+    }
+    const realRoot = realpathSync.native(root);
+    const realPath = realpathSync.native(path);
+    return within(realPath, realRoot);
+  } catch {
+    return false;
+  }
 }
 
 function safeEntries(path) {
@@ -175,7 +214,7 @@ function applyAttestation(asset, attestations) {
     && !asset.lineage?.dirty
     && !asset.lineage?.lifecycleProtected;
   if (!exact) return { ...asset, retirementBlocked: true, reason: "Retirement evidence no longer matches the live path, byte count, fingerprint, or Git state." };
-  return {
+  const attested = {
     ...asset,
     classification: "reclaimable",
     labels: {
@@ -187,6 +226,15 @@ function applyAttestation(asset, attestations) {
     lineage: { ...asset.lineage, retirement: attestation, recoverySource: attestation.recoverySource },
     reason: "Exact path retirement attestation matches the live byte count and content fingerprint.",
   };
+  if (asset.type === "worktree") {
+    return { ...attested, classification: "review", retirementBlocked: true, reason: "Registered worktree deletion remains blocked: Git metadata removal is not bound to a verified directory handle." };
+  }
+  if (platform() === "win32") {
+    return { ...attested, classification: "review", retirementBlocked: true, reason: "Windows path deletion remains blocked until a native handle-relative, open-reparse-point helper is available." };
+  }
+  const helperIntegrity = safeDeleteHelperIntegrity();
+  if (!helperIntegrity.ok) return { ...attested, classification: "review", retirementBlocked: true, reason: "POSIX path deletion helper identity, owner, or permissions do not match the frozen build provenance." };
+  return attested;
 }
 
 function candidateRoots(config, projects) {
@@ -401,32 +449,44 @@ export function importPathRetirementReconciliation({ reportPath, owner = "platfo
   return { importedAt: new Date().toISOString(), reportPath, reportSha256, candidatePathCount: report.assets.length, retirementEventsAdded: events.length, idempotentSkipCount: report.assets.length - events.length };
 }
 
-function removeTreeNoFollow(path) {
+function fileIdentity(path) {
   const stats = lstatSync(path);
-  if (stats.isSymbolicLink() || !stats.isDirectory()) {
-    try { unlinkSync(path); } catch (error) { chmodSync(path, 0o600); unlinkSync(path); }
-    return;
-  }
-  for (const entry of safeEntries(path)) removeTreeNoFollow(join(path, entry.name));
-  try { rmdirSync(path); } catch (error) { chmodSync(path, 0o700); rmdirSync(path); }
+  return { dev: String(stats.dev), ino: String(stats.ino), mode: Number(stats.mode), birthtimeMs: Math.trunc(Number(stats.birthtimeMs || 0)), reparse: stats.isSymbolicLink() };
 }
 
-export function executePathAssetCleanup(asset) {
-  if (!PATH_TYPES.has(asset?.type) || asset.classification !== "reclaimable") throw new Error("Path asset is not reclaimable.");
+function handleRelativeRemove(path, allowedRoot) {
+  if (platform() === "win32") throw new Error("Windows path cleanup is blocked until a native handle-relative, open-reparse-point helper is available.");
+  const rootIdentity = fileIdentity(allowedRoot);
+  const targetIdentity = fileIdentity(path);
+  if (rootIdentity.reparse || targetIdentity.reparse) throw new Error("Path cleanup cannot target a reparse point.");
+  const integrity = safeDeleteHelperIntegrity();
+  if (!integrity.ok) throw new Error("Handle-relative path cleanup helper identity, owner, or permissions do not match the frozen build provenance.");
+  const helperSource = readFileSync(integrity.helperPath, "utf8");
+  const executionSha256 = createHash("sha256").update(helperSource).digest("hex");
+  if (executionSha256 !== integrity.declaredSha256) throw new Error("Handle-relative path cleanup helper changed between identity verification and execution.");
+  execFileSync("python3", [
+    "-c", helperSource,
+    "--root", allowedRoot,
+    "--path", path,
+    "--root-dev", rootIdentity.dev,
+    "--root-ino", rootIdentity.ino,
+    "--target-dev", targetIdentity.dev,
+    "--target-ino", targetIdentity.ino,
+  ], { encoding: "utf8", timeout: 120_000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+}
+
+export function executePathAssetCleanup(asset, { beforeIsolation } = {}) {
+  if (!PATH_TYPES.has(asset?.type) || (asset.classification !== "reclaimable" && asset.retirementState !== "executable-candidate")) throw new Error("Path asset is not reclaimable.");
+  if (platform() === "win32") throw new Error("Windows path cleanup is blocked until a native handle-relative, open-reparse-point helper is available.");
+  if (asset.type === "worktree") throw new Error("Registered worktree cleanup is blocked until Git metadata removal can be bound to the same verified directory handle.");
   const path = resolve(asset.path || asset.lineage?.path || "");
   const allowedRoot = resolve(asset.lineage?.allowedRoot || "");
-  if (!path || !allowedRoot || !within(path, allowedRoot) || !existsSync(path)) throw new Error("Path cleanup target is outside its exact allowed root or no longer exists.");
+  if (!path || !allowedRoot || !canonicalPathContainment(path, allowedRoot)) throw new Error("Path cleanup target is outside its canonical allowed root, crosses a reparse point, or no longer exists.");
   const current = scanPathUsage(path);
   if (current.truncated || current.sizeBytes !== Number(asset.sizeBytes) || current.fingerprint !== asset.lineage?.contentFingerprint) throw new Error("Path content changed after preview.");
-  if (asset.type === "worktree") {
-    if (asset.lineage?.primary || asset.lineage?.dirty || !asset.lineage?.gitRoot) throw new Error("Primary or dirty worktree cleanup is blocked.");
-    const registered = parseWorktreeBlocks(runGit(["worktree", "list", "--porcelain"], asset.lineage.gitRoot)).some((item) => keyPath(item.worktree) === keyPath(path));
-    if (!registered) throw new Error("Registered worktree identity changed after preview.");
-    const output = runGit(["worktree", "remove", "--", path], asset.lineage.gitRoot, 120_000);
-    if (existsSync(path)) throw new Error(output || "Git did not remove the exact worktree.");
-    return { output, removed: true };
-  }
-  removeTreeNoFollow(path);
+  if (beforeIsolation) beforeIsolation();
+  if (!canonicalPathContainment(path, allowedRoot)) throw new Error("Path ancestry changed before isolation.");
+  handleRelativeRemove(path, allowedRoot);
   if (existsSync(path)) throw new Error("Exact path still exists after cleanup.");
   return { removed: true };
 }
