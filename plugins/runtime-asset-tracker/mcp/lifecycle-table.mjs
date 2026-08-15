@@ -148,7 +148,7 @@ function exactIdentity(asset) {
   return {
     id: String(asset.id || ""),
     name: String(asset.name || ""),
-    tags: [...(asset?.lineage?.tags || [])].map(String).sort(),
+    tags: [...new Set((asset?.lineage?.tags || []).map(String).filter((tag) => tag && !tag.includes("<none>")))].sort(),
     imageId: asset?.lineage?.imageId || null,
     state: asset?.status || null,
     composeProject: asset?.lineage?.composeProject || null,

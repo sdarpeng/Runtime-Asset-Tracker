@@ -1,6 +1,6 @@
 {
   "name": "runtime-asset-tracker",
-  "version": "0.4.0+codex.20260814-unified-lifecycle.5",
+  "version": "0.4.0+codex.20260814-unified-lifecycle.6",
   "description": "Track Docker assets, Git worktrees, residual directories, and host artifacts with portable labels and an append-only JSONL ledger.",
   "author": {
     "name": "SparklingPlay Engineering"

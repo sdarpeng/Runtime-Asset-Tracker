@@ -134,4 +134,16 @@ describe("unified runtime asset table", () => {
     });
     assert.deepEqual(table.assets.map((row) => row.decision), ["protected", "protected"]);
   });
+
+  it("drops Docker pseudo-tags and preserves a unique exact real tag set", () => {
+    const table = buildUnifiedAssetTable({
+      project: PROJECT,
+      generatedAt: "2026-08-14T00:00:00Z",
+      githubAuthority: authority(),
+      dashboards: [{ source: "staging", dashboard: { assets: [
+        asset({ type: "image", id: `sha256:${"5".repeat(64)}`, lineage: { revision: REVISION, consumers: [], tags: ["registry/cms:<none>", "cms:feature", "cms:feature"] } }),
+      ] } }],
+    });
+    assert.deepEqual(table.assets[0].exactIdentity.tags, ["cms:feature"]);
+  });
 });
