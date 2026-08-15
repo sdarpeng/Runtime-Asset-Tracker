@@ -100,8 +100,10 @@ function consumers(asset) {
 function isProtected(asset, source) {
   const reason = String(asset?.lineage?.protection?.reason || asset?.reason || "").toLowerCase();
   const name = String(asset?.name || "").toLowerCase();
+  const identityText = [name, runtimeLabel(asset, "release"), ...(asset?.lineage?.tags || [])].filter(Boolean).join(" ").toLowerCase();
   const running = String(asset?.status || "").toLowerCase() === "running" || consumers(asset).some((item) => item?.state === "running");
   if (asset?.classification === "protected") return true;
+  if (/(?:^|[-_/:])(rollback|recovery)(?:$|[-_/:])/.test(identityText)) return true;
   if (["active", "protected"].includes(asset?.classification) && /(current|rollback|release|recovery)/.test(reason)) return true;
   if (asset?.retirementBlocked && /(current|rollback|release)/.test(reason)) return true;
   if (source === "production" && running && /(?:^|[-_])prod(?:uction)?(?:$|[-_])/.test(name)) return true;

@@ -80,4 +80,16 @@ describe("unified runtime asset table", () => {
     });
     assert.equal(table.assets[0].decision, "protected");
   });
+
+  it("atomically protects a multi-tag image when any tag is rollback or recovery", () => {
+    const table = buildUnifiedAssetTable({
+      project: PROJECT,
+      generatedAt: "2026-08-14T00:00:00Z",
+      githubAuthority: authority(),
+      dashboards: [{ source: "production", dashboard: { assets: [
+        asset({ type: "image", id: `sha256:${"8".repeat(64)}`, name: "cms-api:feature", classification: "retained", lineage: { revision: REVISION, consumers: [], tags: ["cms-api:feature", "cms-api:rollback-feature"] } }),
+      ] } }],
+    });
+    assert.equal(table.assets[0].decision, "protected");
+  });
 });
