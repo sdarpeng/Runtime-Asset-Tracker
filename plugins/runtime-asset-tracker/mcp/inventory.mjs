@@ -993,6 +993,12 @@ export function runDeepScan({ source = "local", project = "all" } = {}) {
   };
 }
 
+export function cleanupSourceSupportsType(source, type) {
+  if (source === "github") return ["artifact", "actions_cache"].includes(type);
+  if (source === "local") return ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact"].includes(type);
+  return ["container", "image", "volume", "cache", "worktree", "host_artifact"].includes(type);
+}
+
 export function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact", "artifact", "actions_cache"], assetIds } = {}) {
   const dashboard = collectDashboard({ source, project, includeAllAssets: true });
   const selectedSource = dashboard.selectedSource || source;
@@ -1004,9 +1010,7 @@ export function createCleanupPreview({ source = "local", project = "all", types 
     if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
     if (requestedIds && !requestedIds.has(String(asset.id))) return false;
     if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX}disposable`] === "true";
-    return selectedSource === "github"
-      ? ["artifact", "actions_cache"].includes(asset.type)
-      : ["container", "image", "volume", "cache", "worktree", "host_artifact"].includes(asset.type);
+    return cleanupSourceSupportsType(selectedSource, asset.type);
   }).map((asset) => ({
     type: asset.type,
     id: asset.id,
