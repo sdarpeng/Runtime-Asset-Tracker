@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { gzipSync } from "node:zlib";
-import { assetInSelectedProjectScope, awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, findExactSsmCommandId, limitDashboardAssets, remoteImageRemovalArgs, remoteSnapshotScript, resolveExpiry, ssmMutationCommand } from "../mcp/remote.mjs";
+import { assetInSelectedProjectScope, awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, executeRemoteCleanup, findExactSsmCommandId, limitDashboardAssets, remoteImageRemovalArgs, remoteSnapshotScript, resolveExpiry, runSsmMutation, ssmMutationCommand } from "../mcp/remote.mjs";
 
 describe("remote read-only adapters", () => {
   it("keeps the EC2 collector free of cleanup and service mutation commands", () => {
@@ -262,6 +262,43 @@ describe("remote read-only adapters", () => {
     assert.match(source, /allowlist = \[\]/);
     assert.match(source, /live reconciliation is required/);
     assert.match(source, /without resending/);
+  });
+
+  for (const transport of [
+    { kind: "aws-ssm", collector: "collectAwsSnapshot", mutation: "runSsmMutation", source: "production" },
+    { kind: "ssh", collector: "collectSshSnapshot", mutation: "runSshMutation", source: "staging" },
+    { kind: "github", collector: "collectGithubSnapshot", mutation: "runGithubMutation", source: "github" },
+  ]) it(`classifies ${transport.kind} pre-mutation snapshot failure as not_sent`, () => {
+    let sends = 0;
+    let caught;
+    try {
+      executeRemoteCleanup({ source: transport.source, sourceConfig: { kind: transport.kind, instanceId: "i-test", sshProfile: "test", repository: "owner/repo" }, allowlist: [] }, {
+        [transport.collector]() { throw new Error("injected snapshot failure"); },
+        [transport.mutation]() { sends += 1; throw new Error("must not execute"); },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    assert.equal(caught?.mutationState, "not_sent");
+    assert.equal(sends, 0);
+  });
+
+  for (const condition of ["describe-error", "offline"]) it(`sends zero SSM commands when the instance check is ${condition}`, () => {
+    let sends = 0;
+    let caught;
+    try {
+      runSsmMutation({ instanceId: "i-test" }, "echo safe", "RAT test-operation", {
+        runJson(_command, args) {
+          if (args.includes("send-command")) sends += 1;
+          if (condition === "describe-error") throw new Error("injected describe failure");
+          return { InstanceInformationList: [{ InstanceId: "i-test", PingStatus: "Offline" }] };
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    assert.equal(caught?.mutationState, "not_sent");
+    assert.equal(sends, 0);
   });
 
   it("resume logic never calls the cleanup send path", () => {

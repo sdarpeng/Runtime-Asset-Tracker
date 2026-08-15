@@ -1377,18 +1377,30 @@ function pollExistingSsmMutation(sourceConfig, commandId, comment, waitMs = 185_
   throw mutationError(`Remote cleanup command ${commandId} did not reach a terminal state within ${Math.ceil(waitMs / 1_000)} seconds.`, "outcome_unknown");
 }
 
-function runSsmMutation(sourceConfig, script, comment) {
+function mutationFailure(error, mutationState, details = {}) {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  if (!failure.mutationState) failure.mutationState = mutationState;
+  return Object.assign(failure, details);
+}
+
+export function runSsmMutation(sourceConfig, script, comment, io = {}) {
+  const executeJson = io.runJson || runJson;
   const instanceId = sourceConfig?.instanceId;
-  if (!instanceId) throw new Error("EC2 instanceId is not configured.");
+  if (!instanceId) throw mutationFailure(new Error("EC2 instanceId is not configured."), "not_sent", { operationComment: comment });
   const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
-  const managed = runJson("aws", [...regionArgs, "ssm", "describe-instance-information", "--filters", `Key=InstanceIds,Values=${instanceId}`, "--output", "json"]);
+  let managed;
+  try {
+    managed = executeJson("aws", [...regionArgs, "ssm", "describe-instance-information", "--filters", `Key=InstanceIds,Values=${instanceId}`, "--output", "json"]);
+  } catch (error) {
+    throw mutationFailure(error, "not_sent", { operationComment: comment });
+  }
   const instance = managed.InstanceInformationList?.find((item) => item.InstanceId === instanceId);
-  if (!instance || instance.PingStatus !== "Online") throw new Error(`EC2 ${instanceId} is not online through Systems Manager.`);
+  if (!instance || instance.PingStatus !== "Online") throw mutationFailure(new Error(`EC2 ${instanceId} is not online through Systems Manager.`), "not_sent", { operationComment: comment });
   const command = ssmMutationCommand(script);
   const mutationError = (message, mutationState, commandId) => Object.assign(new Error(message), { mutationState, commandId, operationComment: comment });
   let sent;
   try {
-    sent = runJson("aws", [...regionArgs, "ssm", "send-command", "--instance-ids", instanceId, "--document-name", "AWS-RunShellScript", "--comment", comment, "--parameters", JSON.stringify({ commands: [command] }), "--timeout-seconds", "180", "--output", "json"], { timeout: 30_000 });
+    sent = executeJson("aws", [...regionArgs, "ssm", "send-command", "--instance-ids", instanceId, "--document-name", "AWS-RunShellScript", "--comment", comment, "--parameters", JSON.stringify({ commands: [command] }), "--timeout-seconds", "180", "--output", "json"], { timeout: 30_000 });
   } catch (error) {
     const reconciledCommandId = reconcileSsmCommandId(sourceConfig, comment, { attempts: 8, delayMs: 1_000 });
     if (!reconciledCommandId) throw mutationError(`SSM send outcome is unknown; exact operation comment: ${comment}. Resume by operationId without resending. ${error.message}`, "outcome_unknown");
@@ -1448,10 +1460,14 @@ function collectPostCleanupSnapshot(sourceConfig, commandId, partialResults) {
   }
 }
 
-function executeAwsDockerCleanup(sourceConfig, allowlist, operationId) {
+function executeAwsDockerCleanup(sourceConfig, allowlist, operationId, io = {}) {
+  const collectSnapshot = io.collectAwsSnapshot || collectAwsSnapshot;
+  const executeMutation = io.runSsmMutation || runSsmMutation;
   const cleanupResultPath = `/tmp/runtime-asset-tracker-cleanup-${String(operationId).replace(/[^a-zA-Z0-9-]/g, "")}/result.b64`;
   const fullSourceConfig = { ...sourceConfig, includeAllAssets: true, cleanupResultPath };
-  const snapshot = collectAwsSnapshot(fullSourceConfig);
+  let snapshot;
+  try { snapshot = collectSnapshot(fullSourceConfig); }
+  catch (error) { throw mutationFailure(error, "not_sent"); }
   const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
   const approved = [];
@@ -1464,7 +1480,7 @@ function executeAwsDockerCleanup(sourceConfig, allowlist, operationId) {
   if (!approved.length) return { completedAt: new Date().toISOString(), results: skipped };
   const script = awsDockerCleanupScript(approved, fullSourceConfig);
   const encoded = gzipSync(Buffer.from(script, "utf8"), { level: 9 }).toString("base64");
-  const invocation = runSsmMutation(fullSourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, `RAT ${operationId}`);
+  const invocation = executeMutation(fullSourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, `RAT ${operationId}`);
   const payload = decodeAwsCleanupResult(invocation, fullSourceConfig, cleanupResultPath);
   remoteCache.clear();
   const results = [...skipped, ...(payload.results || [])];
@@ -1521,21 +1537,29 @@ export function resumeAwsCleanup({ sourceConfig, operationId, commandId, allowli
 
 function runSshMutation(sourceConfig, script) {
   const sshProfile = String(sourceConfig?.sshProfile || "").trim();
-  if (!sshProfile) throw new Error("未配置 SSH Profile；私钥只应由 OpenSSH/系统凭据库管理");
+  if (!sshProfile) throw mutationFailure(new Error("未配置 SSH Profile；私钥只应由 OpenSSH/系统凭据库管理"), "not_sent");
   const encoded = Buffer.from(script, "utf8").toString("base64");
-  return runStrict("ssh", [
-    "-o", "BatchMode=yes",
-    "-o", "IdentitiesOnly=yes",
-    "-o", "StrictHostKeyChecking=yes",
-    "-o", "ConnectTimeout=12",
-    sshProfile,
-    `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`,
-  ], { timeout: 210_000, maxBuffer: 32 * 1024 * 1024 });
+  try {
+    return runStrict("ssh", [
+      "-o", "BatchMode=yes",
+      "-o", "IdentitiesOnly=yes",
+      "-o", "StrictHostKeyChecking=yes",
+      "-o", "ConnectTimeout=12",
+      sshProfile,
+      `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`,
+    ], { timeout: 210_000, maxBuffer: 32 * 1024 * 1024 });
+  } catch (error) {
+    throw mutationFailure(error, "outcome_unknown");
+  }
 }
 
-function executeSshDockerCleanup(sourceConfig, allowlist) {
+function executeSshDockerCleanup(sourceConfig, allowlist, io = {}) {
+  const collectSnapshot = io.collectSshSnapshot || collectSshSnapshot;
+  const executeMutation = io.runSshMutation || runSshMutation;
   const fullSourceConfig = { ...sourceConfig, includeAllAssets: true };
-  const snapshot = collectSshSnapshot(fullSourceConfig);
+  let snapshot;
+  try { snapshot = collectSnapshot(fullSourceConfig); }
+  catch (error) { throw mutationFailure(error, "not_sent"); }
   const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
   const approved = [];
@@ -1546,18 +1570,25 @@ function executeSshDockerCleanup(sourceConfig, allowlist) {
     else approved.push({ ...requested, sizeBytes: current.sizeBytes, reason: current.reason });
   }
   if (!approved.length) return { completedAt: new Date().toISOString(), results: skipped };
-  const output = runSshMutation(fullSourceConfig, awsDockerCleanupScript(approved, fullSourceConfig));
+  const output = executeMutation(fullSourceConfig, awsDockerCleanupScript(approved, fullSourceConfig));
   const match = output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
-  if (!match) throw new Error("远程清理没有返回可验证结果");
-  const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
+  if (!match) throw mutationFailure(new Error("远程清理没有返回可验证结果"), "outcome_unknown");
+  let payload;
+  try { payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8")); }
+  catch (error) { throw mutationFailure(error, "outcome_unknown"); }
   remoteCache.clear();
   const results = [...skipped, ...(payload.results || [])];
-  const after = collectSshSnapshot(fullSourceConfig);
+  let after;
+  try { after = collectSnapshot(fullSourceConfig); }
+  catch (error) { throw mutationFailure(error, "outcome_unknown", { partialResults: results }); }
   return { completedAt: new Date().toISOString(), results, verification: buildPostCleanupVerification(snapshot, after, results) };
 }
 
-function executeGithubCleanup(sourceConfig, allowlist) {
-  const snapshot = collectGithubSnapshot(sourceConfig);
+function executeGithubCleanup(sourceConfig, allowlist, io = {}) {
+  const collectSnapshot = io.collectGithubSnapshot || collectGithubSnapshot;
+  let snapshot;
+  try { snapshot = collectSnapshot(sourceConfig); }
+  catch (error) { throw mutationFailure(error, "not_sent"); }
   const safeAssets = new Map(snapshot.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.remoteKind}:${item.id}`, item]));
   const results = [];
   for (const requested of allowlist) {
@@ -1580,11 +1611,11 @@ function executeGithubCleanup(sourceConfig, allowlist) {
   return { completedAt: new Date().toISOString(), results };
 }
 
-export function executeRemoteCleanup({ source, sourceConfig, allowlist, operationId = randomUUID() }) {
-  if (!sourceConfig) throw new Error(`${source} 来源尚未配置`);
-  if (sourceConfig.kind === "github") return executeGithubCleanup(sourceConfig, allowlist);
-  if (sourceConfig.kind === "ssh") return executeSshDockerCleanup(sourceConfig, allowlist);
-  return executeAwsDockerCleanup(sourceConfig, allowlist, operationId);
+export function executeRemoteCleanup({ source, sourceConfig, allowlist, operationId = randomUUID() }, io = {}) {
+  if (!sourceConfig) throw mutationFailure(new Error(`${source} 来源尚未配置`), "not_sent");
+  if (sourceConfig.kind === "github") return executeGithubCleanup(sourceConfig, allowlist, io);
+  if (sourceConfig.kind === "ssh") return executeSshDockerCleanup(sourceConfig, allowlist, io);
+  return executeAwsDockerCleanup(sourceConfig, allowlist, operationId, io);
 }
 
 function registeredProjectOptions(config, sourceConfig) {
