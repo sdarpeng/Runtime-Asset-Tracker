@@ -96,6 +96,32 @@ describe("runtime retirement reconciliation", () => {
     assert.deepEqual(governance.retirements.get(`image:${IMAGE}`).approvedTags, ["example/api:legacy"]);
   });
 
+  it("keeps identical remote image IDs scoped to their project environment", () => {
+    const event = (environment, approvedTags) => ({
+      event: "asset.retired",
+      status: "retired",
+      project: PROJECT,
+      environment,
+      owner: "platform",
+      release: `merged-${environment}`,
+      gitSha: REVISION,
+      asset: { type: "image", id: IMAGE },
+      details: {
+        disposable: "true",
+        retention: "retired",
+        recoverySource: `git:${REVISION}`,
+        approvedTags,
+        reportSha256: environment === "production" ? "d".repeat(64) : "e".repeat(64),
+        group: `merged-${environment}`,
+      },
+    });
+    const events = [event("production", ["example/api:production"]), event("staging", ["example/api:staging"])];
+    const production = retirementAttestations(events, { project: PROJECT, environment: "production" });
+    const staging = retirementAttestations(events, { project: PROJECT, environment: "staging" });
+    assert.deepEqual(production.retirements.get(`image:${IMAGE}`).approvedTags, ["example/api:production"]);
+    assert.deepEqual(staging.retirements.get(`image:${IMAGE}`).approvedTags, ["example/api:staging"]);
+  });
+
   it("imports exact local retirement without requiring a remote environment registration", () => {
     const root = mkdtempSync(join(tmpdir(), "rat-reconcile-local-"));
     temporaryRoots.push(root);

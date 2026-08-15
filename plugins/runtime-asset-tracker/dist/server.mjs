@@ -35087,10 +35087,12 @@ function validateRetirementReconciliation(report, { project, source, instanceId,
   }
   return { ok: errors.length === 0, errors, selectedGroups, imageCount, uniqueBytes, protectedIds: [...protectedIds] };
 }
-function retirementAttestations(events) {
+function retirementAttestations(events, { project: selectedProject, environment: selectedEnvironment } = {}) {
   const retirements = /* @__PURE__ */ new Map();
   const protections = /* @__PURE__ */ new Map();
   for (const event of events || []) {
+    if (selectedProject && String(event?.project || "") !== String(selectedProject)) continue;
+    if (selectedEnvironment && String(event?.environment || "") !== String(selectedEnvironment)) continue;
     const type = String(event?.asset?.type || "");
     const id = String(event?.asset?.id || "");
     if (!RETIREMENT_TYPES.has(type) || !id) continue;
@@ -36561,8 +36563,8 @@ function retirementOverrideLabels(events) {
 function readRetirementOverrides() {
   return retirementOverrideLabels(readRawLedgerEvents());
 }
-function readRetirementGovernance() {
-  return retirementAttestations(readRawLedgerEvents());
+function readRetirementGovernance(project, environment) {
+  return retirementAttestations(readRawLedgerEvents(), { project, environment });
 }
 function importReconciliation(input) {
   const result = importRetirementReconciliation(input);
@@ -36643,7 +36645,7 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
   if (selectedSource !== "local") {
     const scopedConfig = { ...config2, sources: sourceConfigs.filter((item) => item.id !== "local") };
     const dashboard2 = collectRemoteDashboard({ source: selectedSource, scope: "project", project: selectedProject, config: scopedConfig, sources, includeAllAssets });
-    return applyRemoteRetirementGovernance(dashboard2, readRetirementGovernance());
+    return applyRemoteRetirementGovernance(dashboard2, readRetirementGovernance(selectedProject, selectedSource));
   }
   const docker = dockerInventory();
   const worktrees = worktreeInventory(config2, projects);

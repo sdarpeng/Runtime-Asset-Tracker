@@ -531,8 +531,8 @@ function readRetirementOverrides() {
   return retirementOverrideLabels(readRawLedgerEvents());
 }
 
-export function readRetirementGovernance() {
-  return retirementAttestations(readRawLedgerEvents());
+export function readRetirementGovernance(project, environment) {
+  return retirementAttestations(readRawLedgerEvents(), { project, environment });
 }
 
 export function importReconciliation(input) {
@@ -615,7 +615,7 @@ export function collectDashboard({ scope = "project", source = "local", project 
   if (selectedSource !== "local") {
     const scopedConfig = { ...config, sources: sourceConfigs.filter((item) => item.id !== "local") };
     const dashboard = collectRemoteDashboard({ source: selectedSource, scope: "project", project: selectedProject, config: scopedConfig, sources, includeAllAssets });
-    return applyRemoteRetirementGovernance(dashboard, readRetirementGovernance());
+    return applyRemoteRetirementGovernance(dashboard, readRetirementGovernance(selectedProject, selectedSource));
   }
   const docker = dockerInventory();
   const worktrees = worktreeInventory(config, projects);

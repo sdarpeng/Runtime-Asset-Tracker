@@ -86,10 +86,12 @@ export function validateRetirementReconciliation(report, { project, source, inst
   return { ok: errors.length === 0, errors, selectedGroups, imageCount, uniqueBytes, protectedIds: [...protectedIds] };
 }
 
-export function retirementAttestations(events) {
+export function retirementAttestations(events, { project: selectedProject, environment: selectedEnvironment } = {}) {
   const retirements = new Map();
   const protections = new Map();
   for (const event of events || []) {
+    if (selectedProject && String(event?.project || "") !== String(selectedProject)) continue;
+    if (selectedEnvironment && String(event?.environment || "") !== String(selectedEnvironment)) continue;
     const type = String(event?.asset?.type || "");
     const id = String(event?.asset?.id || "");
     if (!RETIREMENT_TYPES.has(type) || !id) continue;
