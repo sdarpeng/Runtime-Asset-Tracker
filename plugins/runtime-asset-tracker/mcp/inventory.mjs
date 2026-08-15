@@ -1472,34 +1472,64 @@ export function executeAuthorityBoundRemoteCleanup({ token, preview, sourceConfi
   const readAuthority = io.readAuthority || remoteCleanupAuthoritySnapshot;
   const appendEvent = io.appendEvent || appendCleanupEvent;
   const executeRemote = io.executeRemote || executeRemoteCleanup;
-  const before = readAuthority(preview);
-  appendEvent("cleanup.operation.started", {
-    previewToken: token,
-    operationId: preview.operationId,
-    source: preview.source,
-    project: preview.project,
-    actorId: preview.actorId,
-    serverInstanceId: preview.serverInstanceId,
-    confirmationDigest: preview.confirmationDigest,
-    authorityOrdinal: before.ordinal,
-    authorityDigest: before.governanceDigest,
-    authorityLedgerDigest: before.ledgerDigest,
-    allowlist: preview.allowlist,
-  }, preview.source);
-  const after = readAuthority(preview);
-  const stable = after.observedStarted
-    && after.ordinal === before.ordinal + 1
-    && after.governanceDigest === before.governanceDigest
-    && before.invalidAssetKeys.length === 0
-    && after.invalidAssetKeys.length === 0;
-  if (!stable) {
-    throw Object.assign(new Error("Remote cleanup authority changed after preview or is no longer executable; no command was sent."), {
-      mutationState: "not_sent",
-      authorityBefore: before,
-      authorityAfter: after,
-    });
+  let enteredRemoteExecutor = false;
+  try {
+    if (!sourceConfig) throw new Error(`${preview.source} source is not configured; no command was sent.`);
+    const before = readAuthority(preview);
+    appendEvent("cleanup.operation.started", {
+      previewToken: token,
+      operationId: preview.operationId,
+      source: preview.source,
+      project: preview.project,
+      actorId: preview.actorId,
+      serverInstanceId: preview.serverInstanceId,
+      confirmationDigest: preview.confirmationDigest,
+      authorityOrdinal: before.ordinal,
+      authorityDigest: before.governanceDigest,
+      authorityLedgerDigest: before.ledgerDigest,
+      allowlist: preview.allowlist,
+    }, preview.source);
+    const after = readAuthority(preview);
+    const stable = after.observedStarted
+      && after.ordinal === before.ordinal + 1
+      && after.governanceDigest === before.governanceDigest
+      && before.invalidAssetKeys.length === 0
+      && after.invalidAssetKeys.length === 0;
+    if (!stable) {
+      throw Object.assign(new Error("Remote cleanup authority changed after preview or is no longer executable; no command was sent."), {
+        mutationState: "not_sent",
+        authorityBefore: before,
+        authorityAfter: after,
+      });
+    }
+    enteredRemoteExecutor = true;
+    return executeRemote({ source: preview.source, sourceConfig, allowlist: preview.allowlist, operationId: preview.operationId });
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    if (!enteredRemoteExecutor && !failure.mutationState) failure.mutationState = "not_sent";
+    throw failure;
   }
-  return executeRemote({ source: preview.source, sourceConfig, allowlist: preview.allowlist, operationId: preview.operationId });
+}
+
+export function remoteCleanupFailureResult(preview, error) {
+  const mutationState = String(error.mutationState || "outcome_unknown");
+  const resultStatus = ["not_sent", "failed"].includes(mutationState) ? "failed" : "outcome_unknown";
+  const results = Array.isArray(error.partialResults) && error.partialResults.length
+    ? error.partialResults.map((item) => ({ ...item, status: item.status === "removed" ? "outcome_unknown" : item.status, reclaimedBytes: 0, reason: item.status === "removed" ? `Command reported removal; post-cleanup verification is pending. ${error.message}` : item.reason }))
+    : preview.allowlist.map((item) => ({ ...item, status: resultStatus, reclaimedBytes: 0, reason: error.message }));
+  return {
+    mutationState,
+    resultStatus,
+    results,
+    response: {
+      completedAt: new Date().toISOString(),
+      operationId: preview.operationId,
+      commandId: error.commandId || null,
+      resumeToken: resultStatus === "outcome_unknown" ? { commandId: error.commandId || null, operationId: preview.operationId, source: preview.source, project: preview.project } : null,
+      status: resultStatus,
+      results,
+    },
+  };
 }
 
 export function executeCleanup(input, context = {}) {
@@ -1529,13 +1559,13 @@ export function executeCleanup(input, context = {}) {
       }, preview.source);
       return completed;
     } catch (error) {
-      const mutationState = String(error.mutationState || "outcome_unknown");
-      const resultStatus = ["not_sent", "failed"].includes(mutationState) ? "failed" : "outcome_unknown";
-      const results = Array.isArray(error.partialResults) && error.partialResults.length
-        ? error.partialResults.map((item) => ({ ...item, status: item.status === "removed" ? "outcome_unknown" : item.status, reclaimedBytes: 0, reason: item.status === "removed" ? `Command reported removal; post-cleanup verification is pending. ${error.message}` : item.reason }))
-        : preview.allowlist.map((item) => ({ ...item, status: resultStatus, reclaimedBytes: 0, reason: error.message }));
-      appendCleanupEvent(resultStatus === "outcome_unknown" ? "cleanup.remote.outcome_unknown" : "cleanup.remote.failed", { previewToken: token, operationId: preview.operationId, source: preview.source, mutationState, commandId: error.commandId || null, reason: error.message }, preview.source);
-      return { completedAt: new Date().toISOString(), operationId: preview.operationId, commandId: error.commandId || null, resumeToken: resultStatus === "outcome_unknown" ? { commandId: error.commandId || null, operationId: preview.operationId, source: preview.source, project: preview.project } : null, status: resultStatus, results };
+      const failure = remoteCleanupFailureResult(preview, error);
+      try {
+        appendCleanupEvent(failure.resultStatus === "outcome_unknown" ? "cleanup.remote.outcome_unknown" : "cleanup.remote.failed", { previewToken: token, operationId: preview.operationId, source: preview.source, mutationState: failure.mutationState, commandId: error.commandId || null, reason: error.message }, preview.source);
+      } catch (ledgerError) {
+        failure.response.auditRecordError = ledgerError.message;
+      }
+      return failure.response;
     }
   }
   appendCleanupEvent("cleanup.operation.started", { previewToken: token, operationId: preview.operationId, source: preview.source, project: preview.project, actorId: preview.actorId, serverInstanceId: preview.serverInstanceId, confirmationDigest: preview.confirmationDigest, allowlist: preview.allowlist }, preview.source);

@@ -3,7 +3,7 @@ import { appendFileSync, mkdtempSync, readFileSync, renameSync, statSync, writeF
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { appendCleanupEvent, executeAuthorityBoundRemoteCleanup, readAuthoritativeLedgerEvents, retirementOverrideLabels } from "../mcp/inventory.mjs";
+import { appendCleanupEvent, executeAuthorityBoundRemoteCleanup, readAuthoritativeLedgerEvents, remoteCleanupFailureResult, retirementOverrideLabels } from "../mcp/inventory.mjs";
 import { retirementAttestations } from "../mcp/reconciliation.mjs";
 
 function event(kind, environment, details = {}) {
@@ -301,5 +301,43 @@ describe("authoritative ledger state", () => {
       if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
       else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
     }
+  });
+
+  for (const failureStage of ["first-read", "started-fsync", "second-read"]) it(`classifies ${failureStage} authority failure as not_sent with no resume token`, () => {
+    const preview = {
+      operationId: "12345678-1234-4123-8123-123456789abc",
+      source: "production",
+      project: "cms",
+      actorId: "operator",
+      serverInstanceId: "server",
+      confirmationDigest: "d".repeat(64),
+      allowlist: [{ type: "image", id: `sha256:${"a".repeat(64)}` }],
+    };
+    const before = { ordinal: 1, ledgerDigest: "1".repeat(64), governanceDigest: "2".repeat(64), invalidAssetKeys: [], observedStarted: false };
+    let reads = 0;
+    let sends = 0;
+    let caught;
+    try {
+      executeAuthorityBoundRemoteCleanup({ token: "preview-token", preview, sourceConfig: { kind: "aws-ssm" } }, {
+        readAuthority() {
+          reads += 1;
+          if (failureStage === "first-read" && reads === 1) throw new Error("injected first read failure");
+          if (failureStage === "second-read" && reads === 2) throw new Error("injected second read failure");
+          return reads === 1 ? before : { ...before, ordinal: 2, observedStarted: true };
+        },
+        appendEvent() {
+          if (failureStage === "started-fsync") throw new Error("injected fsync failure");
+        },
+        executeRemote() { sends += 1; return { results: [] }; },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    assert.equal(caught?.mutationState, "not_sent");
+    assert.equal(sends, 0);
+    const failure = remoteCleanupFailureResult(preview, caught);
+    assert.equal(failure.response.status, "failed");
+    assert.equal(failure.response.resumeToken, null);
+    assert.ok(failure.response.results.every((item) => item.status === "failed"));
   });
 });
