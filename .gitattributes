@@ -1,1 +1,2 @@
-plugins/runtime-asset-tracker/dist/* linguist-generated=true -diff
+plugins/runtime-asset-tracker/dist/* linguist-generated=true -diff -text
+plugins/runtime-asset-tracker/scripts/safe-delete-path.py -text
