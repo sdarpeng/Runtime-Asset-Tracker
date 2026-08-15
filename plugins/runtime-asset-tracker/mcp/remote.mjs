@@ -278,7 +278,7 @@ export function remoteSnapshotScript(sourceConfig = {}) {
     transportPath: sourceConfig.transportPath || "",
   }), "utf8").toString("base64");
   return String.raw`
-import base64, datetime, gzip, hashlib, json, os, re, shutil, socket, subprocess
+import base64, datetime, gzip, hashlib, json, os, re, shutil, socket, stat, subprocess
 
 PREFIX = "com.codex.runtime."
 CONTEXT = json.loads(base64.b64decode("${context}"))
@@ -596,10 +596,20 @@ payload = gzip.compress(json.dumps(result, separators=(",",":"), ensure_ascii=Fa
 encoded_payload = base64.b64encode(payload).decode("ascii")
 transport_path = CONTEXT.get("transportPath") or ""
 if transport_path and len(encoded_payload) > 16000:
-    descriptor = os.open(transport_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    if not hasattr(os, "O_NOFOLLOW"): raise RuntimeError("O_NOFOLLOW is required for staged snapshot transport")
+    transport_dir = os.path.dirname(transport_path)
+    os.mkdir(transport_dir, 0o700)
+    directory_info = os.lstat(transport_dir)
+    if not stat.S_ISDIR(directory_info.st_mode) or stat.S_ISLNK(directory_info.st_mode) or directory_info.st_uid != os.geteuid() or stat.S_IMODE(directory_info.st_mode) != 0o700:
+        raise RuntimeError("staged snapshot directory identity is unsafe")
+    descriptor = os.open(transport_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    staged_info = os.fstat(descriptor)
+    if not stat.S_ISREG(staged_info.st_mode) or staged_info.st_uid != os.geteuid() or stat.S_IMODE(staged_info.st_mode) != 0o600 or staged_info.st_nlink != 1:
+        os.close(descriptor)
+        raise RuntimeError("staged snapshot file identity is unsafe")
     with os.fdopen(descriptor, "w", encoding="ascii") as handle:
         handle.write(encoded_payload)
-    print("RAT2:%d:%s" % (len(encoded_payload), hashlib.sha256(encoded_payload.encode("ascii")).hexdigest()))
+    print("RAT2:%d:%s:%d:%d:%d" % (len(encoded_payload), hashlib.sha256(encoded_payload.encode("ascii")).hexdigest(), staged_info.st_dev, staged_info.st_ino, staged_info.st_uid))
 else:
     print("RAT1:" + encoded_payload)
 `;
@@ -670,7 +680,7 @@ function collectAwsSnapshot(sourceConfig) {
     throw new Error(`EC2 ${instanceId} 未通过 Systems Manager 在线，当前不能读取 Docker 运行态`);
   }
 
-  const transportPath = `/tmp/runtime-asset-tracker-${randomUUID()}.b64`;
+  const transportPath = `/tmp/runtime-asset-tracker-${randomUUID()}/snapshot.b64`;
   const encoded = Buffer.from(remoteSnapshotScript({ ...sourceConfig, transportPath }), "utf8").toString("base64");
   const command = `python3 -c "import base64;exec(base64.b64decode('${encoded}'))"`;
   const invocation = runAwsSsmCommand(regionArgs, instanceId, command, "Runtime Asset Tracker read-only snapshot");
@@ -679,7 +689,7 @@ function collectAwsSnapshot(sourceConfig) {
   if (directMarker) return decodeSnapshotPayload(directMarker.slice(5));
 
   const stagedMarker = lines.find((line) => line.startsWith("RAT2:"));
-  const stagedMatch = stagedMarker?.match(/^RAT2:(\d+):([a-f0-9]{64})$/);
+  const stagedMatch = stagedMarker?.match(/^RAT2:(\d+):([a-f0-9]{64}):(\d+):(\d+):(\d+)$/);
   if (!stagedMatch) throw new Error("远程快照没有返回有效载荷");
   const expectedLength = Number(stagedMatch[1]);
   if (!Number.isSafeInteger(expectedLength) || expectedLength <= 0 || expectedLength > 32 * 1024 * 1024) {
@@ -692,7 +702,7 @@ function collectAwsSnapshot(sourceConfig) {
   try {
     for (let offset = 0; offset < expectedLength; offset += chunkSize) {
       const count = Math.min(chunkSize, expectedLength - offset);
-      const chunkCommand = `python3 -c "p='${transportPath}';f=open(p,'rb');f.seek(${offset});print(f.read(${count}).decode('ascii'))"`;
+      const chunkCommand = safeStagedFileReadCommand(transportPath, offset, count, { dev: stagedMatch[3], ino: stagedMatch[4], uid: stagedMatch[5] });
       const chunkInvocation = runAwsSsmCommand(regionArgs, instanceId, chunkCommand, "Runtime Asset Tracker snapshot chunk", 30);
       const chunk = String(chunkInvocation.StandardOutputContent || "").trim();
       if (chunk.length !== count) throw new Error(`远程快照分块 ${offset / chunkSize + 1} 长度不一致`);
@@ -703,7 +713,7 @@ function collectAwsSnapshot(sourceConfig) {
     primaryError = error;
   }
   try {
-    const cleanupCommand = `python3 -c "import os;p='${transportPath}';os.path.exists(p) and os.remove(p)"`;
+    const cleanupCommand = safeStagedFileCleanupCommand(transportPath, { dev: stagedMatch[3], ino: stagedMatch[4], uid: stagedMatch[5] });
     runAwsSsmCommand(regionArgs, instanceId, cleanupCommand, "Runtime Asset Tracker snapshot temp cleanup", 30);
   } catch (cleanupError) {
     if (!primaryError) primaryError = new Error(`远程快照已读取，但临时文件清理失败：${cleanupError.message}`);
@@ -919,7 +929,7 @@ export function awsDockerCleanupScript(allowlist, sourceConfig = {}) {
     } : undefined,
   })),
   }), "utf8").toString("base64");
-  return String.raw`import base64, datetime, gzip, hashlib, json, os, re, shutil, subprocess, time
+  return String.raw`import base64, datetime, gzip, hashlib, json, os, re, shutil, stat, subprocess, time
 
 payload = json.loads(base64.b64decode("${payload}"))
 items = payload.get("items") or []
@@ -1024,17 +1034,80 @@ def same_path_identity(path, expected):
     try: return path_identity(path) == expected
     except Exception: return False
 
-def remove_tree_no_follow(path, guard):
-    if not guard(): raise RuntimeError("Managed root or parent identity changed during cleanup")
-    info = os.lstat(path)
-    if os.path.islink(path) or not os.path.isdir(path):
-        if not guard(): raise RuntimeError("Managed root or parent identity changed during cleanup")
-        os.unlink(path)
-        return
-    for entry in list(os.scandir(path)):
-        remove_tree_no_follow(entry.path, guard)
-    if not guard(): raise RuntimeError("Managed root or parent identity changed during cleanup")
-    os.rmdir(path)
+def fd_identity(info):
+    return (int(info.st_dev), int(info.st_ino), int(stat.S_IFMT(info.st_mode)))
+
+def stable_path_identity(expected):
+    return (int(expected[0]), int(expected[1]), int(stat.S_IFMT(expected[2])))
+
+def open_directory_no_follow(name, dir_fd=None):
+    if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
+        raise RuntimeError("O_DIRECTORY and O_NOFOLLOW are required for remote path cleanup")
+    return os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
+
+def remove_directory_contents_fd(directory_fd, expected_device):
+    for name in os.listdir(directory_fd):
+        if name in [".", ".."]: raise RuntimeError("Unexpected directory entry")
+        before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if int(before.st_dev) != int(expected_device): raise RuntimeError("Cross-device path cleanup is blocked")
+        if stat.S_ISDIR(before.st_mode):
+            child_fd = open_directory_no_follow(name, dir_fd=directory_fd)
+            try:
+                opened = os.fstat(child_fd)
+                if fd_identity(opened) != fd_identity(before): raise RuntimeError("Directory identity changed before traversal")
+                remove_directory_contents_fd(child_fd, expected_device)
+                current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                if fd_identity(current) != fd_identity(opened): raise RuntimeError("Directory identity changed before removal")
+            finally:
+                os.close(child_fd)
+            os.rmdir(name, dir_fd=directory_fd)
+        else:
+            os.unlink(name, dir_fd=directory_fd)
+
+def remove_managed_path_handle_relative(path, root, expected_root, expected_target):
+    relative = os.path.relpath(path, root)
+    parts = [part for part in relative.split(os.sep) if part not in ["", "."]]
+    if not parts or any(part == ".." for part in parts): raise RuntimeError("Target is outside the managed root")
+    root_fd = open_directory_no_follow(root)
+    parent_fd = root_fd
+    quarantine = None
+    target_name = parts[-1]
+    try:
+        if fd_identity(os.fstat(root_fd)) != stable_path_identity(expected_root): raise RuntimeError("Managed root identity changed")
+        for part in parts[:-1]:
+            next_fd = open_directory_no_follow(part, dir_fd=parent_fd)
+            if parent_fd != root_fd: os.close(parent_fd)
+            parent_fd = next_fd
+        before = os.stat(target_name, dir_fd=parent_fd, follow_symlinks=False)
+        if fd_identity(before) != stable_path_identity(expected_target) or stat.S_ISLNK(before.st_mode): raise RuntimeError("Target identity changed before isolation")
+        quarantine = ".runtime-asset-trash-" + hashlib.sha256((path + str(time.time_ns())).encode("utf-8")).hexdigest()[:24]
+        os.rename(target_name, quarantine, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+        isolated = os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
+        if fd_identity(isolated) != stable_path_identity(expected_target):
+            try:
+                os.stat(target_name, dir_fd=parent_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                try: os.rename(quarantine, target_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+                except Exception: pass
+            except Exception: pass
+            raise RuntimeError("Target identity changed during isolation")
+        if stat.S_ISDIR(isolated.st_mode):
+            target_fd = open_directory_no_follow(quarantine, dir_fd=parent_fd)
+            try:
+                opened = os.fstat(target_fd)
+                if fd_identity(opened) != fd_identity(isolated): raise RuntimeError("Isolated directory identity changed")
+                remove_directory_contents_fd(target_fd, isolated.st_dev)
+                current = os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
+                if fd_identity(current) != fd_identity(opened): raise RuntimeError("Isolated directory identity changed before removal")
+            finally:
+                os.close(target_fd)
+            os.rmdir(quarantine, dir_fd=parent_fd)
+        else:
+            os.unlink(quarantine, dir_fd=parent_fd)
+        quarantine = None
+    finally:
+        if parent_fd != root_fd: os.close(parent_fd)
+        os.close(root_fd)
 
 def overlaps_protected_path(path, protected_paths):
     target = os.path.realpath(path).rstrip("/")
@@ -1092,25 +1165,13 @@ for item in items:
         if not safe:
             results.append({**item,"status":"skipped","reclaimedBytes":0,"reason":"Remote path root, active/protected state, bytes, fingerprint, or bind-mount references drifted."})
             continue
-        quarantine = None
-        guard = lambda: False
         try:
-            quarantine = os.path.join(parent, ".runtime-asset-trash-" + hashlib.sha256((path + str(time.time_ns())).encode("utf-8")).hexdigest()[:24])
-            if not canonical_path_is_contained(path, root) or not same_path_identity(root, root_identity) or not same_path_identity(parent, parent_identity):
+            if not canonical_path_is_contained(path, root) or not same_path_identity(root, root_identity) or not same_path_identity(parent, parent_identity) or not same_path_identity(path, target_identity):
                 raise RuntimeError("Path ancestry changed before isolation")
-            os.rename(path, quarantine)
-            guard = lambda: same_path_identity(root, root_identity) and same_path_identity(parent, parent_identity) and canonical_path_is_contained(quarantine, root)
-            if os.path.lexists(path) or not same_path_identity(quarantine, target_identity) or not guard():
-                raise RuntimeError("Path identity changed while isolating cleanup target")
-            remove_tree_no_follow(quarantine, guard)
-            removed = not os.path.lexists(quarantine)
+            remove_managed_path_handle_relative(path, root, root_identity, target_identity)
+            removed = not os.path.lexists(path)
             results.append({**item,"status":"removed" if removed else "failed","reclaimedBytes":size if removed else 0,"reason":"Exact managed path removed after live revalidation." if removed else "Path still exists after removal."})
         except Exception as error:
-            try:
-                if quarantine and not os.path.lexists(path) and os.path.lexists(quarantine) and guard():
-                    os.rename(quarantine, path)
-            except Exception:
-                pass
             results.append({**item,"status":"failed","reclaimedBytes":0,"reason":str(error)[-300:]})
         continue
     if kind == "image":
@@ -1163,12 +1224,65 @@ for item in items:
 encoded = base64.b64encode(gzip.compress(json.dumps({"results":results}, separators=(",",":"), ensure_ascii=False).encode("utf-8"))).decode("ascii")
 result_path = safety.get("resultPath") or ""
 if result_path and len(encoded) > 16000:
-    descriptor = os.open(result_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    if not hasattr(os, "O_NOFOLLOW"): raise RuntimeError("O_NOFOLLOW is required for staged cleanup transport")
+    result_dir = os.path.dirname(result_path)
+    os.mkdir(result_dir, 0o700)
+    directory_info = os.lstat(result_dir)
+    if not stat.S_ISDIR(directory_info.st_mode) or stat.S_ISLNK(directory_info.st_mode) or directory_info.st_uid != os.geteuid() or stat.S_IMODE(directory_info.st_mode) != 0o700:
+        raise RuntimeError("staged cleanup directory identity is unsafe")
+    descriptor = os.open(result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    staged_info = os.fstat(descriptor)
+    if not stat.S_ISREG(staged_info.st_mode) or staged_info.st_uid != os.geteuid() or stat.S_IMODE(staged_info.st_mode) != 0o600 or staged_info.st_nlink != 1:
+        os.close(descriptor)
+        raise RuntimeError("staged cleanup file identity is unsafe")
     with os.fdopen(descriptor, "w", encoding="ascii") as handle:
         handle.write(encoded)
-    print("RATCLEAN2:%d:%s" % (len(encoded), hashlib.sha256(encoded.encode("ascii")).hexdigest()))
+    print("RATCLEAN2:%d:%s:%d:%d:%d" % (len(encoded), hashlib.sha256(encoded.encode("ascii")).hexdigest(), staged_info.st_dev, staged_info.st_ino, staged_info.st_uid))
 else:
     print("RATCLEAN1:" + encoded)`;
+}
+
+function stagedFileCommand(context, body) {
+  const encodedContext = Buffer.from(JSON.stringify(context), "utf8").toString("base64");
+  const script = `import base64,json,os,stat\nC=json.loads(base64.b64decode("${encodedContext}"))\n${body}`;
+  return `python3 -c "import base64;exec(base64.b64decode('${Buffer.from(script, "utf8").toString("base64")}'))"`;
+}
+
+function safeStagedFileReadCommand(path, offset, count, identity) {
+  return stagedFileCommand({ path, offset, count, ...identity }, `
+p=C["path"]
+d=os.path.dirname(p)
+di=os.lstat(d)
+assert stat.S_ISDIR(di.st_mode) and not stat.S_ISLNK(di.st_mode) and di.st_uid==int(C["uid"])==os.geteuid() and stat.S_IMODE(di.st_mode)==0o700
+dfd=os.open(d,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+try:
+ fd=os.open(os.path.basename(p),os.O_RDONLY|os.O_NOFOLLOW,dir_fd=dfd)
+ s=os.fstat(fd)
+ assert stat.S_ISREG(s.st_mode) and s.st_dev==int(C["dev"]) and s.st_ino==int(C["ino"]) and s.st_uid==int(C["uid"]) and stat.S_IMODE(s.st_mode)==0o600 and s.st_nlink==1
+ with os.fdopen(fd,"rb") as f:
+  f.seek(int(C["offset"]))
+  print(f.read(int(C["count"])).decode("ascii"))
+finally:
+ os.close(dfd)`);
+}
+
+function safeStagedFileCleanupCommand(path, identity) {
+  return stagedFileCommand({ path, ...identity }, `
+p=C["path"]
+d=os.path.dirname(p)
+di=os.lstat(d)
+assert stat.S_ISDIR(di.st_mode) and not stat.S_ISLNK(di.st_mode) and di.st_uid==int(C["uid"])==os.geteuid() and stat.S_IMODE(di.st_mode)==0o700
+dfd=os.open(d,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+try:
+ n=os.path.basename(p)
+ fd=os.open(n,os.O_RDONLY|os.O_NOFOLLOW,dir_fd=dfd)
+ s=os.fstat(fd)
+ os.close(fd)
+ assert stat.S_ISREG(s.st_mode) and s.st_dev==int(C["dev"]) and s.st_ino==int(C["ino"]) and s.st_uid==int(C["uid"]) and stat.S_IMODE(s.st_mode)==0o600 and s.st_nlink==1
+ os.unlink(n,dir_fd=dfd)
+finally:
+ os.close(dfd)
+os.rmdir(d)`);
 }
 
 export function ssmMutationCommand(script) {
@@ -1247,7 +1361,7 @@ function decodeAwsCleanupResult(invocation, sourceConfig, resultPath) {
   const direct = lines.find((line) => line.startsWith("RATCLEAN1:"));
   if (direct) return decodeSnapshotPayload(direct.slice("RATCLEAN1:".length));
   const staged = lines.find((line) => line.startsWith("RATCLEAN2:"));
-  const match = staged?.match(/^RATCLEAN2:(\d+):([a-f0-9]{64})$/);
+  const match = staged?.match(/^RATCLEAN2:(\d+):([a-f0-9]{64}):(\d+):(\d+):(\d+)$/);
   if (!match) throw Object.assign(new Error("Remote cleanup returned no checksum-verifiable result marker."), { mutationState: "outcome_unknown", commandId: invocation.commandId });
   const expectedLength = Number(match[1]);
   if (!Number.isSafeInteger(expectedLength) || expectedLength <= 0 || expectedLength > 32 * 1024 * 1024) throw Object.assign(new Error("Remote cleanup result length is outside the safety bound."), { mutationState: "outcome_unknown", commandId: invocation.commandId });
@@ -1257,7 +1371,7 @@ function decodeAwsCleanupResult(invocation, sourceConfig, resultPath) {
   try {
     for (let offset = 0; offset < expectedLength; offset += 16_000) {
       const count = Math.min(16_000, expectedLength - offset);
-      const command = `python3 -c "p='${resultPath}';f=open(p,'rb');f.seek(${offset});print(f.read(${count}).decode('ascii'))"`;
+      const command = safeStagedFileReadCommand(resultPath, offset, count, { dev: match[3], ino: match[4], uid: match[5] });
       const chunk = runAwsSsmCommand(regionArgs, instanceId, command, `RAT result ${invocation.commandId} ${offset}`, 30);
       const value = String(chunk.StandardOutputContent || "").trim();
       if (value.length !== count) throw new Error(`Remote cleanup result chunk ${offset / 16_000 + 1} has an unexpected length.`);
@@ -1269,11 +1383,14 @@ function decodeAwsCleanupResult(invocation, sourceConfig, resultPath) {
   }
 }
 
-function cleanupAwsResultFile(sourceConfig, commandId, resultPath) {
+function cleanupAwsResultFile(sourceConfig, commandId, resultPath, output) {
   const instanceId = sourceConfig.instanceId;
   const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
+  const staged = String(output || "").split(/\r?\n/).find((line) => line.startsWith("RATCLEAN2:"));
+  const match = staged?.match(/^RATCLEAN2:(\d+):([a-f0-9]{64}):(\d+):(\d+):(\d+)$/);
+  if (!match) return { status: "retained-for-recovery", reason: "Missing exact staged-file identity." };
   try {
-    runAwsSsmCommand(regionArgs, instanceId, `python3 -c "import os;p='${resultPath}';os.path.exists(p) and os.remove(p)"`, `RAT result cleanup ${commandId}`, 30);
+    runAwsSsmCommand(regionArgs, instanceId, safeStagedFileCleanupCommand(resultPath, { dev: match[3], ino: match[4], uid: match[5] }), `RAT result cleanup ${commandId}`, 30);
     return { status: "removed-or-absent" };
   } catch (error) {
     return { status: "retained-for-recovery", reason: error.message };
@@ -1289,7 +1406,7 @@ function collectPostCleanupSnapshot(sourceConfig, commandId, partialResults) {
 }
 
 function executeAwsDockerCleanup(sourceConfig, allowlist, operationId) {
-  const cleanupResultPath = `/tmp/runtime-asset-tracker-cleanup-${String(operationId).replace(/[^a-zA-Z0-9-]/g, "")}.b64`;
+  const cleanupResultPath = `/tmp/runtime-asset-tracker-cleanup-${String(operationId).replace(/[^a-zA-Z0-9-]/g, "")}/result.b64`;
   const fullSourceConfig = { ...sourceConfig, includeAllAssets: true, cleanupResultPath };
   const snapshot = collectAwsSnapshot(fullSourceConfig);
   const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
@@ -1309,7 +1426,7 @@ function executeAwsDockerCleanup(sourceConfig, allowlist, operationId) {
   remoteCache.clear();
   const results = [...skipped, ...(payload.results || [])];
   const after = collectPostCleanupSnapshot(fullSourceConfig, invocation.commandId, results);
-  const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(fullSourceConfig, invocation.commandId, cleanupResultPath) : { status: "not-staged" };
+  const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(fullSourceConfig, invocation.commandId, cleanupResultPath, invocation.output) : { status: "not-staged" };
   return { completedAt: new Date().toISOString(), commandId: invocation.commandId, results, verification: buildPostCleanupVerification(snapshot, after, results), resultTransportCleanup };
 }
 
@@ -1328,12 +1445,12 @@ export function resumeAwsCleanup({ sourceConfig, operationId, commandId } = {}) 
   }
   if (!exactCommandId) return { completedAt: new Date().toISOString(), operationId, commandId: null, status: "outcome_unknown", results: [], resumeToken: { operationId, commandId: null }, reason: "Exact commandId is not visible yet; retry this resume operation without sending a new cleanup command." };
   const invocation = pollExistingSsmMutation(sourceConfig, exactCommandId, comment);
-  const resultPath = `/tmp/runtime-asset-tracker-cleanup-${String(operationId).replace(/[^a-zA-Z0-9-]/g, "")}.b64`;
+  const resultPath = `/tmp/runtime-asset-tracker-cleanup-${String(operationId).replace(/[^a-zA-Z0-9-]/g, "")}/result.b64`;
   const payload = decodeAwsCleanupResult(invocation, sourceConfig, resultPath);
   const results = payload.results || [];
   remoteCache.clear();
   const after = collectPostCleanupSnapshot({ ...sourceConfig, includeAllAssets: true }, exactCommandId, results);
-  const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(sourceConfig, exactCommandId, resultPath) : { status: "not-staged" };
+  const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(sourceConfig, exactCommandId, resultPath, invocation.output) : { status: "not-staged" };
   const remaining = new Set((after.assets || []).map((asset) => `${asset.type}:${asset.id}`));
   const reconciledResults = results.map((item) => item.status === "removed" && remaining.has(`${item.type}:${item.id}`)
     ? { ...item, status: "outcome_unknown", reclaimedBytes: 0, reason: "Command reported removal but the exact object is still present during resume reconciliation." }

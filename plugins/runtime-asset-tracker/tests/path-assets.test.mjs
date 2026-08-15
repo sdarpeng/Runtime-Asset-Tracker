@@ -55,15 +55,21 @@ describe("worktree and host artifact lifecycle", () => {
       assert.ok(dependency);
       assert.ok(archive);
       assert.equal(scanPathUsage(dependency.path).fingerprint, dependency.fingerprint);
-      executePathAssetCleanup({
+      const cleanupAsset = {
         id: pathAssetId("host_artifact", archive.path),
         type: "host_artifact",
         path: archive.path,
         classification: "reclaimable",
         sizeBytes: archive.sizeBytes,
         lineage: { allowedRoot: root, contentFingerprint: archive.fingerprint },
-      });
-      assert.equal(existsSync(archive.path), false);
+      };
+      if (process.platform === "win32") {
+        assert.throws(() => executePathAssetCleanup(cleanupAsset), /Windows path cleanup is blocked/i);
+        assert.equal(existsSync(archive.path), true);
+      } else {
+        executePathAssetCleanup(cleanupAsset);
+        assert.equal(existsSync(archive.path), false);
+      }
       assert.equal(existsSync(root), true);
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -138,15 +144,21 @@ describe("worktree and host artifact lifecycle", () => {
       const scan = scanPathUsage(root);
       assert.ok(scan.sizeBytes < 2 * 1024 * 1024);
       assert.equal(scan.reparsePoints.length, 1);
-      executePathAssetCleanup({
+      const cleanupAsset = {
         id: pathAssetId("worktree_residual", root),
         type: "worktree_residual",
         path: root,
         classification: "reclaimable",
         sizeBytes: scan.sizeBytes,
         lineage: { path: root, allowedRoot: join(sandbox, "allowed"), contentFingerprint: scan.fingerprint },
-      });
-      assert.equal(existsSync(root), false);
+      };
+      if (process.platform === "win32") {
+        assert.throws(() => executePathAssetCleanup(cleanupAsset), /Windows path cleanup is blocked/i);
+        assert.equal(existsSync(root), true);
+      } else {
+        executePathAssetCleanup(cleanupAsset);
+        assert.equal(existsSync(root), false);
+      }
       assert.equal(existsSync(join(outside, "sentinel.bin")), true);
     } finally {
       if (!junctionCreated && existsSync(root)) rmSync(root, { recursive: true, force: true });
@@ -182,7 +194,7 @@ describe("worktree and host artifact lifecycle", () => {
     writeFileSync(join(outsideTarget, "sentinel.txt"), "outside");
     const scan = scanPathUsage(target);
     try {
-      assert.throws(() => executePathAssetCleanup({
+      const cleanup = () => executePathAssetCleanup({
         id: pathAssetId("worktree_residual", target),
         type: "worktree_residual",
         path: target,
@@ -194,12 +206,57 @@ describe("worktree and host artifact lifecycle", () => {
           renameSync(allowed, holding);
           symlinkSync(outside, allowed, process.platform === "win32" ? "junction" : "dir");
         },
-      }), /ancestry changed|canonical allowed root/i);
+      });
+      assert.throws(cleanup, process.platform === "win32" ? /Windows path cleanup is blocked/i : /ancestry changed|canonical allowed root/i);
       assert.equal(existsSync(join(outsideTarget, "sentinel.txt")), true);
-      assert.equal(existsSync(join(holding, "retired", "inside.txt")), true);
+      assert.equal(existsSync(process.platform === "win32" ? join(target, "inside.txt") : join(holding, "retired", "inside.txt")), true);
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }
+  });
+
+  it("never exposes a Windows filesystem attestation as executable without a native handle helper", () => {
+    const sandbox = temporaryDirectory("tracker-windows-path-blocker");
+    const root = join(sandbox, "managed");
+    const target = join(root, "residual-v1");
+    mkdirSync(target, { recursive: true });
+    writeFileSync(join(target, "artifact.txt"), "retired");
+    const scan = scanPathUsage(target);
+    const event = {
+      event: "asset.retired",
+      status: "retired",
+      asset: { type: "worktree_residual", id: pathAssetId("worktree_residual", target) },
+      details: {
+        disposable: "true",
+        retention: "retired",
+        path: target,
+        expectedBytes: scan.sizeBytes,
+        contentFingerprint: scan.fingerprint,
+        recoverySource: "git:https://github.com/owner/project.git@" + "a".repeat(40),
+      },
+    };
+    try {
+      const asset = discoverWorktreeAssets({ residualRoots: [root], pathScan: { cacheTtlMs: 0 } }, [], [event]).find((item) => item.path.toLowerCase() === target.toLowerCase());
+      assert.ok(asset);
+      if (process.platform === "win32") {
+        assert.equal(asset.classification, "review");
+        assert.equal(asset.retirementBlocked, true);
+        assert.match(asset.reason, /Windows path deletion remains blocked/i);
+      } else {
+        assert.equal(asset.classification, "reclaimable");
+      }
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("uses a descriptor-relative POSIX helper instead of recursive string paths", () => {
+    const helper = readFileSync(new URL("../scripts/safe-delete-path.py", import.meta.url), "utf8");
+    assert.match(helper, /os\.O_DIRECTORY \| os\.O_NOFOLLOW/);
+    assert.match(helper, /dir_fd=parent_fd/);
+    assert.match(helper, /os\.listdir\(directory_fd\)/);
+    assert.match(helper, /follow_symlinks=False/);
+    assert.doesNotMatch(helper, /shutil\.rmtree|os\.walk/);
   });
 
   it("rejects vague retirement reports and imports exact path attestations idempotently", () => {

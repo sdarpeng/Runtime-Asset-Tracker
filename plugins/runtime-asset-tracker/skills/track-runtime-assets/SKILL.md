@@ -41,7 +41,7 @@ Before cleanup:
 7. Call `execute_cleanup` only after the user confirms that exact preview and its confirmation digest. The token is bound to the authenticated actor, server process, operation ID, and allowlist digest; consume it atomically before mutation and never replay it. The server must re-read and revalidate every candidate before mutation.
 8. If an AWS cleanup returns `outcome_unknown`, call `resume_cleanup` with the same project, source, operation ID, and command ID when known. It may only reconcile and poll the exact existing SSM operation; it must never send the cleanup command again. A missing command ID remains recoverable by the unique operation comment and stays unknown until exactly one matching command is visible.
 9. Multi-tag images are one atomic unit: revalidate that every approved tag still resolves to the approved image ID, remove every exact tag without `--force`, and fail if the image remains.
-10. Registered worktrees must be clean, non-primary, still registered by the same Git root, and removed with `git worktree remove` without force. Residuals and artifacts must remain under their exact allowed root; unlink reparse points instead of traversing them.
+10. Registered worktrees remain inventory/reconciliation-only until Git metadata removal can be bound to the same verified directory handle. On POSIX, attested residuals and artifacts are deleted only through the bundled `dir_fd`/`O_NOFOLLOW` helper. On Windows, path cleanup remains blocked and preview-only until a native handle-relative, open-reparse-point helper is available; Docker cleanup is unaffected.
 11. Re-scan after cleanup and report missing active containers, paths or images that survived deletion, and the actual free-space delta.
 
 A reconciliation import must fail closed when the project, environment, instance, image ID, tag set, Git revision, group confidence, byte totals, or current/rollback protection set is inconsistent. A release-directory revision that differs from the running production image blocks cleanup unless the same reconciliation report explicitly protects both the running image and the release-revision rollback image.
@@ -87,7 +87,7 @@ node scripts/run-compose.mjs --project my-project --environment local -- up --bu
 - Never treat PR merge alone as deletion authority. Require the cooling period plus exact runtime/path lineage, and keep current, rollback, recovery, shared, referenced, or ambiguous assets out of the token.
 - Never delete a GitHub cache or artifact solely because it is large; it must satisfy the explicit safe classification and exact-ID revalidation rules.
 - Never treat `v1`/`v2` names, age, similar task names, a clean branch, or an unregistered directory as deletion authorization. Missing task outcome, recovery, byte, or fingerprint evidence remains `review`.
-- Never remove the primary checkout or a dirty worktree. Never follow reparse points during scanning or deletion.
+- Never remove the primary checkout or a dirty worktree. Never follow reparse points during scanning or deletion. Treat a platform safety blocker as non-executable even when retirement evidence is otherwise exact.
 
 ## Bundled Resources
 

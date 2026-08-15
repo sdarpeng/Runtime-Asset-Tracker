@@ -121,6 +121,7 @@ function decisionFor(asset, source, lifecycle, protectedRevision = false) {
   if (!REMOVABLE_TYPES.has(asset.type)) return { decision: "inventory-only", reason: "Asset type is not supported by an exact cleanup executor." };
   if (protectedRevision) return { decision: "protected", reason: "Asset revision is bound to current, rollback, or recovery state in this environment." };
   if (isProtected(asset, source)) return { decision: "protected", reason: "Current, rollback, recovery, or explicitly protected runtime binding." };
+  if (asset.retirementBlocked) return { decision: "review", reason: asset.reason || "A live executor-safety blocker prevents retirement." };
   if (lifecycle.conflictingOpenPullRequest) return { decision: "review", reason: "GitHub authority still reports an open pull request for the bound revision." };
   if (asset.classification === "reclaimable") {
     if (asset.type === "container" && (!asset?.lineage?.imageId || !asset?.lineage?.composeProject || !Array.isArray(asset?.lineage?.mounts))) {

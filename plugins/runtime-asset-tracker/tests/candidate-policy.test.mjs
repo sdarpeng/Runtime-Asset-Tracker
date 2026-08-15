@@ -124,6 +124,42 @@ describe("candidate policy", () => {
     assert.equal(failed.retirementCandidate.blockedBy.some((item) => item.type === "successful-successor-missing"), true);
   });
 
+  it("uses the latest build event when one successor image later fails", () => {
+    const result = discoverRetirementCandidates([
+      image("sha256:old", "2026-08-10T00:00:00Z", { tags: ["cms-api:old"], revision: "a".repeat(40) }),
+      image("sha256:new", "2026-08-10T01:00:00Z", { tags: ["cms-api:new"], revision: "b".repeat(40) }),
+    ], {
+      source: "local", project: "cms", now: Date.parse("2026-08-14T00:00:00Z"),
+      events: [
+        { event: "build.succeeded", occurredAt: "2026-08-10T01:01:00Z", project: "cms", environment: "local", asset: { id: "sha256:new" } },
+        { event: "build.failed", occurredAt: "2026-08-10T01:02:00Z", project: "cms", environment: "local", asset: { id: "sha256:new" } },
+      ],
+    });
+    const old = result.assets.find((asset) => asset.id === "sha256:old");
+    assert.equal(old.retirementState, "blocked-candidate");
+    assert.equal(old.retirementCandidate.blockedBy.some((item) => item.type === "successor-success-unproven"), true);
+  });
+
+  it("uses append order for equal timestamps and permits a later recovery success", () => {
+    const assets = [
+      image("sha256:old", "2026-08-10T00:00:00Z", { tags: ["cms-api:old"], revision: "a".repeat(40) }),
+      image("sha256:new", "2026-08-10T01:00:00Z", { tags: ["cms-api:new"], revision: "b".repeat(40) }),
+    ];
+    const base = { source: "local", project: "cms", now: Date.parse("2026-08-14T00:00:00Z") };
+    const equalTimestampFailure = discoverRetirementCandidates(assets, { ...base, events: [
+      { event: "build.succeeded", occurredAt: "2026-08-10T01:01:00Z", project: "cms", environment: "local", asset: { id: "sha256:new" } },
+      { event: "build.failed", occurredAt: "2026-08-10T01:01:00Z", project: "cms", environment: "local", asset: { id: "sha256:new" } },
+    ] }).assets.find((asset) => asset.id === "sha256:old");
+    assert.equal(equalTimestampFailure.retirementState, "blocked-candidate");
+
+    const recovered = discoverRetirementCandidates(assets, { ...base, events: [
+      { event: "build.succeeded", occurredAt: "2026-08-10T01:01:00Z", project: "cms", environment: "local", asset: { id: "sha256:new" } },
+      { event: "build.failed", occurredAt: "2026-08-10T01:02:00Z", project: "cms", environment: "local", asset: { id: "sha256:new" } },
+      { event: "build.succeeded", occurredAt: "2026-08-10T01:03:00Z", project: "cms", environment: "local", asset: { id: "sha256:new" } },
+    ] }).assets.find((asset) => asset.id === "sha256:old");
+    assert.equal(recovered.retirementState, "executable-candidate");
+  });
+
   it("keeps referenced superseded builds visible as blocked candidates", () => {
     const result = discoverRetirementCandidates([
       image("sha256:old", "2026-08-10T00:00:00Z", { tags: ["cms-web:build-1"], revision: "a".repeat(40), consumers: [{ id: "container-1", state: "exited" }] }),
@@ -132,6 +168,20 @@ describe("candidate policy", () => {
     const old = result.assets.find((asset) => asset.id === "sha256:old");
     assert.equal(old.retirementState, "blocked-candidate");
     assert.equal(old.retirementCandidate.blockedBy[0].id, "container-1");
+  });
+
+  it("keeps an exact retirement visible but non-executable when its platform executor is blocked", () => {
+    const result = discoverRetirementCandidates([{
+      id: "path-sha256:" + "a".repeat(64),
+      type: "worktree_residual",
+      classification: "review",
+      retirementBlocked: true,
+      sizeBytes: 1024,
+      reason: "Windows path deletion remains blocked until a native handle helper is available.",
+      lineage: { retirement: { recoverySource: "git:repository@" + "b".repeat(40) } },
+    }], { source: "local", project: "cms" });
+    assert.equal(result.assets[0].retirementState, "blocked-candidate");
+    assert.equal(result.assets[0].retirementCandidate.blockedBy.some((item) => item.type === "executor-safety-blocker"), true);
   });
 
   it("never downgrades rollback identities under capacity pressure", () => {

@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmdirSync, unlinkSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir, hostname, platform } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const PATH_RECONCILIATION_SCHEMA = "sparkling.runtime-path-retirement-reconciliation/v1";
 const PATH_TYPES = new Set(["worktree", "worktree_residual", "host_artifact"]);
@@ -195,7 +196,7 @@ function applyAttestation(asset, attestations) {
     && !asset.lineage?.dirty
     && !asset.lineage?.lifecycleProtected;
   if (!exact) return { ...asset, retirementBlocked: true, reason: "Retirement evidence no longer matches the live path, byte count, fingerprint, or Git state." };
-  return {
+  const attested = {
     ...asset,
     classification: "reclaimable",
     labels: {
@@ -207,6 +208,13 @@ function applyAttestation(asset, attestations) {
     lineage: { ...asset.lineage, retirement: attestation, recoverySource: attestation.recoverySource },
     reason: "Exact path retirement attestation matches the live byte count and content fingerprint.",
   };
+  if (asset.type === "worktree") {
+    return { ...attested, classification: "review", retirementBlocked: true, reason: "Registered worktree deletion remains blocked: Git metadata removal is not bound to a verified directory handle." };
+  }
+  if (platform() === "win32") {
+    return { ...attested, classification: "review", retirementBlocked: true, reason: "Windows path deletion remains blocked until a native handle-relative, open-reparse-point helper is available." };
+  }
+  return attested;
 }
 
 function candidateRoots(config, projects) {
@@ -426,69 +434,36 @@ function fileIdentity(path) {
   return { dev: String(stats.dev), ino: String(stats.ino), mode: Number(stats.mode), birthtimeMs: Math.trunc(Number(stats.birthtimeMs || 0)), reparse: stats.isSymbolicLink() };
 }
 
-function sameFileIdentity(left, right) {
-  return left && right && left.dev === right.dev && left.ino === right.ino && left.mode === right.mode && left.birthtimeMs === right.birthtimeMs && left.reparse === right.reparse;
-}
-
-function removeTreeNoFollow(path, guard = () => true) {
-  if (!guard()) throw new Error("Managed root or parent identity changed during cleanup.");
-  const stats = lstatSync(path);
-  if (stats.isSymbolicLink() || !stats.isDirectory()) {
-    if (!guard()) throw new Error("Managed root or parent identity changed during cleanup.");
-    try { unlinkSync(path); } catch (error) { chmodSync(path, 0o600); unlinkSync(path); }
-    return;
-  }
-  for (const entry of safeEntries(path)) removeTreeNoFollow(join(path, entry.name), guard);
-  if (!guard()) throw new Error("Managed root or parent identity changed during cleanup.");
-  try { rmdirSync(path); } catch (error) { chmodSync(path, 0o700); rmdirSync(path); }
-}
-
-function quarantineAndRemove(path, allowedRoot) {
-  if (!canonicalPathContainment(path, allowedRoot)) throw new Error("Path ancestry changed before isolation.");
-  const parent = dirname(path);
+function handleRelativeRemove(path, allowedRoot) {
+  if (platform() === "win32") throw new Error("Windows path cleanup is blocked until a native handle-relative, open-reparse-point helper is available.");
   const rootIdentity = fileIdentity(allowedRoot);
-  const parentIdentity = fileIdentity(parent);
   const targetIdentity = fileIdentity(path);
-  const quarantine = join(parent, `.runtime-asset-trash-${randomUUID()}`);
-  const guard = () => {
-    try {
-      return sameFileIdentity(rootIdentity, fileIdentity(allowedRoot))
-        && sameFileIdentity(parentIdentity, fileIdentity(parent))
-        && canonicalPathContainment(quarantine, allowedRoot);
-    } catch {
-      return false;
-    }
-  };
-  renameSync(path, quarantine);
-  try {
-    if (existsSync(path) || !sameFileIdentity(targetIdentity, fileIdentity(quarantine)) || !guard()) throw new Error("Path identity changed while isolating the cleanup target.");
-    removeTreeNoFollow(quarantine, guard);
-    if (existsSync(quarantine)) throw new Error("Isolated path still exists after cleanup.");
-  } catch (error) {
-    try {
-      if (!existsSync(path) && existsSync(quarantine) && guard()) renameSync(quarantine, path);
-    } catch {}
-    throw error;
-  }
+  if (rootIdentity.reparse || targetIdentity.reparse) throw new Error("Path cleanup cannot target a reparse point.");
+  const helper = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "safe-delete-path.py");
+  if (!existsSync(helper)) throw new Error("Handle-relative path cleanup helper is unavailable.");
+  execFileSync("python3", [
+    helper,
+    "--root", allowedRoot,
+    "--path", path,
+    "--root-dev", rootIdentity.dev,
+    "--root-ino", rootIdentity.ino,
+    "--target-dev", targetIdentity.dev,
+    "--target-ino", targetIdentity.ino,
+  ], { encoding: "utf8", timeout: 120_000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
 }
 
 export function executePathAssetCleanup(asset, { beforeIsolation } = {}) {
   if (!PATH_TYPES.has(asset?.type) || (asset.classification !== "reclaimable" && asset.retirementState !== "executable-candidate")) throw new Error("Path asset is not reclaimable.");
+  if (platform() === "win32") throw new Error("Windows path cleanup is blocked until a native handle-relative, open-reparse-point helper is available.");
+  if (asset.type === "worktree") throw new Error("Registered worktree cleanup is blocked until Git metadata removal can be bound to the same verified directory handle.");
   const path = resolve(asset.path || asset.lineage?.path || "");
   const allowedRoot = resolve(asset.lineage?.allowedRoot || "");
   if (!path || !allowedRoot || !canonicalPathContainment(path, allowedRoot)) throw new Error("Path cleanup target is outside its canonical allowed root, crosses a reparse point, or no longer exists.");
   const current = scanPathUsage(path);
   if (current.truncated || current.sizeBytes !== Number(asset.sizeBytes) || current.fingerprint !== asset.lineage?.contentFingerprint) throw new Error("Path content changed after preview.");
-  if (asset.type === "worktree") {
-    if (asset.lineage?.primary || asset.lineage?.dirty || !asset.lineage?.gitRoot) throw new Error("Primary or dirty worktree cleanup is blocked.");
-    const registered = parseWorktreeBlocks(runGit(["worktree", "list", "--porcelain"], asset.lineage.gitRoot)).some((item) => keyPath(item.worktree) === keyPath(path));
-    if (!registered) throw new Error("Registered worktree identity changed after preview.");
-    const output = runGit(["worktree", "remove", "--", path], asset.lineage.gitRoot, 120_000);
-    if (existsSync(path)) throw new Error(output || "Git did not remove the exact worktree.");
-    return { output, removed: true };
-  }
   if (beforeIsolation) beforeIsolation();
-  quarantineAndRemove(path, allowedRoot);
+  if (!canonicalPathContainment(path, allowedRoot)) throw new Error("Path ancestry changed before isolation.");
+  handleRelativeRemove(path, allowedRoot);
   if (existsSync(path)) throw new Error("Exact path still exists after cleanup.");
   return { removed: true };
 }

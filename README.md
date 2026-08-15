@@ -12,6 +12,7 @@ It provides:
 - AWS Systems Manager or OpenSSH inventory for project-bound EC2 Production and Staging, including root-disk total/used/free capacity, image unique-layer usage, running/stopped container references, real volume sizes, and volume mount relationships.
 - A non-secret connection identity panel for AWS Account ID, IAM principal, region, availability zone, instance ID, host, OS user, application path, and credential profile.
 - GitHub Actions cache, artifact, and workflow inventory, with safe cleanup limited to expired artifacts, closed-PR caches, and caches not accessed for more than 30 days.
+- Handle-relative POSIX cleanup for exact residual/artifact paths; registered worktrees and Windows filesystem paths remain preview-only until their metadata and deletion can be bound to native verified handles.
 
 Every cleanup starts with a short-lived exact-item preview and is revalidated immediately before execution. Assets approaching an explicit expiry are shown in orange but remain ineligible until the expiry passes and all other safety conditions succeed. EC2 cleanup can remove exact unreferenced dangling or explicitly disposable image IDs, exact unreferenced explicitly disposable non-business volume names, and unused BuildKit cache. It never performs broad image/volume prune, forced deletion, container deletion, release deletion, or rollback deletion. Unknown volumes and assets without sufficient disposal evidence remain protected.
 

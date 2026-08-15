@@ -67,14 +67,20 @@ describe("remote read-only adapters", () => {
   });
 
   it("stages oversized SSM snapshots in a private file for checksum-verified chunk reads", () => {
-    const script = remoteSnapshotScript({ transportPath: "/tmp/runtime-asset-tracker-test.b64" });
+    const script = remoteSnapshotScript({ transportPath: "/tmp/runtime-asset-tracker-test/snapshot.b64" });
     assert.match(script, /len\(encoded_payload\) > 16000/);
-    assert.match(script, /os\.O_WRONLY \| os\.O_CREAT \| os\.O_TRUNC, 0o600/);
-    assert.match(script, /RAT2:%d:%s/);
+    assert.match(script, /os\.mkdir\(transport_dir, 0o700\)/);
+    assert.match(script, /os\.O_WRONLY \| os\.O_CREAT \| os\.O_EXCL \| os\.O_NOFOLLOW, 0o600/);
+    assert.doesNotMatch(script, /os\.O_TRUNC/);
+    assert.match(script, /staged_info\.st_nlink != 1/);
+    assert.match(script, /RAT2:%d:%s:%d:%d:%d/);
     assert.match(script, /hashlib\.sha256/);
     const source = readFileSync(new URL("../mcp/remote.mjs", import.meta.url), "utf8");
     assert.match(source, /const chunkSize = 16_000/);
-    assert.match(source, /os\.path\.exists\(p\) and os\.remove\(p\)/);
+    assert.match(source, /safeStagedFileReadCommand/);
+    assert.match(source, /os\.O_RDONLY\|os\.O_NOFOLLOW/);
+    assert.match(source, /s\.st_dev==int\(C\["dev"\]\)/);
+    assert.match(source, /safeStagedFileCleanupCommand/);
     assert.doesNotMatch(source, /snapshot temp cleanup[^\n]+\brm\b/);
   });
 
@@ -239,10 +245,13 @@ describe("remote read-only adapters", () => {
   });
 
   it("stages oversized cleanup results with a checksum marker", () => {
-    const script = awsDockerCleanupScript([], { cleanupResultPath: "/tmp/rat-cleanup-operation.b64" });
+    const script = awsDockerCleanupScript([], { cleanupResultPath: "/tmp/rat-cleanup-operation/result.b64" });
     assert.match(script, /len\(encoded\) > 16000/);
-    assert.match(script, /RATCLEAN2:%d:%s/);
-    assert.match(script, /os\.O_WRONLY \| os\.O_CREAT \| os\.O_TRUNC, 0o600/);
+    assert.match(script, /RATCLEAN2:%d:%s:%d:%d:%d/);
+    assert.match(script, /os\.mkdir\(result_dir, 0o700\)/);
+    assert.match(script, /os\.O_WRONLY \| os\.O_CREAT \| os\.O_EXCL \| os\.O_NOFOLLOW, 0o600/);
+    assert.doesNotMatch(script, /os\.O_TRUNC/);
+    assert.match(script, /staged_info\.st_nlink != 1/);
     assert.match(script, /hashlib\.sha256/);
   });
 

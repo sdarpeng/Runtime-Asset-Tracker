@@ -74,17 +74,22 @@ function recoverySource(asset) {
 }
 
 function buildEvidence(events, project, environment) {
-  const failed = new Set();
-  const successful = new Set();
-  for (const event of events || []) {
+  const latest = new Map();
+  for (const [index, event] of (events || []).entries()) {
     if (project && project !== "all" && String(event?.project || "") !== project) continue;
     if (environment && String(event?.environment || "") !== environment) continue;
     const id = String(event?.asset?.id || event?.details?.imageId || "");
     if (!id) continue;
-    if (event?.event === "build.failed") failed.add(id);
-    if (["build.completed", "build.succeeded"].includes(event?.event)) successful.add(id);
+    const status = event?.event === "build.failed" ? "failed" : ["build.completed", "build.succeeded"].includes(event?.event) ? "successful" : null;
+    if (!status) continue;
+    // The ledger is append-only: physical append sequence is authoritative.
+    // occurredAt may be delayed or skewed and must not resurrect stale evidence.
+    latest.set(id, { status, index });
   }
-  return { failed, successful };
+  return {
+    failed: new Set([...latest].filter(([, value]) => value.status === "failed").map(([id]) => id)),
+    successful: new Set([...latest].filter(([, value]) => value.status === "successful").map(([id]) => id)),
+  };
 }
 
 export function capacityPressure(disk = {}, policy = {}) {
@@ -152,10 +157,12 @@ export function discoverRetirementCandidates(assets = [], {
     const supersededEvidence = superseded.get(String(asset.id));
     const failedBuild = builds.failed.has(String(asset.id));
     const existingExecutable = asset.classification === "reclaimable";
+    const attestedButBlocked = asset.retirementBlocked === true && Boolean(asset.lineage?.retirement);
     const pressureOrphan = asset.type === "image" && pressure.level !== "normal" && consumers.length === 0 && ageMs >= orphanMs;
     const recovery = recoverySource(asset);
     const discoveryReasons = [
       existingExecutable && "existing-safe-classification",
+      attestedButBlocked && "attested-executor-blocked",
       supersededEvidence && "superseded-build",
       failedBuild && "failed-build",
       pressureOrphan && "capacity-pressure-orphan",
@@ -165,6 +172,7 @@ export function discoverRetirementCandidates(assets = [], {
     if (!discoveryReasons.length) return { ...asset, retirementState: "retained", retirementCandidate: { state: "retained", reasons: [], blockedBy: [] } };
 
     const blockedBy = [];
+    if (attestedButBlocked) blockedBy.push({ type: "executor-safety-blocker", reason: asset.reason || "The current platform cannot safely execute this attested cleanup." });
     if (consumers.length > 0) blockedBy.push(...consumers.map((consumer) => ({ type: "runtime-reference", id: consumer.id, name: consumer.name, state: consumer.state })));
     if (asset.type === "image" && !recovery && !existingExecutable) blockedBy.push({ type: "missing-recovery-source" });
     if (supersededEvidence && !supersededEvidence.successorSuccessful) blockedBy.push({ type: "successor-success-unproven", successorImageId: supersededEvidence.successorImageId });
