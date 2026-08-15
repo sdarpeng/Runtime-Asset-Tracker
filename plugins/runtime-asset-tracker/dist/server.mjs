@@ -33720,7 +33720,7 @@ function N3(Z, $, J, X, V) {
 
 // mcp/inventory.mjs
 import { execFileSync as execFileSync3 } from "node:child_process";
-import { appendFileSync as appendFileSync4, closeSync, existsSync as existsSync4, mkdirSync as mkdirSync4, openSync, readFileSync as readFileSync5, readSync, statfsSync, statSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { appendFileSync as appendFileSync4, closeSync, existsSync as existsSync4, mkdirSync as mkdirSync4, openSync, readFileSync as readFileSync5, readSync, statfsSync, statSync as statSync2, writeFileSync as writeFileSync2 } from "node:fs";
 import { homedir as homedir4, hostname as hostname6, platform as platform4 } from "node:os";
 import { dirname as dirname4, join as join4, parse as parse3, resolve as resolve5 } from "node:path";
 import { createHash as createHash6, randomUUID as randomUUID5 } from "node:crypto";
@@ -34593,6 +34593,28 @@ if code != 0:
 if code != 0:
     raise SystemExit("Docker daemon is unavailable")
 
+result_path = safety.get("resultPath") or ""
+result_dir = os.path.dirname(result_path) if result_path else ""
+result_name = os.path.basename(result_path) if result_path else ""
+result_dir_fd = None
+result_descriptor = None
+staged_info = None
+if result_path:
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise RuntimeError("O_NOFOLLOW and O_DIRECTORY are required for staged cleanup transport")
+    os.mkdir(result_dir, 0o700)
+    result_dir_fd = os.open(result_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    directory_info = os.fstat(result_dir_fd)
+    if not stat.S_ISDIR(directory_info.st_mode) or directory_info.st_uid != os.geteuid() or stat.S_IMODE(directory_info.st_mode) != 0o700:
+        os.close(result_dir_fd)
+        raise RuntimeError("staged cleanup directory identity is unsafe")
+    result_descriptor = os.open(result_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=result_dir_fd)
+    staged_info = os.fstat(result_descriptor)
+    if not stat.S_ISREG(staged_info.st_mode) or staged_info.st_uid != os.geteuid() or stat.S_IMODE(staged_info.st_mode) != 0o600 or staged_info.st_nlink != 1:
+        os.close(result_descriptor)
+        os.close(result_dir_fd)
+        raise RuntimeError("staged cleanup file identity is unsafe")
+
 def inspect(kind, identifier):
     code, out, _ = run(docker + [kind, "inspect", identifier])
     if code != 0: return None
@@ -34686,22 +34708,38 @@ def fd_identity(info):
 def stable_path_identity(expected):
     return (int(expected[0]), int(expected[1]), int(stat.S_IFMT(expected[2])))
 
+def fd_mount_id(descriptor):
+    try:
+        with open("/proc/self/fdinfo/%d" % descriptor, "r", encoding="ascii") as handle:
+            for line in handle:
+                if line.startswith("mnt_id:"): return int(line.split(":", 1)[1].strip())
+    except Exception as error:
+        raise RuntimeError("Mount identity is unavailable") from error
+    raise RuntimeError("Mount identity is unavailable")
+
 def open_directory_no_follow(name, dir_fd=None):
     if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
         raise RuntimeError("O_DIRECTORY and O_NOFOLLOW are required for remote path cleanup")
     return os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
 
-def remove_directory_contents_fd(directory_fd, expected_device):
+def remove_directory_contents_fd(directory_fd, expected_device, expected_mount_id):
     for name in os.listdir(directory_fd):
         if name in [".", ".."]: raise RuntimeError("Unexpected directory entry")
         before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
         if int(before.st_dev) != int(expected_device): raise RuntimeError("Cross-device path cleanup is blocked")
+        if not hasattr(os, "O_PATH"): raise RuntimeError("O_PATH is required for mount-safe cleanup")
+        entry_fd = os.open(name, os.O_PATH | os.O_NOFOLLOW, dir_fd=directory_fd)
+        try:
+            if fd_identity(os.fstat(entry_fd)) != fd_identity(before) or fd_mount_id(entry_fd) != expected_mount_id:
+                raise RuntimeError("Entry identity or mount changed before removal")
+        finally:
+            os.close(entry_fd)
         if stat.S_ISDIR(before.st_mode):
             child_fd = open_directory_no_follow(name, dir_fd=directory_fd)
             try:
                 opened = os.fstat(child_fd)
-                if fd_identity(opened) != fd_identity(before): raise RuntimeError("Directory identity changed before traversal")
-                remove_directory_contents_fd(child_fd, expected_device)
+                if fd_identity(opened) != fd_identity(before) or fd_mount_id(child_fd) != expected_mount_id: raise RuntimeError("Directory identity or mount changed before traversal")
+                remove_directory_contents_fd(child_fd, expected_device, expected_mount_id)
                 current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
                 if fd_identity(current) != fd_identity(opened): raise RuntimeError("Directory identity changed before removal")
             finally:
@@ -34720,12 +34758,23 @@ def remove_managed_path_handle_relative(path, root, expected_root, expected_targ
     target_name = parts[-1]
     try:
         if fd_identity(os.fstat(root_fd)) != stable_path_identity(expected_root): raise RuntimeError("Managed root identity changed")
+        root_mount_id = fd_mount_id(root_fd)
         for part in parts[:-1]:
             next_fd = open_directory_no_follow(part, dir_fd=parent_fd)
+            if fd_mount_id(next_fd) != root_mount_id:
+                os.close(next_fd)
+                raise RuntimeError("Mount transition below managed root is blocked")
             if parent_fd != root_fd: os.close(parent_fd)
             parent_fd = next_fd
         before = os.stat(target_name, dir_fd=parent_fd, follow_symlinks=False)
         if fd_identity(before) != stable_path_identity(expected_target) or stat.S_ISLNK(before.st_mode): raise RuntimeError("Target identity changed before isolation")
+        if not hasattr(os, "O_PATH"): raise RuntimeError("O_PATH is required for mount-safe cleanup")
+        target_identity_fd = os.open(target_name, os.O_PATH | os.O_NOFOLLOW, dir_fd=parent_fd)
+        try:
+            if fd_identity(os.fstat(target_identity_fd)) != fd_identity(before) or fd_mount_id(target_identity_fd) != root_mount_id:
+                raise RuntimeError("Target mount transition is blocked")
+        finally:
+            os.close(target_identity_fd)
         quarantine = ".runtime-asset-trash-" + hashlib.sha256((path + str(time.time_ns())).encode("utf-8")).hexdigest()[:24]
         os.rename(target_name, quarantine, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
         isolated = os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
@@ -34742,7 +34791,8 @@ def remove_managed_path_handle_relative(path, root, expected_root, expected_targ
             try:
                 opened = os.fstat(target_fd)
                 if fd_identity(opened) != fd_identity(isolated): raise RuntimeError("Isolated directory identity changed")
-                remove_directory_contents_fd(target_fd, isolated.st_dev)
+                if fd_mount_id(target_fd) != root_mount_id: raise RuntimeError("Isolated target mount transition is blocked")
+                remove_directory_contents_fd(target_fd, isolated.st_dev, root_mount_id)
                 current = os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
                 if fd_identity(current) != fd_identity(opened): raise RuntimeError("Isolated directory identity changed before removal")
             finally:
@@ -34868,21 +34918,14 @@ for item in items:
     results.append({**item, "status":"removed" if removed else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if removed else 0, "removedReferences":removed_references, "reason":reason if removed else (error[-300:] or "image still exists after exact tag removal")})
 
 encoded = base64.b64encode(gzip.compress(json.dumps({"results":results}, separators=(",",":"), ensure_ascii=False).encode("utf-8"))).decode("ascii")
-result_path = safety.get("resultPath") or ""
-if result_path and len(encoded) > 16000:
-    if not hasattr(os, "O_NOFOLLOW"): raise RuntimeError("O_NOFOLLOW is required for staged cleanup transport")
-    result_dir = os.path.dirname(result_path)
-    os.mkdir(result_dir, 0o700)
-    directory_info = os.lstat(result_dir)
-    if not stat.S_ISDIR(directory_info.st_mode) or stat.S_ISLNK(directory_info.st_mode) or directory_info.st_uid != os.geteuid() or stat.S_IMODE(directory_info.st_mode) != 0o700:
-        raise RuntimeError("staged cleanup directory identity is unsafe")
-    descriptor = os.open(result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    staged_info = os.fstat(descriptor)
-    if not stat.S_ISREG(staged_info.st_mode) or staged_info.st_uid != os.geteuid() or stat.S_IMODE(staged_info.st_mode) != 0o600 or staged_info.st_nlink != 1:
-        os.close(descriptor)
-        raise RuntimeError("staged cleanup file identity is unsafe")
-    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
-        handle.write(encoded)
+if result_path:
+    payload_bytes = encoded.encode("ascii")
+    offset = 0
+    while offset < len(payload_bytes):
+        offset += os.write(result_descriptor, payload_bytes[offset:])
+    os.fsync(result_descriptor)
+    os.close(result_descriptor)
+    os.close(result_dir_fd)
     print("RATCLEAN2:%d:%s:%d:%d:%d" % (len(encoded), hashlib.sha256(encoded.encode("ascii")).hexdigest(), staged_info.st_dev, staged_info.st_ino, staged_info.st_uid))
 else:
     print("RATCLEAN1:" + encoded)`;
@@ -34968,7 +35011,7 @@ function pollExistingSsmMutation(sourceConfig, commandId, comment, waitMs = 185e
       throw mutationError(error51.message, "outcome_unknown");
     }
     if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
-    if (invocation.Status !== "Success") throw mutationError(invocation.StandardErrorContent || `SSM cleanup status: ${invocation.Status}`, "failed");
+    if (invocation.Status !== "Success") throw Object.assign(mutationError(invocation.StandardErrorContent || `SSM cleanup status: ${invocation.Status}`, "outcome_unknown"), { output: String(invocation.StandardOutputContent || ""), terminalStatus: invocation.Status });
     return { commandId, output: String(invocation.StandardOutputContent || "") };
   }
   throw mutationError(`Remote cleanup command ${commandId} did not reach a terminal state within ${Math.ceil(waitMs / 1e3)} seconds.`, "outcome_unknown");
@@ -35064,7 +35107,7 @@ function executeAwsDockerCleanup(sourceConfig, allowlist, operationId) {
   const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(fullSourceConfig, invocation.commandId, cleanupResultPath, invocation.output) : { status: "not-staged" };
   return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), commandId: invocation.commandId, results, verification: buildPostCleanupVerification(snapshot, after, results), resultTransportCleanup };
 }
-function resumeAwsCleanup({ sourceConfig, operationId, commandId } = {}) {
+function resumeAwsCleanup({ sourceConfig, operationId, commandId, allowlist = [] } = {}) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(operationId || ""))) throw new Error("A valid cleanup operationId is required.");
   const instanceId = sourceConfig?.instanceId;
   if (!instanceId) throw new Error("EC2 instanceId is not configured.");
@@ -35078,15 +35121,28 @@ function resumeAwsCleanup({ sourceConfig, operationId, commandId } = {}) {
     exactCommandId = reconcileSsmCommandId(sourceConfig, comment, { attempts: 8, delayMs: 1e3 }) || "";
   }
   if (!exactCommandId) return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), operationId, commandId: null, status: "outcome_unknown", results: [], resumeToken: { operationId, commandId: null }, reason: "Exact commandId is not visible yet; retry this resume operation without sending a new cleanup command." };
-  const invocation = pollExistingSsmMutation(sourceConfig, exactCommandId, comment);
+  let invocation;
+  try {
+    invocation = pollExistingSsmMutation(sourceConfig, exactCommandId, comment);
+  } catch (error51) {
+    if (error51.mutationState !== "outcome_unknown" || error51.commandId !== exactCommandId) throw error51;
+    invocation = { commandId: exactCommandId, output: String(error51.output || ""), terminalStatus: error51.terminalStatus || "Unknown" };
+  }
   const resultPath = `/tmp/runtime-asset-tracker-cleanup-${String(operationId).replace(/[^a-zA-Z0-9-]/g, "")}/result.b64`;
-  const payload = decodeAwsCleanupResult(invocation, sourceConfig, resultPath);
-  const results = payload.results || [];
+  const hasResultMarker = /RATCLEAN[12]:/.test(invocation.output);
+  const payload = hasResultMarker ? decodeAwsCleanupResult(invocation, sourceConfig, resultPath) : { results: [] };
+  const results = hasResultMarker ? payload.results || [] : (allowlist || []).map((item) => ({ ...item, status: "outcome_unknown", reclaimedBytes: 0, reason: `SSM terminal status ${invocation.terminalStatus || "unknown"} had no durable result marker; live reconciliation is required.` }));
+  if (!hasResultMarker && results.length === 0) throw Object.assign(new Error("The failed SSM operation has no result marker or persisted exact allowlist for live reconciliation."), { mutationState: "outcome_unknown", commandId: exactCommandId });
   remoteCache.clear();
   const after = collectPostCleanupSnapshot({ ...sourceConfig, includeAllAssets: true }, exactCommandId, results);
-  const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(sourceConfig, exactCommandId, resultPath, invocation.output) : { status: "not-staged" };
+  const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(sourceConfig, exactCommandId, resultPath, invocation.output) : { status: hasResultMarker ? "not-staged" : "retained-or-unavailable-for-reconciliation" };
   const remaining = new Set((after.assets || []).map((asset) => `${asset.type}:${asset.id}`));
-  const reconciledResults = results.map((item) => item.status === "removed" && remaining.has(`${item.type}:${item.id}`) ? { ...item, status: "outcome_unknown", reclaimedBytes: 0, reason: "Command reported removal but the exact object is still present during resume reconciliation." } : item);
+  const reconciledResults = results.map((item) => {
+    const stillPresent = remaining.has(`${item.type}:${item.id}`);
+    if (!hasResultMarker && item.type !== "cache" && !stillPresent) return { ...item, status: "removed", reclaimedBytes: Number(item.sizeBytes || 0), reason: "Exact object is absent in the live post-command inventory; removal was reconciled without resending." };
+    if (item.status === "removed" && stillPresent) return { ...item, status: "outcome_unknown", reclaimedBytes: 0, reason: "Command reported removal but the exact object is still present during resume reconciliation." };
+    return item;
+  });
   const incomplete = reconciledResults.filter((item) => item.status !== "removed").length;
   return {
     completedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -35543,7 +35599,7 @@ function importRetirementReconciliation({ reportPath, source, project, groups, o
 // mcp/path-assets.mjs
 import { execFileSync as execFileSync2 } from "node:child_process";
 import { createHash as createHash3, randomUUID as randomUUID3 } from "node:crypto";
-import { appendFileSync as appendFileSync2, existsSync as existsSync2, lstatSync, mkdirSync as mkdirSync2, readFileSync as readFileSync2, readdirSync, realpathSync } from "node:fs";
+import { appendFileSync as appendFileSync2, existsSync as existsSync2, lstatSync, mkdirSync as mkdirSync2, readFileSync as readFileSync2, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir as homedir2, hostname as hostname4, platform as platform2 } from "node:os";
 import { basename, dirname as dirname2, extname, isAbsolute as isAbsolute2, join as join2, relative, resolve as resolve2, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35553,6 +35609,23 @@ var FINGERPRINT = /^sha256:[0-9a-f]{64}$/i;
 var ARCHIVE = /(?:\.tar\.gz|\.tar|\.tgz|\.zip|\.gz|\.7z|\.bundle)$/i;
 var ARTIFACT_DIR = /^(?:node_modules|dist|build|coverage|smoke-artifacts|test-results|playwright-report|\.next|\.nuxt|\.turbo|\.cache|\.pytest_cache|__pycache__|\.prod-artifacts|\.codex-(?:execution|artifacts?|deploy|release).*)$/i;
 var scanCache = /* @__PURE__ */ new Map();
+var moduleDirectory = dirname2(fileURLToPath(import.meta.url));
+var pluginRoot = resolve2(moduleDirectory, "..");
+function safeDeleteHelperIntegrity() {
+  const helperPath = join2(pluginRoot, "scripts", "safe-delete-path.py");
+  const provenancePath = join2(pluginRoot, "dist", "build-provenance.json");
+  try {
+    const provenance = JSON.parse(readFileSync2(provenancePath, "utf8"));
+    const observedSha256 = createHash3("sha256").update(readFileSync2(helperPath)).digest("hex");
+    const declaredSha256 = String(provenance.safeDeleteHelperSha256 || "");
+    const stats = statSync(helperPath);
+    const ownerSafe = platform2() === "win32" || typeof process.geteuid !== "function" || Number(stats.uid) === Number(process.geteuid());
+    const modeSafe = platform2() === "win32" || (Number(stats.mode) & 18) === 0;
+    return { ok: /^[0-9a-f]{64}$/.test(declaredSha256) && observedSha256 === declaredSha256 && ownerSafe && modeSafe, helperPath, declaredSha256, observedSha256, ownerSafe, modeSafe };
+  } catch (error51) {
+    return { ok: false, helperPath, declaredSha256: null, observedSha256: null, ownerSafe: false, modeSafe: false, reason: error51.message };
+  }
+}
 function defaultStateRoot2() {
   if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve2(process.env.RUNTIME_ASSET_STATE_DIR);
   if (platform2() === "win32") return join2(process.env.LOCALAPPDATA || join2(homedir2(), "AppData", "Local"), "RuntimeAssetTracker");
@@ -35753,6 +35826,8 @@ function applyAttestation(asset, attestations) {
   if (platform2() === "win32") {
     return { ...attested, classification: "review", retirementBlocked: true, reason: "Windows path deletion remains blocked until a native handle-relative, open-reparse-point helper is available." };
   }
+  const helperIntegrity = safeDeleteHelperIntegrity();
+  if (!helperIntegrity.ok) return { ...attested, classification: "review", retirementBlocked: true, reason: "POSIX path deletion helper identity, owner, or permissions do not match the frozen build provenance." };
   return attested;
 }
 function candidateRoots(config2, projects) {
@@ -35978,8 +36053,9 @@ function handleRelativeRemove(path, allowedRoot) {
   const rootIdentity = fileIdentity(allowedRoot);
   const targetIdentity = fileIdentity(path);
   if (rootIdentity.reparse || targetIdentity.reparse) throw new Error("Path cleanup cannot target a reparse point.");
-  const helper = join2(dirname2(fileURLToPath(import.meta.url)), "..", "scripts", "safe-delete-path.py");
-  if (!existsSync2(helper)) throw new Error("Handle-relative path cleanup helper is unavailable.");
+  const integrity = safeDeleteHelperIntegrity();
+  const helper = integrity.helperPath;
+  if (!integrity.ok) throw new Error("Handle-relative path cleanup helper identity, owner, or permissions do not match the frozen build provenance.");
   execFileSync2("python3", [
     helper,
     "--root",
@@ -37017,7 +37093,7 @@ function readLedger(limit = 24) {
 function readRecentLedgerEvents(maxBytes = 8 * 1024 * 1024) {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
   if (!existsSync4(ledger)) return [];
-  const stats = statSync(ledger);
+  const stats = statSync2(ledger);
   const length = Math.min(stats.size, maxBytes);
   const buffer = Buffer.alloc(length);
   const fd = openSync(ledger, "r");
@@ -37034,13 +37110,14 @@ function readRecentLedgerEvents(maxBytes = 8 * 1024 * 1024) {
   });
 }
 function emptyAuthorityState() {
-  return { retirements: /* @__PURE__ */ new Map(), protections: /* @__PURE__ */ new Map(), lifecycle: /* @__PURE__ */ new Map(), parsedEventCount: 0 };
+  return { retirements: /* @__PURE__ */ new Map(), protections: /* @__PURE__ */ new Map(), lifecycle: /* @__PURE__ */ new Map(), orders: /* @__PURE__ */ new Map(), parsedEventCount: 0 };
 }
 function cloneAuthorityState(state) {
   return {
     retirements: new Map(state.retirements),
     protections: new Map(state.protections),
     lifecycle: new Map(state.lifecycle),
+    orders: new Map(state.orders || []),
     parsedEventCount: Number(state.parsedEventCount || 0)
   };
 }
@@ -37053,34 +37130,48 @@ function scopedAssetKey(event) {
 }
 function reduceAuthoritativeLedgerEvents(events, initialState = emptyAuthorityState()) {
   const state = initialState;
+  if (!state.orders) state.orders = /* @__PURE__ */ new Map();
   for (const event of events || []) {
     state.parsedEventCount += 1;
+    const appendOrdinal = state.parsedEventCount;
     const assetKey = scopedAssetKey(event);
     if (assetKey && event.event === "asset.retirement.revoked") {
       state.retirements.delete(assetKey);
+      state.orders.delete(`retirement\0${assetKey}`);
       continue;
     }
     if (assetKey && event.event === "asset.protection.revoked") {
       state.protections.delete(assetKey);
+      state.orders.delete(`protection\0${assetKey}`);
       continue;
     }
     if (assetKey && event.event === "asset.protection.bound" && event.status === "protected") {
       state.protections.set(assetKey, event);
+      state.orders.set(`protection\0${assetKey}`, appendOrdinal);
       continue;
     }
     if (assetKey && event.event === "asset.retired" && event.status === "retired") {
       state.retirements.set(assetKey, event);
+      state.orders.set(`retirement\0${assetKey}`, appendOrdinal);
       continue;
     }
-    if (/^(?:build|compose|deployment|task|outcome|pull_request)\./.test(String(event?.event || ""))) {
-      const lifecycleKey = [event.project, event.environment, event.event, event.asset?.type, event.asset?.id, event.details?.outcomeId, event.details?.threadId].map((value) => String(value || "")).join("\0");
+    if (/^(?:build|compose|deployment|task|outcome|pull_request|cleanup)\./.test(String(event?.event || ""))) {
+      const eventName = String(event?.event || "");
+      const lifecycleFamily = /^(?:build\.failed|build\.completed|build\.succeeded)$/.test(eventName) ? "build.terminal-state" : eventName;
+      const lifecycleKey = [event.project, event.environment, lifecycleFamily, event.asset?.type, event.asset?.id, event.details?.outcomeId, event.details?.threadId, event.details?.operationId].map((value) => String(value || "")).join("\0");
       state.lifecycle.set(lifecycleKey, event);
+      state.orders.set(`lifecycle\0${lifecycleKey}`, appendOrdinal);
     }
   }
   return state;
 }
 function authorityStateEvents(state) {
-  return [...state.retirements.values(), ...state.protections.values(), ...state.lifecycle.values()].sort((left, right) => String(left.occurredAt || "").localeCompare(String(right.occurredAt || "")));
+  const ordered = [
+    ...[...state.retirements].map(([key, event]) => ({ event, order: state.orders.get(`retirement\0${key}`) || 0 })),
+    ...[...state.protections].map(([key, event]) => ({ event, order: state.orders.get(`protection\0${key}`) || 0 })),
+    ...[...state.lifecycle].map(([key, event]) => ({ event, order: state.orders.get(`lifecycle\0${key}`) || 0 }))
+  ];
+  return ordered.sort((left, right) => left.order - right.order).map((item) => item.event);
 }
 function scanLedgerAuthority(ledger, startOffset, initialState) {
   const state = cloneAuthorityState(initialState);
@@ -37122,7 +37213,7 @@ function scanLedgerAuthority(ledger, startOffset, initialState) {
 function readAuthoritativeLedgerEvents() {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
   if (!existsSync4(ledger)) return [];
-  const stats = statSync(ledger);
+  const stats = statSync2(ledger);
   const cached2 = ledgerAuthorityCache.get(ledger);
   const canResume = cached2 && stats.size > cached2.size && cached2.size > 0;
   if (cached2 && stats.size === cached2.size && stats.mtimeMs === cached2.mtimeMs) return cached2.events;
@@ -37137,7 +37228,7 @@ function ledgerAuthorityStatus() {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
   if (!existsSync4(ledger)) return { path: ledger, exists: false, integrity: "empty", bytes: 0, effectiveEvents: 0 };
   const events = readAuthoritativeLedgerEvents();
-  const stats = statSync(ledger);
+  const stats = statSync2(ledger);
   const cache = ledgerAuthorityCache.get(ledger);
   return { path: ledger, exists: true, integrity: "verified-full-history", bytes: stats.size, parsedEventCount: cache?.state?.parsedEventCount || 0, effectiveEvents: events.length };
 }
@@ -37826,7 +37917,7 @@ function consumeCleanupPreview({ token, confirmed = false, confirmationDigest },
 function executeCleanup(input, context = {}) {
   const { token } = input;
   const preview = consumeCleanupPreview(input, context);
-  appendCleanupEvent("cleanup.operation.started", { previewToken: token, operationId: preview.operationId, source: preview.source, actorId: preview.actorId, confirmationDigest: preview.confirmationDigest }, preview.source);
+  appendCleanupEvent("cleanup.operation.started", { previewToken: token, operationId: preview.operationId, source: preview.source, project: preview.project, actorId: preview.actorId, confirmationDigest: preview.confirmationDigest, allowlist: preview.allowlist }, preview.source);
   if (preview.source !== "local") {
     const config2 = loadConfig();
     const baseSourceConfig = projectSourceConfigs(config2, preview.project).find((item) => item.id === preview.source);
@@ -37927,18 +38018,20 @@ function resumeCleanup({ source, project, operationId, commandId } = {}) {
   const config2 = loadConfig();
   const sourceConfig = projectSourceConfigs(config2, project).find((item) => item.id === source);
   if (!sourceConfig || (sourceConfig.transport || "aws-ssm") !== "aws-ssm") throw new Error("The selected project/source is not configured for AWS SSM cleanup recovery.");
-  const result = resumeAwsCleanup({ sourceConfig, operationId, commandId });
+  const started = readAuthoritativeLedgerEvents().filter((event) => event.event === "cleanup.operation.started" && event.details?.operationId === operationId && event.details?.source === source && event.details?.project === project).at(-1);
+  const allowlist = Array.isArray(started?.details?.allowlist) ? started.details.allowlist : [];
+  const result = resumeAwsCleanup({ sourceConfig, operationId, commandId, allowlist });
   appendCleanupEvent("cleanup.remote.resumed", { source, project, operationId, commandId: result.commandId || null, status: result.status }, source);
   return result;
 }
 
 // mcp/server.mjs
-var moduleDirectory = dirname5(fileURLToPath2(import.meta.url));
+var moduleDirectory2 = dirname5(fileURLToPath2(import.meta.url));
 var DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
-var dashboardPath = [join5(moduleDirectory, "dashboard.html"), join5(moduleDirectory, "..", "dist", "dashboard.html")].find(existsSync5);
+var dashboardPath = [join5(moduleDirectory2, "dashboard.html"), join5(moduleDirectory2, "..", "dist", "dashboard.html")].find(existsSync5);
 if (!dashboardPath) throw new Error("Runtime Asset Tracker dashboard.html is missing; run npm run build.");
 var dashboardHtml = readFileSync6(dashboardPath, "utf8");
-var pluginRoot = join5(moduleDirectory, "..");
+var pluginRoot2 = join5(moduleDirectory2, "..");
 function readJson3(path, fallback = {}) {
   try {
     return JSON.parse(readFileSync6(path, "utf8"));
@@ -37947,11 +38040,14 @@ function readJson3(path, fallback = {}) {
   }
 }
 function runtimeIdentity() {
-  const manifest = readJson3(join5(pluginRoot, ".codex-plugin", "plugin.json"));
-  const packageJson = readJson3(join5(pluginRoot, "package.json"));
-  const provenance = readJson3(join5(pluginRoot, "dist", "build-provenance.json"));
+  const manifest = readJson3(join5(pluginRoot2, ".codex-plugin", "plugin.json"));
+  const packageJson = readJson3(join5(pluginRoot2, "package.json"));
+  const provenance = readJson3(join5(pluginRoot2, "dist", "build-provenance.json"));
   const serverPath = fileURLToPath2(import.meta.url);
   const serverSha256 = createHash7("sha256").update(readFileSync6(serverPath)).digest("hex");
+  const helperPath = join5(pluginRoot2, "scripts", "safe-delete-path.py");
+  const safeDeleteHelperSha256Observed = existsSync5(helperPath) ? createHash7("sha256").update(readFileSync6(helperPath)).digest("hex") : null;
+  const safeDeleteHelperSha256Declared = provenance.safeDeleteHelperSha256 || null;
   return {
     pluginId: String(manifest.name || "runtime-asset-tracker"),
     manifestVersion: String(manifest.version || "unknown"),
@@ -37962,6 +38058,9 @@ function runtimeIdentity() {
     sourceDigest: provenance.sourceDigest || null,
     buildDigest: provenance.buildDigest || serverSha256,
     serverSha256,
+    safeDeleteHelperSha256Declared,
+    safeDeleteHelperSha256Observed,
+    safeDeleteHelperIntegrity: Boolean(safeDeleteHelperSha256Declared && safeDeleteHelperSha256Observed === safeDeleteHelperSha256Declared),
     serverInstanceId: runtimeInstanceId()
   };
 }
