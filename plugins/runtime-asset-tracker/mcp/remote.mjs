@@ -47,7 +47,7 @@ function parseBytes(value) {
 }
 
 function emptyBars() {
-  return ["worktree", "image", "volume", "cache"].map((type) => ({
+  return ["worktree", "host_artifact", "image", "volume", "cache"].map((type) => ({
     type,
     totalBytes: 0,
     count: 0,
@@ -89,6 +89,7 @@ function aggregate(type, assets, summary) {
 export function buildBars(assets, summary = {}) {
   return [
     aggregate("worktree", assets),
+    aggregate("host_artifact", assets),
     aggregate("image", assets, summary.Images),
     aggregate("volume", assets, summary["Local Volumes"]),
     aggregate("cache", assets, summary["Build Cache"]),
@@ -168,7 +169,7 @@ export function classifyDockerVolume({ labels = {}, referenced = false, protecte
 }
 
 function normalizedTags(tags) {
-  return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.startsWith("<none>")))].sort();
+  return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.includes("<none>")))].sort();
 }
 
 export function validateRemoteRetirementApproval(requested, current, sourceConfig = {}) {
@@ -222,6 +223,10 @@ export function buildPostCleanupVerification(before, after, results = []) {
 export function remoteSnapshotScript(sourceConfig = {}) {
   const context = Buffer.from(JSON.stringify({
     project: sourceConfig.projectId || "sparklingplaycms",
+    projectAliases: sourceConfig.projectAliases || [],
+    assetPrefixes: sourceConfig.assetPrefixes || [],
+    managedPaths: sourceConfig.managedPaths || [],
+    includeAllAssets: sourceConfig.includeAllAssets === true,
     environment: sourceConfig.id || "remote",
     releaseRoot: sourceConfig.releaseRoot ?? "/home/ec2-user/apps/sparkling-cms-releases",
     activeLink: sourceConfig.activeLink ?? "/home/ec2-user/apps/sparkling-cms",
@@ -236,6 +241,7 @@ CONTEXT = json.loads(base64.b64decode("${context}"))
 DEFAULT_PROJECT = CONTEXT.get("project") or "unknown"
 DEFAULT_ENVIRONMENT = CONTEXT.get("environment") or "remote"
 EXPIRY_WINDOW_DAYS = int(CONTEXT.get("expiryWindowDays") or 7)
+PROJECT_TOKENS = [re.sub(r"[^a-z0-9]", "", str(value).lower()) for value in (CONTEXT.get("projectAliases") or []) + (CONTEXT.get("assetPrefixes") or []) if value]
 
 def run(args, timeout=30):
     try:
@@ -269,6 +275,12 @@ def parse_bytes(value):
     units = {"B":1,"KB":1000,"KIB":1024,"MB":1000**2,"MIB":1024**2,"GB":1000**3,"GIB":1024**3,"TB":1000**4,"TIB":1024**4}
     return int(float(match.group(1)) * units.get((match.group(2) or "B").upper(), 1))
 
+def disk_usage_bytes(path):
+    code, value = run(["sudo", "-n", "du", "-sb", "--", path], timeout=90)
+    if code != 0: return 0
+    try: return int(value.split()[0])
+    except Exception: return 0
+
 def safe_labels(labels):
     return {k:v for k,v in (labels or {}).items() if k.startswith(PREFIX) or k.startswith("com.docker.compose.") or k in ["org.opencontainers.image.revision", "org.opencontainers.image.source"]}
 
@@ -297,8 +309,29 @@ def expiry_class(labels, created_at=None):
     if expires - now <= datetime.timedelta(days=EXPIRY_WINDOW_DAYS): return "expiring", expires.isoformat()
     return "retained", expires.isoformat()
 
-def project(labels, fallback=None):
-    return label(labels, "project") or DEFAULT_PROJECT or fallback or "unknown"
+def normalized_project_token(value):
+    return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+
+def belongs_to_selected_project(value):
+    candidate = normalized_project_token(value)
+    return bool(candidate and any(len(token) >= 4 and token in candidate for token in PROJECT_TOKENS))
+
+def explicit_project(labels):
+    value = label(labels, "project")
+    if not value: return None
+    return DEFAULT_PROJECT if belongs_to_selected_project(value) else value
+
+def inferred_project(candidates):
+    values = [str(value) for value in candidates if value]
+    if any(belongs_to_selected_project(value) for value in values): return DEFAULT_PROJECT
+    unique = sorted(set(values))
+    if len(unique) == 1 and re.fullmatch(r"[0-9a-f]{64}", unique[0], re.I): return "unknown"
+    return unique[0] if len(unique) == 1 else ("shared" if len(unique) > 1 else "unknown")
+
+def project_from_compose_or_name(compose_project, name):
+    if compose_project:
+        return DEFAULT_PROJECT if belongs_to_selected_project(compose_project) else str(compose_project)
+    return inferred_project([name])
 
 def classify(labels, active=False, protected=False, dangling=False, created_at=None):
     if active: return "active"
@@ -326,13 +359,21 @@ all_mounted = {mount.get("Name") for item in container_details for mount in (ite
 active_mounted = {mount.get("Name") for item in container_details if (item.get("State") or {}).get("Running") for mount in (item.get("Mounts") or []) if mount.get("Type") == "volume"}
 image_consumers = {}
 volume_consumers = {}
+image_consumer_projects = {}
+volume_consumer_projects = {}
 for item in container_details:
     name = str(item.get("Name") or "").lstrip("/")
     state = (item.get("State") or {}).get("Status") or "unknown"
-    if item.get("Image"): image_consumers.setdefault(item.get("Image"), []).append({"id":item.get("Id"),"name":name,"state":state})
+    item_labels = safe_labels((item.get("Config") or {}).get("Labels"))
+    compose_project = item_labels.get("com.docker.compose.project")
+    consumer_project = explicit_project(item_labels) or project_from_compose_or_name(compose_project, name)
+    if item.get("Image"):
+        image_consumers.setdefault(item.get("Image"), []).append({"id":item.get("Id"),"name":name,"state":state})
+        image_consumer_projects.setdefault(item.get("Image"), set()).add(consumer_project)
     for mount in (item.get("Mounts") or []):
         if mount.get("Type") == "volume" and mount.get("Name"):
             volume_consumers.setdefault(mount.get("Name"), []).append({"id":item.get("Id"),"name":name,"state":state,"destination":mount.get("Destination")})
+            volume_consumer_projects.setdefault(mount.get("Name"), set()).add(consumer_project)
 
 df_verbose = docker(["system", "df", "-v"]) if docker_available else ""
 def section(text, start_marker, end_marker):
@@ -356,12 +397,13 @@ container_row_map = {row.get("ID"): row for row in container_rows}
 for item in container_details:
     labels = safe_labels((item.get("Config") or {}).get("Labels"))
     active = bool((item.get("State") or {}).get("Running"))
+    compose_project = labels.get("com.docker.compose.project")
     assets.append({
         "id": item.get("Id"), "name": str(item.get("Name") or "").lstrip("/"), "type":"container",
-        "project": project(labels), "environment": label(labels, "environment") or "remote",
+        "project": explicit_project(labels) or project_from_compose_or_name(compose_project, str(item.get("Name") or "").lstrip("/")), "environment": label(labels, "environment") or "remote",
         "status": (item.get("State") or {}).get("Status") or "unknown", "classification": classify(labels, active=active, created_at=item.get("Created")),
         "sizeBytes": parse_bytes((container_row_map.get(item.get("Id")) or {}).get("Size")), "createdAt": item.get("Created"),
-        "labels": labels, "lineage":{"composeProject":labels.get("com.docker.compose.project"),"imageId":item.get("Image"),"mounts":[{"type":mount.get("Type"),"name":mount.get("Name"),"destination":mount.get("Destination")} for mount in (item.get("Mounts") or [])]}, "reason": "正在运行" if active else "已停止，等待归属确认"
+        "labels": labels, "lineage":{"composeProject":labels.get("com.docker.compose.project"),"imageId":item.get("Image"),"mounts":[{"type":mount.get("Type"),"name":mount.get("Name"),"source":mount.get("Source"),"destination":mount.get("Destination")} for mount in (item.get("Mounts") or [])]}, "reason": "正在运行" if active else "已停止，等待归属确认"
     })
 
 image_rows = json_lines(docker(["image", "ls", "--no-trunc", "--format", "{{json .}}"])) if docker_available else []
@@ -394,11 +436,13 @@ for image_id, entry in image_map.items():
     expiry_state, expires_at = expiry_class(labels, created_at)
     image_class = "active" if referenced else ("protected" if protected else ("expiring" if expiry_state == "expiring" else ("retained" if expiry_state == "retained" else ("reclaimable" if disposable or dangling else "retained"))))
     unique_size = next((size for short_id, size in image_unique_sizes.items() if short_id in image_id), 0)
+    consumer_projects = sorted(image_consumer_projects.get(image_id, set()))
+    inferred_image_project = explicit_project(labels) or (consumer_projects[0] if len(consumer_projects) == 1 else ("shared" if len(consumer_projects) > 1 else inferred_project(tags)))
     assets.append({
-        "id":image_id, "name":tags[0] if tags else image_id[:19], "type":"image", "project":project(labels, (tags[0].split(":")[0] if tags else "unknown")),
+        "id":image_id, "name":tags[0] if tags else image_id[:19], "type":"image", "project":inferred_image_project,
         "environment":label(labels, "environment") or "remote", "status":"in-use" if running else ("referenced-stopped" if referenced else ("dangling" if dangling else "unused")),
         "classification":image_class, "sizeBytes":unique_size,
-        "createdAt":created_at, "expiresAt":expires_at, "labels":labels, "lineage":{"consumers":image_consumers.get(image_id, []),"tags":tags,"revision":labels.get("org.opencontainers.image.revision"),"source":labels.get("org.opencontainers.image.source")},
+        "createdAt":created_at, "expiresAt":expires_at, "labels":labels, "lineage":{"consumers":image_consumers.get(image_id, []),"projects":consumer_projects,"tags":tags,"revision":labels.get("org.opencontainers.image.revision"),"source":labels.get("org.opencontainers.image.source")},
         "reason":"被运行容器引用" if running else ("仍被已停止容器引用" if referenced else ("保留策略明确保护" if protected else ("未引用且明确可丢弃" if disposable else ("未被任何容器引用的悬空镜像" if dangling else "未引用但没有可丢弃标签"))))
     })
 
@@ -420,8 +464,10 @@ for item in volume_details:
     disposable = label(labels, "disposable") == "true"
     expiry_state, expires_at = expiry_class(labels, item.get("CreatedAt"))
     volume_class = "active" if mounted else ("protected" if policy_protected else ("expiring" if expiry_state == "expiring" else ("review" if expiry_state == "retained" else ("reclaimable" if disposable else "review"))))
+    consumer_projects = sorted(volume_consumer_projects.get(name, set()))
+    inferred_volume_project = explicit_project(labels) or (consumer_projects[0] if len(consumer_projects) == 1 else ("shared" if len(consumer_projects) > 1 else project_from_compose_or_name(labels.get("com.docker.compose.project"), name)))
     assets.append({
-        "id":name, "name":name, "type":"volume", "project":project(labels, name.split("_")[0]),
+        "id":name, "name":name, "type":"volume", "project":inferred_volume_project,
         "environment":label(labels, "environment") or "remote", "status":"mounted-running" if active else ("mounted-stopped" if mounted else "unmounted"),
         "classification":volume_class, "sizeBytes":volume_sizes.get(name, 0), "createdAt":item.get("CreatedAt"), "expiresAt":expires_at,
         "labels":labels, "lineage":{"composeProject":labels.get("com.docker.compose.project"),"consumers":volume_consumers.get(name, []),"mountpoint":item.get("Mountpoint")}, "reason":"被运行容器挂载" if active else ("仍被已停止容器挂载" if mounted else ("名称或保留策略表明可能包含业务数据" if policy_protected else ("未挂载且明确可丢弃" if disposable else "未证明可丢弃，等待确认")))
@@ -443,10 +489,22 @@ release_root = CONTEXT.get("releaseRoot") or ""
 active_link = CONTEXT.get("activeLink") or ""
 active_release = os.path.realpath(active_link) if os.path.exists(active_link) else ""
 if os.path.isdir(release_root):
-    for entry in sorted(os.scandir(release_root), key=lambda item:item.stat().st_mtime, reverse=True)[:60]:
+    release_entries = sorted(os.scandir(release_root), key=lambda item:item.stat().st_mtime, reverse=True)
+    if not CONTEXT.get("includeAllAssets"): release_entries = release_entries[:60]
+    for entry in release_entries:
         if not entry.is_dir(follow_symlinks=False): continue
         active = os.path.realpath(entry.path) == active_release
-        assets.append({"id":entry.path,"name":entry.name,"type":"worktree","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"active-release" if active else "retained-release","classification":"active" if active else "retained","sizeBytes":0,"createdAt":datetime.datetime.fromtimestamp(entry.stat().st_mtime, datetime.timezone.utc).isoformat(),"labels":{},"reason":"当前活动 release" if active else "保留的 release"})
+        assets.append({"id":entry.path,"name":entry.name,"type":"worktree","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"active-release" if active else "retained-release","classification":"active" if active else "retained","sizeBytes":disk_usage_bytes(entry.path),"createdAt":datetime.datetime.fromtimestamp(entry.stat().st_mtime, datetime.timezone.utc).isoformat(),"labels":{},"lineage":{"path":entry.path,"activeLink":active_link},"reason":"当前活动 release" if active else "保留的 release"})
+
+for managed in CONTEXT.get("managedPaths") or []:
+    root = str(managed.get("path") or "")
+    if not root.startswith("/home/") or not os.path.isdir(root): continue
+    managed_entries = sorted(os.scandir(root), key=lambda item:item.stat(follow_symlinks=False).st_mtime, reverse=True)
+    if not CONTEXT.get("includeAllAssets"): managed_entries = managed_entries[:240]
+    for entry in managed_entries:
+        if entry.is_symlink(): continue
+        kind = str(managed.get("kind") or "managed-host-artifact")
+        assets.append({"id":entry.path,"name":entry.name,"type":"host_artifact","project":DEFAULT_PROJECT,"environment":DEFAULT_ENVIRONMENT,"status":"retained-host-artifact","classification":"retained","sizeBytes":disk_usage_bytes(entry.path) if entry.is_dir(follow_symlinks=False) else entry.stat(follow_symlinks=False).st_size,"createdAt":datetime.datetime.fromtimestamp(entry.stat(follow_symlinks=False).st_mtime,datetime.timezone.utc).isoformat(),"labels":{},"lineage":{"path":entry.path,"managedRoot":root,"artifactKind":kind,"consumers":[]},"reason":"Managed host artifact awaiting exact retirement evidence"})
 
 events = []
 for ledger_path in ["/var/lib/runtime-asset-tracker/events.jsonl", os.path.expanduser("~/.local/state/runtime-asset-tracker/events.jsonl")]:
@@ -464,8 +522,9 @@ usage = shutil.disk_usage("/")
 revision = ""
 if active_release:
     revision = run(["git", "-C", active_release, "rev-parse", "HEAD"])[1]
-limits = {"container":200, "image":500, "volume":500, "worktree":60, "cache":10}
-assets = [item for kind in ["container", "image", "volume", "worktree", "cache"] for item in [entry for entry in assets if entry.get("type") == kind][:limits[kind]]]
+asset_types = ["container", "image", "volume", "worktree", "host_artifact", "cache"]
+limits = {"container":200, "image":500, "volume":500, "worktree":60, "host_artifact":240, "cache":10}
+assets = [item for kind in asset_types for item in ([entry for entry in assets if entry.get("type") == kind] if CONTEXT.get("includeAllAssets") else [entry for entry in assets if entry.get("type") == kind][:limits[kind]])]
 result = {"host":socket.gethostname(),"dockerAvailable":docker_available,"disk":{"totalBytes":usage.total,"freeBytes":usage.free},"summary":summary,"assets":assets,"events":events[:24],"activeRelease":active_release,"revision":revision}
 payload = gzip.compress(json.dumps(result, separators=(",",":"), ensure_ascii=False).encode("utf-8"))
 encoded_payload = base64.b64encode(payload).decode("ascii")
@@ -1025,6 +1084,7 @@ function registeredProjectOptions(config, sourceConfig) {
       repository,
       label: String(item.label || repository.split("/").at(-1)),
       aliases: [...new Set([...(item.aliases || []), item.id, item.label, repository.split("/").at(-1)].filter(Boolean).map(String))],
+      assetPrefixes: [...new Set((item.assetPrefixes || []).filter(Boolean).map(String))],
     });
   }
   return [...unique.values()];
@@ -1037,17 +1097,33 @@ function canonicalRemoteProject(value, projects) {
   return match?.id || value || "unknown";
 }
 
-export function collectRemoteDashboard({ source, scope, project, config, sources }) {
+export function assetInSelectedProjectScope(asset, selectedProject) {
+  if (selectedProject === "all") return true;
+  if (asset?.project === selectedProject) return true;
+  return Array.isArray(asset?.lineage?.projects) && asset.lineage.projects.includes(selectedProject);
+}
+
+export function limitDashboardAssets(assets, includeAllAssets = false) {
+  return includeAllAssets ? assets : assets.slice(0, 320);
+}
+
+export function collectRemoteDashboard({ source, scope, project, config, sources, includeAllAssets = false }) {
   const schedule = config.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" };
   const baseSourceConfig = (config.sources || []).find((item) => item.id === source);
   const projectOptions = registeredProjectOptions(config, baseSourceConfig);
   const selectedRepository = baseSourceConfig?.kind === "github"
     ? (project !== "all" ? project : baseSourceConfig.repository || projectOptions[0]?.repository)
     : undefined;
+  const selectedProject = selectedRepository || project;
+  const selectedProjectOption = projectOptions.find((item) => item.id === selectedProject);
   const sourceConfig = baseSourceConfig?.kind === "github"
     ? { ...baseSourceConfig, repository: selectedRepository }
-    : baseSourceConfig;
-  const selectedProject = selectedRepository || project;
+    : baseSourceConfig ? {
+      ...baseSourceConfig,
+      projectAliases: baseSourceConfig.projectAliases || selectedProjectOption?.aliases || [],
+      assetPrefixes: baseSourceConfig.assetPrefixes || selectedProjectOption?.assetPrefixes || [],
+      includeAllAssets,
+    } : baseSourceConfig;
   const empty = {
     generatedAt: new Date().toISOString(),
     scope,
@@ -1084,7 +1160,19 @@ export function collectRemoteDashboard({ source, scope, project, config, sources
       remoteCache.set(cacheKey, { createdAt: Date.now(), value: snapshot });
     }
     const canonicalAssets = snapshot.assets.map((asset) => ({ ...asset, project: canonicalRemoteProject(asset.project, projectOptions) }));
-    const filteredAssets = selectedProject === "all" ? canonicalAssets : canonicalAssets.filter((asset) => asset.project === selectedProject);
+    const filteredAssets = canonicalAssets.filter((asset) => assetInSelectedProjectScope(asset, selectedProject));
+    const siblingAssets = canonicalAssets.filter((asset) => !assetInSelectedProjectScope(asset, selectedProject));
+    const siblingProjects = [...new Set(siblingAssets.flatMap((asset) => {
+      if (asset.type === "container") return [asset.project];
+      if (Array.isArray(asset.lineage?.projects)) return asset.lineage.projects;
+      return asset.lineage?.composeProject ? [asset.lineage.composeProject] : [];
+    }).filter((value) => value && !["unknown", "shared", selectedProject].includes(value)))].sort();
+    const hostGuard = {
+      siblingAssetCount: siblingAssets.length,
+      unattributedAssetCount: siblingAssets.filter((asset) => asset.project === "unknown").length,
+      sharedDependencyCount: filteredAssets.filter((asset) => asset.project === "shared").length,
+      siblingProjects,
+    };
     const projects = projectOptions.length
       ? projectOptions.map((item) => item.id)
       : [...new Set(canonicalAssets.map((asset) => asset.project).filter(Boolean))].sort();
@@ -1098,12 +1186,13 @@ export function collectRemoteDashboard({ source, scope, project, config, sources
       sources: sources.map((item) => item.id === source ? { ...item, status: "connected", detail: sourceConfig.kind === "github" ? selectedRepository : snapshot.host } : item),
       projects,
       projectOptions,
-      assets: filteredAssets.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 320),
+      assets: limitDashboardAssets(filteredAssets.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)), includeAllAssets),
       events: snapshot.events || [],
       remoteSnapshotAvailable: true,
       snapshotMode: sourceConfig.kind === "github" ? "github-api" : sourceConfig.kind === "ssh" ? "ssh-readonly" : "aws-ssm-readonly",
       activeRelease: snapshot.activeRelease,
       revision: snapshot.revision,
+      hostGuard,
       cached: fromCache,
     };
   } catch (error) {

@@ -281,6 +281,7 @@ export function registeredProjects(config = loadConfig()) {
       repository,
       label: String(item.label || repository.split("/").at(-1)),
       aliases: [...new Set([...(item.aliases || []), item.id, item.label, repository.split("/").at(-1)].filter(Boolean).map(String))],
+      assetPrefixes: [...new Set((item.assetPrefixes || []).filter(Boolean).map(String))],
       gitRoots: [...new Set((item.gitRoots || []).filter(Boolean).map(String))],
       environments: (item.environments || []).filter((source) => source?.id && source?.kind),
     });
@@ -319,7 +320,12 @@ export function projectSourceConfigs(config, project) {
       : [];
   return [
     { id: "local", kind: "local" },
-    ...configuredEnvironments.map((source) => ({ ...source, projectId: selectedProject })),
+    ...configuredEnvironments.map((source) => ({
+      ...source,
+      projectId: selectedProject,
+      projectAliases: registered?.aliases || [],
+      assetPrefixes: registered?.assetPrefixes || [],
+    })),
     { id: "github", kind: "github", repository: selectedProject },
   ];
 }
@@ -600,7 +606,7 @@ export function collectDashboard({ scope = "project", source = "local", project 
   const sources = projectSourceCards(config, projects, selectedProject, true);
   if (selectedSource !== "local") {
     const scopedConfig = { ...config, sources: sourceConfigs.filter((item) => item.id !== "local") };
-    const dashboard = collectRemoteDashboard({ source: selectedSource, scope: "project", project: selectedProject, config: scopedConfig, sources });
+    const dashboard = collectRemoteDashboard({ source: selectedSource, scope: "project", project: selectedProject, config: scopedConfig, sources, includeAllAssets });
     return applyRemoteRetirementGovernance(dashboard, readRetirementGovernance());
   }
   const docker = dockerInventory();
@@ -644,7 +650,7 @@ export function collectDashboard({ scope = "project", source = "local", project 
 }
 
 function normalizedTags(tags) {
-  return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.startsWith("<none>")))].sort();
+  return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.includes("<none>")))].sort();
 }
 
 export function applyRemoteRetirementGovernance(dashboard, governance) {

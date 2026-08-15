@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { gzipSync } from "node:zlib";
-import { awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, remoteSnapshotScript, resolveExpiry, ssmMutationCommand } from "../mcp/remote.mjs";
+import { assetInSelectedProjectScope, awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, limitDashboardAssets, remoteImageRemovalArgs, remoteSnapshotScript, resolveExpiry, ssmMutationCommand } from "../mcp/remote.mjs";
 
 describe("remote read-only adapters", () => {
   it("keeps the EC2 collector free of cleanup and service mutation commands", () => {
@@ -27,8 +27,43 @@ describe("remote read-only adapters", () => {
     assert.equal(context.activeLink, "/home/ubuntu/apps/finportex");
     assert.equal(context.releaseRoot, "");
     assert.match(script, /"project":DEFAULT_PROJECT/);
-    assert.match(script, /return label\(labels, "project"\) or DEFAULT_PROJECT or fallback or "unknown"/);
+    assert.match(script, /def inferred_project\(candidates\):/);
+    assert.match(script, /compose_project = labels\.get\("com\.docker\.compose\.project"\)/);
     assert.match(script, /"composeProject":labels\.get\("com\.docker\.compose\.project"\)/);
+  });
+
+  it("measures remote releases and configured host artifacts without making them disposable", () => {
+    const script = remoteSnapshotScript({
+      projectId: "owner/cms",
+      managedPaths: [{ path: "/home/ec2-user/apps/cms-transfer", kind: "release-transfer" }],
+    });
+    assert.match(script, /def disk_usage_bytes\(path\):/);
+    assert.match(script, /CONTEXT\.get\("managedPaths"\)/);
+    assert.match(script, /"type":"host_artifact"/);
+    assert.match(script, /"classification":"retained"/);
+    assert.match(script, /"source":mount\.get\("Source"\)/);
+  });
+
+  it("does not truncate a requested full remote inventory", () => {
+    const assets = Array.from({ length: 400 }, (_, index) => ({ id: index }));
+    assert.equal(limitDashboardAssets(assets, false).length, 320);
+    assert.equal(limitDashboardAssets(assets, true).length, 400);
+    const fullScript = remoteSnapshotScript({ includeAllAssets: true });
+    const encoded = fullScript.match(/CONTEXT = json\.loads\(base64\.b64decode\("([^"]+)"\)\)/)?.[1];
+    assert.ok(encoded);
+    const context = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+    assert.equal(context.includeAllAssets, true);
+    assert.match(fullScript, /if not CONTEXT\.get\("includeAllAssets"\): release_entries = release_entries\[:60\]/);
+    assert.match(fullScript, /asset_types = \["container", "image", "volume", "worktree", "host_artifact", "cache"\]/);
+    assert.match(fullScript, /if CONTEXT\.get\("includeAllAssets"\) else/);
+  });
+
+  it("keeps sibling host assets outside the selected project while retaining shared dependencies", () => {
+    const selected = "owner/SparklingCMS";
+    assert.equal(assetInSelectedProjectScope({ project: selected }, selected), true);
+    assert.equal(assetInSelectedProjectScope({ project: "plane" }, selected), false);
+    assert.equal(assetInSelectedProjectScope({ project: "shared", lineage: { projects: ["plane", selected] } }, selected), true);
+    assert.equal(assetInSelectedProjectScope({ project: "unknown", lineage: { projects: [] } }, selected), false);
   });
 
   it("stages oversized SSM snapshots in a private file for checksum-verified chunk reads", () => {
@@ -157,6 +192,10 @@ describe("remote read-only adapters", () => {
     assert.equal(payload[0].retirementEvidence.reportSha256, "b".repeat(64));
     assert.deepEqual(payload[0].retirementEvidence.approvedTags, ["example/api:retired"]);
     assert.equal(payload[0].retirementEvidence.revision, "a".repeat(40));
+  });
+
+  it("drops Docker pseudo-tags whose repository or tag is none", () => {
+    assert.deepEqual(remoteImageRemovalArgs({ tags: ["repo:<none>", "<none>:<none>", "repo:valid"] }), ["image", "rm", "repo:valid"]);
   });
 
   it("gzip-bounds a 29-image retirement command below the SSM command safety limit", () => {
