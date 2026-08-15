@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statfsSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants as FS_CONSTANTS, existsSync, fstatSync, fsyncSync, mkdirSync, openSync, readFileSync, readSync, statfsSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { homedir, hostname, platform } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -511,16 +511,6 @@ function emptyAuthorityState() {
   return { retirements: new Map(), protections: new Map(), lifecycle: new Map(), orders: new Map(), parsedEventCount: 0 };
 }
 
-function cloneAuthorityState(state) {
-  return {
-    retirements: new Map(state.retirements),
-    protections: new Map(state.protections),
-    lifecycle: new Map(state.lifecycle),
-    orders: new Map(state.orders || []),
-    parsedEventCount: Number(state.parsedEventCount || 0),
-  };
-}
-
 function scopedAssetKey(event) {
   const project = String(event?.project || "").trim();
   const environment = String(event?.environment || "").trim();
@@ -576,17 +566,26 @@ function authorityStateEvents(state) {
   return ordered.sort((left, right) => left.order - right.order).map((item) => item.event);
 }
 
-function scanLedgerAuthority(ledger, startOffset, initialState) {
-  const state = cloneAuthorityState(initialState);
+function ledgerFileIdentity(stats) {
+  return `${String(stats.dev)}:${String(stats.ino)}`;
+}
+
+function scanLedgerAuthority(ledger) {
+  const state = emptyAuthorityState();
   const fd = openSync(ledger, "r");
   const decoder = new StringDecoder("utf8");
   const buffer = Buffer.alloc(4 * 1024 * 1024);
-  let position = startOffset;
+  const digest = createHash("sha256");
+  const openedStats = fstatSync(fd);
+  const snapshotSize = openedStats.size;
+  let position = 0;
   let carry = "";
   try {
-    while (true) {
-      const bytesRead = readSync(fd, buffer, 0, buffer.length, position);
-      if (bytesRead === 0) break;
+    while (position < snapshotSize) {
+      const requested = Math.min(buffer.length, snapshotSize - position);
+      const bytesRead = readSync(fd, buffer, 0, requested, position);
+      if (bytesRead === 0) throw new Error(`Authoritative ledger changed while reading at byte ${position}`);
+      digest.update(buffer.subarray(0, bytesRead));
       position += bytesRead;
       const text = carry + decoder.write(buffer.subarray(0, bytesRead));
       const lines = text.split(/\r?\n/);
@@ -605,31 +604,41 @@ function scanLedgerAuthority(ledger, startOffset, initialState) {
   } finally {
     closeSync(fd);
   }
-  return { state, size: position };
+  return {
+    state,
+    size: position,
+    identity: ledgerFileIdentity(openedStats),
+    mtimeMs: openedStats.mtimeMs,
+    ctimeMs: openedStats.ctimeMs,
+    digest: digest.digest("hex"),
+  };
 }
 
-export function readAuthoritativeLedgerEvents() {
+export function readAuthoritativeLedgerEvents(io = {}) {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
   if (!existsSync(ledger)) return [];
-  const stats = statSync(ledger);
-  const cached = ledgerAuthorityCache.get(ledger);
-  const canResume = cached && stats.size > cached.size && cached.size > 0;
-  if (cached && stats.size === cached.size && stats.mtimeMs === cached.mtimeMs) return cached.events;
-  const initialState = canResume ? cached.state : emptyAuthorityState();
-  const startOffset = canResume ? cached.size : 0;
-  const scanned = scanLedgerAuthority(ledger, startOffset, initialState);
-  const events = authorityStateEvents(scanned.state);
-  ledgerAuthorityCache.set(ledger, { size: stats.size, mtimeMs: stats.mtimeMs, state: scanned.state, events });
-  return events;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const scanned = scanLedgerAuthority(ledger);
+    io.afterScan?.({ attempt, ledger, scanned });
+    const current = statSync(ledger);
+    const stable = ledgerFileIdentity(current) === scanned.identity
+      && current.size === scanned.size
+      && current.mtimeMs === scanned.mtimeMs
+      && current.ctimeMs === scanned.ctimeMs;
+    if (!stable) continue;
+    const events = authorityStateEvents(scanned.state);
+    ledgerAuthorityCache.set(ledger, { ...scanned, state: scanned.state, events });
+    return events;
+  }
+  throw new Error("Authoritative ledger changed during verification; refusing to use an unstable authority snapshot");
 }
 
 export function ledgerAuthorityStatus() {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
   if (!existsSync(ledger)) return { path: ledger, exists: false, integrity: "empty", bytes: 0, effectiveEvents: 0 };
   const events = readAuthoritativeLedgerEvents();
-  const stats = statSync(ledger);
   const cache = ledgerAuthorityCache.get(ledger);
-  return { path: ledger, exists: true, integrity: "verified-full-history", bytes: stats.size, parsedEventCount: cache?.state?.parsedEventCount || 0, effectiveEvents: events.length };
+  return { path: ledger, exists: true, integrity: "verified-full-history", bytes: cache?.size || 0, digest: cache?.digest, parsedEventCount: cache?.state?.parsedEventCount || 0, effectiveEvents: events.length };
 }
 
 export function retirementOverrideLabels(events, { project, environment } = {}) {
@@ -1315,7 +1324,15 @@ export function createCleanupPreview({ source = "local", project = "all", types 
   return preview;
 }
 
-function appendCleanupEvent(event, details, environment = "local") {
+export function appendCleanupEvent(event, details, environment = "local", io = {}) {
+  const operations = {
+    exists: io.exists || existsSync,
+    mkdir: io.mkdir || mkdirSync,
+    open: io.open || openSync,
+    write: io.write || writeSync,
+    fsync: io.fsync || fsyncSync,
+    close: io.close || closeSync,
+  };
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
   const item = {
     schemaVersion: 1,
@@ -1330,8 +1347,31 @@ function appendCleanupEvent(event, details, environment = "local") {
     owner: "local-user",
     details,
   };
-  mkdirSync(dirname(ledger), { recursive: true });
-  appendFileSync(ledger, `${JSON.stringify(item)}\n`, { encoding: "utf8", mode: 0o600 });
+  const ledgerDirectory = dirname(ledger);
+  const directoryExisted = operations.exists(ledgerDirectory);
+  const ledgerExisted = operations.exists(ledger);
+  const fsyncDirectory = (path) => {
+    const directoryFd = operations.open(path, FS_CONSTANTS.O_RDONLY);
+    try { operations.fsync(directoryFd); } finally { operations.close(directoryFd); }
+  };
+  operations.mkdir(ledgerDirectory, { recursive: true });
+  if (!directoryExisted && platform() !== "win32") {
+    fsyncDirectory(dirname(ledgerDirectory));
+  }
+  const payload = Buffer.from(`${JSON.stringify(item)}\n`, "utf8");
+  const fd = operations.open(ledger, FS_CONSTANTS.O_WRONLY | FS_CONSTANTS.O_CREAT | FS_CONSTANTS.O_APPEND, 0o600);
+  try {
+    let offset = 0;
+    while (offset < payload.length) {
+      const written = operations.write(fd, payload, offset, payload.length - offset);
+      if (!Number.isInteger(written) || written <= 0) throw new Error("Authoritative ledger write made no forward progress");
+      offset += written;
+    }
+    operations.fsync(fd);
+  } finally {
+    operations.close(fd);
+  }
+  if (!ledgerExisted && platform() !== "win32") fsyncDirectory(ledgerDirectory);
 }
 
 export function localCleanupArgs(asset) {

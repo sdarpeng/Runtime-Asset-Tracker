@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { readAuthoritativeLedgerEvents, retirementOverrideLabels } from "../mcp/inventory.mjs";
+import { appendCleanupEvent, readAuthoritativeLedgerEvents, retirementOverrideLabels } from "../mcp/inventory.mjs";
 
 function event(kind, environment, details = {}) {
   return {
@@ -100,6 +100,117 @@ describe("authoritative ledger state", () => {
       assert.deepEqual(readAuthoritativeLedgerEvents().filter((item) => item.event.startsWith("build.")).map((item) => item.event), ["build.failed"]);
       writeFileSync(ledger, `${JSON.stringify(build("build.succeeded", "one"))}\n${JSON.stringify(build("build.failed", "two"))}\n${JSON.stringify(build("build.succeeded", "three"))}\n`, "utf8");
       assert.deepEqual(readAuthoritativeLedgerEvents().filter((item) => item.event.startsWith("build.")).map((item) => item.event), ["build.succeeded"]);
+    } finally {
+      if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
+      else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
+    }
+  });
+
+  it("does not reuse authority from a ledger replaced by a larger file", () => {
+    const root = mkdtempSync(join(tmpdir(), "rat-ledger-replaced-"));
+    const ledger = join(root, "events.jsonl");
+    const replacement = join(root, "replacement.jsonl");
+    writeFileSync(ledger, `${JSON.stringify(event("asset.retired", "local"))}\n`, "utf8");
+    const previous = process.env.RUNTIME_ASSET_LEDGER_FILE;
+    process.env.RUNTIME_ASSET_LEDGER_FILE = ledger;
+    try {
+      assert.equal(retirementOverrideLabels(readAuthoritativeLedgerEvents(), { project: "cms", environment: "local" }).get("image:sha256:shared")?.["com.codex.runtime.retention"], "retired");
+      writeFileSync(replacement, `${JSON.stringify(event("asset.protection.bound", "local", { reason: "replacement" }))}\n${JSON.stringify({ event: "diagnostic.noise", details: { payload: "x".repeat(4096) } })}\n`, "utf8");
+      renameSync(replacement, ledger);
+      assert.equal(retirementOverrideLabels(readAuthoritativeLedgerEvents(), { project: "cms", environment: "local" }).get("image:sha256:shared")?.["com.codex.runtime.retention"], "protected");
+    } finally {
+      if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
+      else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
+    }
+  });
+
+  it("fully rescans after a same-inode truncate and larger rewrite", () => {
+    const root = mkdtempSync(join(tmpdir(), "rat-ledger-rewritten-"));
+    const ledger = join(root, "events.jsonl");
+    writeFileSync(ledger, `${JSON.stringify(event("asset.retired", "local"))}\n`, "utf8");
+    const previous = process.env.RUNTIME_ASSET_LEDGER_FILE;
+    process.env.RUNTIME_ASSET_LEDGER_FILE = ledger;
+    try {
+      readAuthoritativeLedgerEvents();
+      const identity = `${statSync(ledger).dev}:${statSync(ledger).ino}`;
+      writeFileSync(ledger, `${JSON.stringify(event("asset.protection.bound", "local", { reason: "rewrite", padding: "x".repeat(4096) }))}\n`, "utf8");
+      assert.equal(`${statSync(ledger).dev}:${statSync(ledger).ino}`, identity);
+      assert.equal(retirementOverrideLabels(readAuthoritativeLedgerEvents(), { project: "cms", environment: "local" }).get("image:sha256:shared")?.["com.codex.runtime.retention"], "protected");
+    } finally {
+      if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
+      else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
+    }
+  });
+
+  it("fully rescans a same-size ledger rewrite", () => {
+    const root = mkdtempSync(join(tmpdir(), "rat-ledger-same-size-"));
+    const ledger = join(root, "events.jsonl");
+    const retired = event("asset.retired", "local", { padding: "x".repeat(256) });
+    const protectedEvent = event("asset.protection.bound", "local", { reason: "rewrite", padding: "" });
+    let protectedLine = `${JSON.stringify(protectedEvent)}\n`;
+    const retiredLine = `${JSON.stringify(retired)}\n`;
+    protectedEvent.details.padding = "x".repeat(Buffer.byteLength(retiredLine) - Buffer.byteLength(protectedLine));
+    protectedLine = `${JSON.stringify(protectedEvent)}\n`;
+    assert.equal(Buffer.byteLength(protectedLine), Buffer.byteLength(retiredLine));
+    writeFileSync(ledger, retiredLine, "utf8");
+    const previous = process.env.RUNTIME_ASSET_LEDGER_FILE;
+    process.env.RUNTIME_ASSET_LEDGER_FILE = ledger;
+    try {
+      readAuthoritativeLedgerEvents();
+      writeFileSync(ledger, protectedLine, "utf8");
+      assert.equal(retirementOverrideLabels(readAuthoritativeLedgerEvents(), { project: "cms", environment: "local" }).get("image:sha256:shared")?.["com.codex.runtime.retention"], "protected");
+    } finally {
+      if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
+      else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
+    }
+  });
+
+  it("restarts verification when an append lands at the scan boundary", () => {
+    const root = mkdtempSync(join(tmpdir(), "rat-ledger-boundary-"));
+    const ledger = join(root, "events.jsonl");
+    writeFileSync(ledger, `${JSON.stringify(event("asset.retired", "local"))}\n`, "utf8");
+    const previous = process.env.RUNTIME_ASSET_LEDGER_FILE;
+    process.env.RUNTIME_ASSET_LEDGER_FILE = ledger;
+    try {
+      let injected = false;
+      const events = readAuthoritativeLedgerEvents({ afterScan() {
+        if (injected) return;
+        injected = true;
+        appendFileSync(ledger, `${JSON.stringify(event("asset.protection.bound", "local", { reason: "boundary" }))}\n`, "utf8");
+      } });
+      assert.equal(retirementOverrideLabels(events, { project: "cms", environment: "local" }).get("image:sha256:shared")?.["com.codex.runtime.retention"], "protected");
+    } finally {
+      if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
+      else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
+    }
+  });
+
+  it("fails a cleanup authority write before mutation when the durable flush fails", () => {
+    const steps = [];
+    const io = {
+      exists() { steps.push("exists"); return true; },
+      mkdir() { steps.push("mkdir"); },
+      open() { steps.push("open"); return 41; },
+      write(_fd, _payload, _offset, length) { steps.push("write"); return length; },
+      fsync() { steps.push("fsync"); throw new Error("injected flush failure"); },
+      close() { steps.push("close"); },
+    };
+    assert.throws(() => appendCleanupEvent("cleanup.operation.started", { operationId: "operation-failure", allowlist: [{ type: "image", id: "sha256:one" }] }, "production", io), /injected flush failure/);
+    assert.deepEqual(steps, ["exists", "exists", "mkdir", "open", "write", "fsync", "close"]);
+  });
+
+  it("recovers an exact cleanup allowlist from the fsynced authoritative ledger", () => {
+    const root = mkdtempSync(join(tmpdir(), "rat-cleanup-authority-"));
+    const ledger = join(root, "events.jsonl");
+    const previous = process.env.RUNTIME_ASSET_LEDGER_FILE;
+    process.env.RUNTIME_ASSET_LEDGER_FILE = ledger;
+    try {
+      appendCleanupEvent("cleanup.operation.started", { operationId: "operation-durable", source: "production", project: "cms", allowlist: [{ type: "image", id: "sha256:durable", sizeBytes: 10 }] }, "production");
+      const started = readAuthoritativeLedgerEvents().find((item) => item.event === "cleanup.operation.started" && item.details?.operationId === "operation-durable");
+      assert.deepEqual(started?.details?.allowlist, [{ type: "image", id: "sha256:durable", sizeBytes: 10 }]);
+      const source = readFileSync(new URL("../mcp/inventory.mjs", import.meta.url), "utf8");
+      assert.ok(source.indexOf('appendCleanupEvent("cleanup.operation.started"') < source.indexOf('if (preview.source !== "local")'));
+      assert.match(source, /FS_CONSTANTS\.O_WRONLY \| FS_CONSTANTS\.O_CREAT \| FS_CONSTANTS\.O_APPEND/);
     } finally {
       if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
       else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
