@@ -1,6 +1,6 @@
 {
   "name": "runtime-asset-tracker",
-  "version": "0.5.0+codex.20260814-autonomy-lifecycle.1",
+  "version": "0.6.0+codex.20260815-windows-safe-paths.1",
   "description": "Track Docker and host assets with broad lifecycle discovery, full-history authority, explicit execution blockers, and exact confirmed cleanup.",
   "author": {
     "name": "SparklingPlay Engineering"
@@ -41,6 +41,8 @@
       "Merged pull-request lifecycle retirement",
       "Exact volume-preserving container retirement",
       "Exact managed remote-path retirement"
+      ,"Windows native handle-relative path cleanup"
+      ,"Exact registered worktree and Git metadata retirement"
       ,"Broad unlabelled build-chain discovery"
       ,"Suspected, blocked, and executable retirement states"
       ,"Full-history scoped ledger authority"

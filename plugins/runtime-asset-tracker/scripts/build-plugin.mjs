@@ -58,7 +58,8 @@ const sourceFiles = [
 const sourceDigest = sha256(Buffer.concat(sourceFiles.flatMap((path) => [Buffer.from(`${relative(root, path).replaceAll("\\", "/")}\0`), readFileSync(path)])));
 const serverSha256 = sha256(readFileSync(join(outputRoot, "server.mjs")));
 const dashboardSha256 = sha256(readFileSync(join(outputRoot, "dashboard.html")));
-const safeDeleteHelperSha256 = sha256(readFileSync(join(root, "scripts", "safe-delete-path.py")));
+const safeDeletePosixHelperSha256 = sha256(readFileSync(join(root, "scripts", "safe-delete-path.py")));
+const safeDeleteWindowsHelperSha256 = sha256(readFileSync(join(root, "scripts", "safe-delete-path-windows.ps1")));
 const sourceDirty = gitValue(["status", "--porcelain", "--", ".codex-plugin", "mcp", "scripts", "skills", "ui/src", "package.json", "package-lock.json", "ui/package.json", "ui/package-lock.json"]) !== "";
 const provenance = {
   schemaVersion: "sparkling.tool-build-provenance/v1",
@@ -69,7 +70,9 @@ const provenance = {
   sourceDigest,
   serverSha256,
   dashboardSha256,
-  safeDeleteHelperSha256,
+  safeDeleteHelperSha256: safeDeletePosixHelperSha256,
+  safeDeletePosixHelperSha256,
+  safeDeleteWindowsHelperSha256,
 };
 provenance.buildDigest = sha256(JSON.stringify(provenance));
 writeFileSync(join(outputRoot, "build-provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`, "utf8");

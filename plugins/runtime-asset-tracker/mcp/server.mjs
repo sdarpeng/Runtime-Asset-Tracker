@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
+import { platform } from "node:os";
 import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -27,9 +28,11 @@ export function runtimeIdentity() {
   const provenance = readJson(join(pluginRoot, "dist", "build-provenance.json"));
   const serverPath = fileURLToPath(import.meta.url);
   const serverSha256 = createHash("sha256").update(readFileSync(serverPath)).digest("hex");
-  const helperPath = join(pluginRoot, "scripts", "safe-delete-path.py");
+  const windows = platform() === "win32";
+  const helperName = windows ? "safe-delete-path-windows.ps1" : "safe-delete-path.py";
+  const helperPath = join(pluginRoot, "scripts", helperName);
   const safeDeleteHelperSha256Observed = existsSync(helperPath) ? createHash("sha256").update(readFileSync(helperPath)).digest("hex") : null;
-  const safeDeleteHelperSha256Declared = provenance.safeDeleteHelperSha256 || null;
+  const safeDeleteHelperSha256Declared = (windows ? provenance.safeDeleteWindowsHelperSha256 : provenance.safeDeletePosixHelperSha256 || provenance.safeDeleteHelperSha256) || null;
   return {
     pluginId: String(manifest.name || "runtime-asset-tracker"),
     manifestVersion: String(manifest.version || "unknown"),
@@ -42,6 +45,7 @@ export function runtimeIdentity() {
     serverSha256,
     safeDeleteHelperSha256Declared,
     safeDeleteHelperSha256Observed,
+    safeDeleteHelperName: helperName,
     safeDeleteHelperIntegrity: Boolean(safeDeleteHelperSha256Declared && safeDeleteHelperSha256Observed === safeDeleteHelperSha256Declared),
     serverInstanceId: runtimeInstanceId(),
   };

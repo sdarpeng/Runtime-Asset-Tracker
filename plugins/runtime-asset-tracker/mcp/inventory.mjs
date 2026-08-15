@@ -6,7 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
 import { collectRemoteDashboard, executeRemoteCleanup, expiryClassification, resolveExpiry, resumeAwsCleanup } from "./remote.mjs";
 import { importRetirementReconciliation, retirementAttestations } from "./reconciliation.mjs";
-import { discoverWorktreeAssets, executePathAssetCleanup, importPathRetirementReconciliation } from "./path-assets.mjs";
+import { discoverWorktreeAssets, executePathAssetCleanup, importPathRetirementReconciliation, pathCleanupEvidence } from "./path-assets.mjs";
 import { importUnifiedRetirementReconciliation } from "./lifecycle-reconciliation.mjs";
 import { buildUnifiedAssetTable, loadGithubAuthority, writeUnifiedAssetTable } from "./lifecycle-table.mjs";
 import { discoverRetirementCandidates } from "./candidate-policy.mjs";
@@ -1279,6 +1279,7 @@ export function createCleanupPreview({ source = "local", project = "all", types 
       successorTags: normalizedTags(asset.lineage.automaticRetirement.successorTags),
       successorSuccessful: asset.lineage.automaticRetirement.successorSuccessful === true,
     } : undefined,
+    pathEvidence: ["worktree", "worktree_residual", "host_artifact"].includes(asset.type) ? pathCleanupEvidence(asset) : undefined,
     remoteKind: asset.remoteKind,
   }));
   if (requestedIds) {
@@ -1596,10 +1597,21 @@ export function executeCleanup(input, context = {}) {
     }
     if (["worktree", "worktree_residual", "host_artifact"].includes(asset.type)) {
       try {
+        if (JSON.stringify(requested.pathEvidence) !== JSON.stringify(pathCleanupEvidence(asset))) {
+          results.push({ ...requested, sizeBytes: asset.sizeBytes, status: "skipped", reclaimedBytes: 0, reason: "Path, managed root, fingerprint, bytes, reconciliation, or Git worktree metadata changed after preview." });
+          continue;
+        }
         executePathAssetCleanup(asset);
         results.push({ ...requested, sizeBytes: asset.sizeBytes, status: "removed", reclaimedBytes: Number(asset.sizeBytes || 0) });
       } catch (error) {
-        results.push({ ...requested, sizeBytes: asset.sizeBytes, status: "failed", reclaimedBytes: 0, reason: error.message });
+        const targetGone = !existsSync(resolve(asset.path || asset.lineage?.path || ""));
+        results.push({
+          ...requested,
+          sizeBytes: asset.sizeBytes,
+          status: targetGone ? "partial" : "failed",
+          reclaimedBytes: targetGone ? Number(asset.sizeBytes || 0) : 0,
+          reason: targetGone ? `Exact path was removed but post-delete or Git metadata verification failed: ${error.message}` : error.message,
+        });
       }
       continue;
     }
@@ -1632,9 +1644,10 @@ export function executeCleanup(input, context = {}) {
   dashboardCache.clear();
   const failed = results.filter((item) => item.status === "failed").length;
   const skipped = results.filter((item) => item.status === "skipped").length;
+  const partial = results.filter((item) => item.status === "partial").length;
   const removed = results.filter((item) => item.status === "removed").length;
-  const status = failed === 0 && skipped === 0 ? "complete" : removed > 0 ? "partial" : "failed";
-  appendCleanupEvent("cleanup.executed", { previewToken: token, operationId: preview.operationId, status, removed: String(removed), failed: String(failed), skipped: String(skipped) });
+  const status = failed === 0 && skipped === 0 && partial === 0 ? "complete" : removed > 0 || partial > 0 ? "partial" : "failed";
+  appendCleanupEvent("cleanup.executed", { previewToken: token, operationId: preview.operationId, status, removed: String(removed), partial: String(partial), failed: String(failed), skipped: String(skipped) });
   return { completedAt: new Date().toISOString(), operationId: preview.operationId, status, results };
 }
 

@@ -56,6 +56,7 @@ describe("authenticated loopback HTTP", () => {
     assert.match(identity.safeDeleteHelperSha256Declared || "", /^[0-9a-f]{64}$/);
     assert.equal(identity.safeDeleteHelperSha256Observed, identity.safeDeleteHelperSha256Declared);
     assert.equal(identity.safeDeleteHelperIntegrity, true);
+    assert.equal(identity.safeDeleteHelperName, process.platform === "win32" ? "safe-delete-path-windows.ps1" : "safe-delete-path.py");
     assert.equal((await fetch(`${baseUrl}/`)).status, 401);
     const bootstrap = await fetch(bootstrapUrl, { redirect: "manual" });
     assert.equal(bootstrap.status, 303);

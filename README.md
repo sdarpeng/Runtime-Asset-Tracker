@@ -2,7 +2,7 @@
 
 Runtime Asset Tracker 是一个面向 Codex 的运行时资产治理插件，用于跨项目、跨环境地盘点、追踪、解释和安全清理 Docker、Git worktree、主机目录、AWS EC2 与 GitHub Actions 资产。
 
-当前版本：`0.5.0+codex.20260814-autonomy-lifecycle.1`
+当前版本：`0.6.0+codex.20260815-windows-safe-paths.1`
 
 它解决的不是“怎么一键 prune”，而是更困难也更重要的问题：
 
@@ -142,7 +142,7 @@ AWS SSM 调用一旦进入可能已发送的状态，就不会自动重发。若
 | 数据源 | 盘点能力 | 可执行清理范围 |
 | --- | --- | --- |
 | Local Docker | 镜像、容器、卷、网络、BuildKit cache、引用和标签 | 通过实时复核的精确镜像、显式可丢弃容器、严格证明可丢弃的卷、未使用 BuildKit cache |
-| Local filesystem | Git worktree、残留目录、生成目录、压缩包、大文件 | POSIX 上通过 fingerprint 和根目录约束的残留/生成物；Windows 路径当前为 preview-only |
+| Local filesystem | Git worktree、残留目录、生成目录、压缩包、大文件 | 通过精确 reconciliation、实时 fingerprint 和平台原生 handle-relative helper 的 Windows/POSIX 路径；满足双向 Git 元数据契约的 clean registered worktree |
 | AWS EC2 / SSM | Docker、根盘容量、镜像唯一层、容器引用、卷、active release、受管路径 | 精确镜像、卷、BuildKit cache、已证明退休且保留卷的容器、受管根目录下的精确路径 |
 | OpenSSH | 与 EC2 相同的只读快照和精确远端清理 | 与 SSH 配置和远端安全复核允许的 exact allowlist 一致 |
 | GitHub | Actions artifacts、caches、workflow runs、PR/revision authority | 已过期 artifact、closed PR cache、超过 30 天未访问的 cache |
@@ -185,7 +185,8 @@ flowchart LR
 | Unified Asset Table | `mcp/lifecycle-table.mjs` | Local/Production/Staging 与 GitHub authority 关联 |
 | Event Ledger | `scripts/runtime-asset-ledger.mjs` / `.py` | 记录构建、部署、Compose、Docker events 和 snapshot |
 | Compose Wrapper | `scripts/run-compose.mjs` | 在 Compose 前后写入事件并执行 snapshot |
-| POSIX 删除助手 | `scripts/safe-delete-path.py` | handle-relative、no-follow 的精确路径删除 |
+| POSIX 删除助手 | `scripts/safe-delete-path.py` | `dir_fd`、`O_NOFOLLOW`、mount identity 约束的精确路径删除 |
+| Windows 删除助手 | `scripts/safe-delete-path-windows.ps1` | 受管根句柄、相对 `NtCreateFile`、reparse 不跟随、卷序列号和 file ID 绑定删除 |
 | Build Pipeline | `scripts/build-plugin.mjs` | 打包 MCP、Dashboard 与 provenance，生成 SHA-256 身份 |
 
 ### 两种运行模式
@@ -203,7 +204,7 @@ HTTP 模式包含 Host 校验、Bearer 或 HttpOnly session、SameSite=Strict、
 - source dirty 状态
 - bundled server SHA-256
 - Dashboard SHA-256
-- POSIX safe-delete helper SHA-256
+- POSIX 与 Windows safe-delete helper SHA-256
 - build digest
 
 运行时会重新计算 server 和 helper 的实际 hash。路径删除助手完整性不匹配时，路径执行会 fail closed。
@@ -234,7 +235,8 @@ HTTP 模式包含 Host 校验、Bearer 或 HttpOnly session、SameSite=Strict、
 - 远端自动候选没有精确 reconciliation。
 - volume 缺少独立的持久化数据证明。
 - 路径不在 managed root、fingerprint 漂移或存在 bind mount consumer。
-- Windows 缺少 native handle-relative 路径删除能力。
+- 当前平台 helper 缺失、provenance hash 不一致或权限不安全。
+- Registered worktree 的 `.git`、common Git directory、metadata 目录和 backlink 无法形成精确双向合同。
 - preview 后 authority 新增保护、撤销退休或发生身份漂移。
 
 ### 为什么不依赖人工 tag
@@ -328,6 +330,20 @@ Token 与 authenticated actor、server instance、operation ID 和 allowlist dig
 - 需要时 `stopBeforeRemoval=true`
 
 未知卷、数据库、上传、媒体、备份、队列和持久化缓存默认保护。
+
+### Windows 本地路径安全删除
+
+Windows 本地文件和目录已经可以进入精确清理 token，但必须同时满足：
+
+- 路径位于配置的受管根之下，并通过退休 reconciliation 绑定绝对路径、字节数、内容 fingerprint 和恢复来源。
+- Preview 把 path、managed root、fingerprint、bytes、report SHA-256 以及 worktree metadata 合同纳入 confirmation digest。
+- 执行时重新扫描内容，并再次确认路径没有穿过 junction、symbolic link 或其他 reparse ancestry。
+- Windows helper 的源码 SHA-256 必须与 frozen build provenance 一致；Tracker 将已验证源码从内存管道交给隔离的 PowerShell 进程，不从可能被替换的脚本路径直接执行。
+- helper 打开受管根时使用 `FILE_FLAG_OPEN_REPARSE_POINT`，校验卷序列号与 file ID；每个后代通过父句柄相对 `NtCreateFile` 打开。
+- 普通目录才会递归枚举；junction、symbolic link 等 reparse 子项只删除链接本身，绝不进入其目标。
+- 根目录或目标对象在扫描与 native handle open 之间被替换时，file ID 漂移会使操作失败且不删除替代对象。
+
+Clean registered worktree 还需要精确的双向 Git 合同：checkout 的 `.git` 文件必须指向 common Git directory 下一个直接的 `.git/worktrees/<id>` 目录，且该目录的 `gitdir` backlink 必须指回同一个 checkout。执行时 Tracker 先锁定 worktree，再分别通过安全 helper 删除 checkout 和这一项 Git metadata。Primary、dirty、显式 locked、metadata 模糊或合同漂移的 worktree 始终不执行。
 
 ## 安装
 
@@ -679,8 +695,8 @@ Tracker **不会**：
 ### 平台差异
 
 - POSIX 残留/生成物：只有通过 SHA-256 完整性验证的 helper 才能执行 handle-relative、no-follow 删除。
-- Git 已注册 worktree：当前仍以 inventory/reconciliation 为主，直到 Git metadata 和目录 handle 可以绑定在同一验证链。
-- Windows filesystem path：当前为 preview-only；Docker 清理不受影响。
+- Windows 残留/生成物：只有通过 SHA-256 完整性验证的 PowerShell/C# helper 才能执行 root-handle-relative、open-reparse-point 删除。
+- Git 已注册 worktree：只允许 clean、非 primary、未显式锁定且具有双向 Git metadata 合同的精确退休项；其他状态 fail closed。
 
 ### AWS SSM 传输
 
@@ -735,6 +751,7 @@ node tests/mcp-smoke.mjs
 - resume 不重发命令。
 - HTTP loopback、Host、Origin、session 与请求体限制。
 - 路径 fingerprint、reparse point、helper integrity 和 POSIX safe delete。
+- Windows root/target file-ID 漂移、junction 不跟随、相对句柄删除与 registered-worktree metadata 合同。
 - MCP smoke test 与 committed bundle provenance。
 
 构建后的 `dist/server.mjs`、`dist/dashboard.html` 和 `dist/build-provenance.json` 必须一并提交，保证 marketplace 安装副本无需现场重新构建。
@@ -757,9 +774,9 @@ Tracker 会把同项目、同镜像仓库、同服务族的构建整理成 super
 
 这是设计行为。容器退休默认保留卷，且永远不使用 `-v`。卷需要自己的零引用、业务数据分类和精确 disposable 证明。
 
-### 为什么 Windows worktree 只能预览？
+### Windows 本地路径现在能直接清理吗？
 
-Windows 需要 native handle-relative、open-reparse-point 的删除助手，才能把路径身份验证和删除绑定到同一个句柄。当前版本选择 fail closed，避免 junction/TOCTOU 越界删除。
+可以，但不是任意路径删除。只有完成精确 reconciliation、进入 `executable-candidate`、被用户确认 token 绑定并通过执行时复核的受管路径才会删除。Windows helper 使用 native parent handle、`NtCreateFile`、reparse-point 不跟随、卷序列号与 file ID 校验；primary、dirty、locked、未登记恢复来源或 Git metadata 合同不完整的 worktree 仍然只展示 blocker。
 
 ### 为什么清理 Docker 后 D 盘没有立刻增加？
 

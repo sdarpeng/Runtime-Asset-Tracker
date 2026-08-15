@@ -15,12 +15,13 @@ const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const pluginRoot = resolve(moduleDirectory, "..");
 
 export function safeDeleteHelperIntegrity() {
-  const helperPath = join(pluginRoot, "scripts", "safe-delete-path.py");
+  const windows = platform() === "win32";
+  const helperPath = join(pluginRoot, "scripts", windows ? "safe-delete-path-windows.ps1" : "safe-delete-path.py");
   const provenancePath = join(pluginRoot, "dist", "build-provenance.json");
   try {
     const provenance = JSON.parse(readFileSync(provenancePath, "utf8"));
     const observedSha256 = createHash("sha256").update(readFileSync(helperPath)).digest("hex");
-    const declaredSha256 = String(provenance.safeDeleteHelperSha256 || "");
+    const declaredSha256 = String(windows ? provenance.safeDeleteWindowsHelperSha256 : (provenance.safeDeletePosixHelperSha256 || provenance.safeDeleteHelperSha256) || "");
     const stats = statSync(helperPath);
     const ownerSafe = platform() === "win32" || typeof process.geteuid !== "function" || Number(stats.uid) === Number(process.geteuid());
     const modeSafe = platform() === "win32" || (Number(stats.mode) & 0o022) === 0;
@@ -203,6 +204,53 @@ function readPathAttestations(events) {
   return attestations;
 }
 
+function resolveGitReportedPath(value, base) {
+  const text = String(value || "").trim();
+  return isAbsolute(text) ? resolve(text) : resolve(base, text);
+}
+
+function registeredWorktreeRemovalContract(path, gitRoot) {
+  const gitFile = join(path, ".git");
+  try {
+    const gitFileStats = lstatSync(gitFile);
+    if (!gitFileStats.isFile() || gitFileStats.isSymbolicLink()) return { ok: false, reason: "Registered worktree .git is not a regular non-reparse file." };
+    const match = /^gitdir:\s*(.+)$/i.exec(readFileSync(gitFile, "utf8").trim());
+    if (!match) return { ok: false, reason: "Registered worktree .git does not contain an exact gitdir pointer." };
+    const commonReported = runGit(["rev-parse", "--path-format=absolute", "--git-common-dir"], gitRoot, 10_000);
+    if (!commonReported) return { ok: false, reason: "Registered worktree common Git directory cannot be resolved." };
+    const commonGitDir = resolveGitReportedPath(commonReported, gitRoot);
+    const metadataRoot = join(commonGitDir, "worktrees");
+    const metadataPath = resolveGitReportedPath(match[1], path);
+    if (keyPath(dirname(metadataPath)) !== keyPath(metadataRoot) || !canonicalPathContainment(metadataPath, metadataRoot)) return { ok: false, reason: "Registered worktree metadata is not one exact child below the common Git worktrees root." };
+    const backlink = join(metadataPath, "gitdir");
+    const backlinkStats = lstatSync(backlink);
+    if (!backlinkStats.isFile() || backlinkStats.isSymbolicLink()) return { ok: false, reason: "Registered worktree metadata backlink is not a regular non-reparse file." };
+    const backlinkTarget = resolveGitReportedPath(readFileSync(backlink, "utf8").trim(), metadataPath);
+    if (keyPath(backlinkTarget) !== keyPath(gitFile)) return { ok: false, reason: "Registered worktree metadata backlink does not match the exact checkout .git file." };
+    if (existsSync(join(metadataPath, "locked"))) return { ok: false, reason: "Registered worktree is explicitly locked and remains protected." };
+    return { ok: true, gitRoot: resolve(gitRoot), gitFile, commonGitDir, metadataRoot, metadataPath };
+  } catch (error) {
+    return { ok: false, reason: `Registered worktree metadata contract failed: ${error.message}` };
+  }
+}
+
+export function pathCleanupEvidence(asset) {
+  if (!PATH_TYPES.has(asset?.type)) return undefined;
+  const contract = asset.lineage?.worktreeRemoval;
+  return {
+    path: keyPath(asset.path || asset.lineage?.path || ""),
+    allowedRoot: keyPath(asset.lineage?.allowedRoot || ""),
+    expectedBytes: Number(asset.sizeBytes || 0),
+    contentFingerprint: String(asset.lineage?.contentFingerprint || "").toLowerCase(),
+    reportSha256: String(asset.lineage?.retirement?.reportSha256 || ""),
+    worktreeRemoval: asset.type === "worktree" ? {
+      gitRoot: keyPath(contract?.gitRoot || ""),
+      metadataRoot: keyPath(contract?.metadataRoot || ""),
+      metadataPath: keyPath(contract?.metadataPath || ""),
+    } : undefined,
+  };
+}
+
 function applyAttestation(asset, attestations) {
   const attestation = attestations.get(`${asset.type}:${asset.id}`);
   if (!attestation) return asset;
@@ -226,15 +274,14 @@ function applyAttestation(asset, attestations) {
     lineage: { ...asset.lineage, retirement: attestation, recoverySource: attestation.recoverySource },
     reason: "Exact path retirement attestation matches the live byte count and content fingerprint.",
   };
-  if (asset.type === "worktree") {
-    return { ...attested, classification: "review", retirementBlocked: true, reason: "Registered worktree deletion remains blocked: Git metadata removal is not bound to a verified directory handle." };
-  }
-  if (platform() === "win32") {
-    return { ...attested, classification: "review", retirementBlocked: true, reason: "Windows path deletion remains blocked until a native handle-relative, open-reparse-point helper is available." };
-  }
+  if (asset.type === "worktree" && !asset.lineage?.worktreeRemoval?.ok) return { ...attested, classification: "review", retirementBlocked: true, reason: asset.lineage?.worktreeRemoval?.reason || "Registered worktree deletion is blocked because its exact Git metadata contract is unavailable." };
   const helperIntegrity = safeDeleteHelperIntegrity();
-  if (!helperIntegrity.ok) return { ...attested, classification: "review", retirementBlocked: true, reason: "POSIX path deletion helper identity, owner, or permissions do not match the frozen build provenance." };
+  if (!helperIntegrity.ok) return { ...attested, classification: "review", retirementBlocked: true, reason: `${platform() === "win32" ? "Windows" : "POSIX"} path deletion helper identity, owner, or permissions do not match the frozen build provenance.` };
   return attested;
+}
+
+function runGitRequired(args, cwd, timeout = 20_000) {
+  return execFileSync("git", args, { cwd, encoding: "utf8", windowsHide: true, timeout, maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }).trim();
 }
 
 function candidateRoots(config, projects) {
@@ -301,6 +348,7 @@ export function discoverWorktreeAssets(config = {}, projects = [], events = []) 
     const primary = registration ? keyPath(registration.gitRoot) === key : false;
     const dirty = Boolean(status);
     const type = registration ? "worktree" : "worktree_residual";
+    const worktreeRemoval = registration && !primary ? registeredWorktreeRemovalContract(path, registration.gitRoot) : undefined;
     const artifactBytes = scan.artifacts.reduce((sum, item) => sum + item.sizeBytes, 0);
     const rootProject = projects.flatMap((project) => (project.gitRoots || []).map((root) => ({
       project,
@@ -340,6 +388,7 @@ export function discoverWorktreeAssets(config = {}, projects = [], events = []) 
         scanTruncated: scan.truncated,
         reparsePoints: scan.reparsePoints,
         threadBinding: binding.threadId ? binding : undefined,
+        worktreeRemoval,
       },
       reason: primary ? "Primary checkout is protected." : dirty ? "Contains uncommitted changes." : lifecycleProtected ? "Task binding is active, pinned, permanent, or lacks a completed outcome." : registration ? "Clean registered worktree requires an exact retirement attestation." : "Physical directory is not registered by Git and requires exact retirement evidence.",
     };
@@ -450,12 +499,11 @@ export function importPathRetirementReconciliation({ reportPath, owner = "platfo
 }
 
 function fileIdentity(path) {
-  const stats = lstatSync(path);
-  return { dev: String(stats.dev), ino: String(stats.ino), mode: Number(stats.mode), birthtimeMs: Math.trunc(Number(stats.birthtimeMs || 0)), reparse: stats.isSymbolicLink() };
+  const stats = lstatSync(path, { bigint: true });
+  return { dev: String(stats.dev), ino: String(stats.ino), mode: Number(stats.mode), birthtimeMs: Math.trunc(Number(stats.birthtimeMs || 0n)), reparse: stats.isSymbolicLink() };
 }
 
-function handleRelativeRemove(path, allowedRoot) {
-  if (platform() === "win32") throw new Error("Windows path cleanup is blocked until a native handle-relative, open-reparse-point helper is available.");
+function handleRelativeRemove(path, allowedRoot, beforeHandleOpen) {
   const rootIdentity = fileIdentity(allowedRoot);
   const targetIdentity = fileIdentity(path);
   if (rootIdentity.reparse || targetIdentity.reparse) throw new Error("Path cleanup cannot target a reparse point.");
@@ -464,6 +512,34 @@ function handleRelativeRemove(path, allowedRoot) {
   const helperSource = readFileSync(integrity.helperPath, "utf8");
   const executionSha256 = createHash("sha256").update(helperSource).digest("hex");
   if (executionSha256 !== integrity.declaredSha256) throw new Error("Handle-relative path cleanup helper changed between identity verification and execution.");
+  if (platform() === "win32") {
+    const relativeTarget = relative(allowedRoot, path);
+    if (!relativeTarget || relativeTarget === ".." || relativeTarget.startsWith(`..${sep}`) || isAbsolute(relativeTarget)) throw new Error("Windows path cleanup target is outside its managed root.");
+    if (beforeHandleOpen) beforeHandleOpen();
+    execFileSync("powershell.exe", [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy", "Bypass",
+      "-Command", "$verifiedSource = [Console]::In.ReadToEnd(); & ([ScriptBlock]::Create($verifiedSource)); if (-not $?) { exit 1 }",
+    ], {
+      encoding: "utf8",
+      input: helperSource,
+      timeout: 120_000,
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        RAT_SAFE_DELETE_ROOT: allowedRoot,
+        RAT_SAFE_DELETE_RELATIVE: relativeTarget,
+        RAT_SAFE_DELETE_ROOT_DEV: rootIdentity.dev,
+        RAT_SAFE_DELETE_ROOT_INO: rootIdentity.ino,
+        RAT_SAFE_DELETE_TARGET_DEV: targetIdentity.dev,
+        RAT_SAFE_DELETE_TARGET_INO: targetIdentity.ino,
+      },
+    });
+    return;
+  }
   execFileSync("python3", [
     "-c", helperSource,
     "--root", allowedRoot,
@@ -475,10 +551,40 @@ function handleRelativeRemove(path, allowedRoot) {
   ], { encoding: "utf8", timeout: 120_000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
 }
 
-export function executePathAssetCleanup(asset, { beforeIsolation } = {}) {
+function executeRegisteredWorktreeCleanup(asset, path, allowedRoot, { beforeHandleOpen, beforeMetadataHandleOpen } = {}) {
+  if (asset.lineage?.primary || asset.lineage?.dirty) throw new Error("Primary or dirty worktrees are protected.");
+  const liveStatus = runGit(["status", "--short"], path, 10_000);
+  if (liveStatus) throw new Error("Registered worktree became dirty after preview.");
+  const contract = registeredWorktreeRemovalContract(path, asset.lineage?.gitRoot);
+  if (!contract.ok) throw new Error(contract.reason || "Registered worktree metadata contract is invalid.");
+  const expectedContract = asset.lineage?.worktreeRemoval;
+  if (!expectedContract?.ok
+    || keyPath(expectedContract.gitRoot) !== keyPath(contract.gitRoot)
+    || keyPath(expectedContract.metadataRoot) !== keyPath(contract.metadataRoot)
+    || keyPath(expectedContract.metadataPath) !== keyPath(contract.metadataPath)) throw new Error("Registered worktree metadata identity changed after preview.");
+  let locked = false;
+  try {
+    runGitRequired(["worktree", "lock", "--reason", "runtime-asset-tracker-exact-cleanup", path], contract.gitRoot, 20_000);
+    locked = true;
+    const lockedScan = scanPathUsage(path);
+    if (lockedScan.truncated || lockedScan.sizeBytes !== Number(asset.sizeBytes) || lockedScan.fingerprint !== asset.lineage?.contentFingerprint) throw new Error("Registered worktree content changed while acquiring the exact Git lock.");
+    handleRelativeRemove(path, allowedRoot, beforeHandleOpen);
+    if (existsSync(path)) throw new Error("Exact registered worktree path still exists after cleanup.");
+    if (!canonicalPathContainment(contract.metadataPath, contract.metadataRoot)) throw new Error("Registered worktree metadata ancestry changed before cleanup.");
+    handleRelativeRemove(contract.metadataPath, contract.metadataRoot, beforeMetadataHandleOpen);
+    if (existsSync(contract.metadataPath)) throw new Error("Exact registered worktree metadata still exists after cleanup.");
+    const remaining = parseWorktreeBlocks(runGit(["worktree", "list", "--porcelain"], contract.gitRoot, 10_000));
+    if (remaining.some((item) => keyPath(item.worktree) === keyPath(path))) throw new Error("Git still reports the retired worktree after exact metadata cleanup.");
+  } catch (error) {
+    if (locked && existsSync(path)) {
+      try { runGitRequired(["worktree", "unlock", path], contract.gitRoot, 10_000); } catch { /* preserve the original failure */ }
+    }
+    throw error;
+  }
+}
+
+export function executePathAssetCleanup(asset, { beforeIsolation, beforeHandleOpen, beforeMetadataHandleOpen } = {}) {
   if (!PATH_TYPES.has(asset?.type) || (asset.classification !== "reclaimable" && asset.retirementState !== "executable-candidate")) throw new Error("Path asset is not reclaimable.");
-  if (platform() === "win32") throw new Error("Windows path cleanup is blocked until a native handle-relative, open-reparse-point helper is available.");
-  if (asset.type === "worktree") throw new Error("Registered worktree cleanup is blocked until Git metadata removal can be bound to the same verified directory handle.");
   const path = resolve(asset.path || asset.lineage?.path || "");
   const allowedRoot = resolve(asset.lineage?.allowedRoot || "");
   if (!path || !allowedRoot || !canonicalPathContainment(path, allowedRoot)) throw new Error("Path cleanup target is outside its canonical allowed root, crosses a reparse point, or no longer exists.");
@@ -486,7 +592,8 @@ export function executePathAssetCleanup(asset, { beforeIsolation } = {}) {
   if (current.truncated || current.sizeBytes !== Number(asset.sizeBytes) || current.fingerprint !== asset.lineage?.contentFingerprint) throw new Error("Path content changed after preview.");
   if (beforeIsolation) beforeIsolation();
   if (!canonicalPathContainment(path, allowedRoot)) throw new Error("Path ancestry changed before isolation.");
-  handleRelativeRemove(path, allowedRoot);
+  if (asset.type === "worktree") executeRegisteredWorktreeCleanup(asset, path, allowedRoot, { beforeHandleOpen, beforeMetadataHandleOpen });
+  else handleRelativeRemove(path, allowedRoot, beforeHandleOpen);
   if (existsSync(path)) throw new Error("Exact path still exists after cleanup.");
   return { removed: true };
 }
