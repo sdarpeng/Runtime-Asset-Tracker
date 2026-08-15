@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "sparkling.tool-build-provenance/v1",
+  "builtAt": "2026-08-15T05:46:08.945Z",
+  "sourceCommit": "f1b4caa73e4f04d59719bc3fe170ac284011f308",
+  "sourceTree": "7d542ae77796c95e849a13d743399982325b9e36",
+  "sourceDirty": false,
+  "sourceDigest": "a094c397da599615d7bcbb04fb172eacb39d6825d53f3571d1ef86a520641957",
+  "serverSha256": "9f7c1e26df0269cd842d69e25457d9b080c0b43ea35941f6a722cc2f3e69cc79",
+  "dashboardSha256": "219fe28db1647e21486163f43025ac24cc1bd351017546d009b4c004e03278d9",
+  "buildDigest": "9d5cc4e8053eddf02f4fbb5e72639844ccefb26902b283e05091434f5e6b9230"
+}

@@ -47,7 +47,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/zod/v4/core/core.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/core.js
 // @__NO_SIDE_EFFECTS__
 function $constructor(name, initializer3, params) {
   function init(inst, def) {
@@ -107,7 +107,7 @@ function config(newConfig) {
 }
 var _a, NEVER, $brand, $ZodAsyncError, $ZodEncodeError, globalConfig;
 var init_core = __esm({
-  "node_modules/zod/v4/core/core.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/core.js"() {
     NEVER = /* @__PURE__ */ Object.freeze({
       status: "aborted"
     });
@@ -128,7 +128,7 @@ var init_core = __esm({
   }
 });
 
-// node_modules/zod/v4/core/util.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/util.js
 var util_exports = {};
 __export(util_exports, {
   BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES,
@@ -739,7 +739,7 @@ function uint8ArrayToHex(bytes) {
 }
 var EVALUATING, captureStackTrace, allowsEval, getParsedType2, propertyKeyTypes, primitiveTypes, NUMBER_FORMAT_RANGES, BIGINT_FORMAT_RANGES, Class;
 var init_util = __esm({
-  "node_modules/zod/v4/core/util.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/util.js"() {
     init_core();
     EVALUATING = /* @__PURE__ */ Symbol("evaluating");
     captureStackTrace = "captureStackTrace" in Error ? Error.captureStackTrace : (..._args) => {
@@ -830,7 +830,7 @@ var init_util = __esm({
   }
 });
 
-// node_modules/zod/v4/core/errors.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/errors.js
 function flattenError(error51, mapper = (issue2) => issue2.message) {
   const fieldErrors = {};
   const formErrors = [];
@@ -952,7 +952,7 @@ function prettifyError(error51) {
 }
 var initializer, $ZodError, $ZodRealError;
 var init_errors = __esm({
-  "node_modules/zod/v4/core/errors.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/errors.js"() {
     init_core();
     init_util();
     initializer = (inst, def) => {
@@ -976,10 +976,10 @@ var init_errors = __esm({
   }
 });
 
-// node_modules/zod/v4/core/parse.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/parse.js
 var _parse, parse, _parseAsync, parseAsync, _safeParse, safeParse, _safeParseAsync, safeParseAsync, _encode, encode, _decode, decode, _encodeAsync, encodeAsync, _decodeAsync, decodeAsync, _safeEncode, safeEncode, _safeDecode, safeDecode, _safeEncodeAsync, safeEncodeAsync, _safeDecodeAsync, safeDecodeAsync;
 var init_parse = __esm({
-  "node_modules/zod/v4/core/parse.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/parse.js"() {
     init_core();
     init_errors();
     init_util();
@@ -1072,7 +1072,7 @@ var init_parse = __esm({
   }
 });
 
-// node_modules/zod/v4/core/regexes.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/regexes.js
 var regexes_exports = {};
 __export(regexes_exports, {
   base64: () => base64,
@@ -1164,7 +1164,7 @@ function fixedBase64url(length) {
 }
 var cuid, cuid2, ulid, xid, ksuid, nanoid, duration, extendedDuration, guid, uuid, uuid4, uuid6, uuid7, email, html5Email, rfc5322Email, unicodeEmail, idnEmail, browserEmail, _emoji, ipv4, ipv6, mac, cidrv4, cidrv6, base64, base64url, hostname, domain, httpProtocol, e164, dateSource, date, string, bigint, integer, number, boolean, _null, _undefined, lowercase, uppercase, hex, md5_hex, md5_base64, md5_base64url, sha1_hex, sha1_base64, sha1_base64url, sha256_hex, sha256_base64, sha256_base64url, sha384_hex, sha384_base64, sha384_base64url, sha512_hex, sha512_base64, sha512_base64url;
 var init_regexes = __esm({
-  "node_modules/zod/v4/core/regexes.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/regexes.js"() {
     init_util();
     cuid = /^[cC][0-9a-z]{6,}$/;
     cuid2 = /^[0-9a-z]+$/;
@@ -1237,7 +1237,7 @@ var init_regexes = __esm({
   }
 });
 
-// node_modules/zod/v4/core/checks.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/checks.js
 function handleCheckPropertyResult(result, payload, property) {
   if (result.issues.length) {
     payload.issues.push(...prefixIssues(property, result.issues));
@@ -1245,7 +1245,7 @@ function handleCheckPropertyResult(result, payload, property) {
 }
 var $ZodCheck, numericOriginMap, $ZodCheckLessThan, $ZodCheckGreaterThan, $ZodCheckMultipleOf, $ZodCheckNumberFormat, $ZodCheckBigIntFormat, $ZodCheckMaxSize, $ZodCheckMinSize, $ZodCheckSizeEquals, $ZodCheckMaxLength, $ZodCheckMinLength, $ZodCheckLengthEquals, $ZodCheckStringFormat, $ZodCheckRegex, $ZodCheckLowerCase, $ZodCheckUpperCase, $ZodCheckIncludes, $ZodCheckStartsWith, $ZodCheckEndsWith, $ZodCheckProperty, $ZodCheckMimeType, $ZodCheckOverwrite;
 var init_checks = __esm({
-  "node_modules/zod/v4/core/checks.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/checks.js"() {
     init_core();
     init_regexes();
     init_util();
@@ -1793,10 +1793,10 @@ var init_checks = __esm({
   }
 });
 
-// node_modules/zod/v4/core/doc.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/doc.js
 var Doc;
 var init_doc = __esm({
-  "node_modules/zod/v4/core/doc.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/doc.js"() {
     Doc = class {
       constructor(args = []) {
         this.content = [];
@@ -1834,10 +1834,10 @@ var init_doc = __esm({
   }
 });
 
-// node_modules/zod/v4/core/versions.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/versions.js
 var version;
 var init_versions = __esm({
-  "node_modules/zod/v4/core/versions.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/versions.js"() {
     version = {
       major: 4,
       minor: 4,
@@ -1846,7 +1846,7 @@ var init_versions = __esm({
   }
 });
 
-// node_modules/zod/v4/core/schemas.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/schemas.js
 function isValidBase64(data) {
   if (data === "")
     return true;
@@ -2252,7 +2252,7 @@ function handleRefineResult(result, payload, input, inst) {
 }
 var $ZodType, $ZodString, $ZodStringFormat, $ZodGUID, $ZodUUID, $ZodEmail, $ZodURL, $ZodEmoji, $ZodNanoID, $ZodCUID, $ZodCUID2, $ZodULID, $ZodXID, $ZodKSUID, $ZodISODateTime, $ZodISODate, $ZodISOTime, $ZodISODuration, $ZodIPv4, $ZodIPv6, $ZodMAC, $ZodCIDRv4, $ZodCIDRv6, $ZodBase64, $ZodBase64URL, $ZodE164, $ZodJWT, $ZodCustomStringFormat, $ZodNumber, $ZodNumberFormat, $ZodBoolean, $ZodBigInt, $ZodBigIntFormat, $ZodSymbol, $ZodUndefined, $ZodNull, $ZodAny, $ZodUnknown, $ZodNever, $ZodVoid, $ZodDate, $ZodArray, $ZodObject, $ZodObjectJIT, $ZodUnion, $ZodXor, $ZodDiscriminatedUnion, $ZodIntersection, $ZodTuple, $ZodRecord, $ZodMap, $ZodSet, $ZodEnum, $ZodLiteral, $ZodFile, $ZodTransform, $ZodOptional, $ZodExactOptional, $ZodNullable, $ZodDefault, $ZodPrefault, $ZodNonOptional, $ZodSuccess, $ZodCatch, $ZodNaN, $ZodPipe, $ZodCodec, $ZodPreprocess, $ZodReadonly, $ZodTemplateLiteral, $ZodFunction, $ZodPromise, $ZodLazy, $ZodCustom;
 var init_schemas = __esm({
-  "node_modules/zod/v4/core/schemas.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/schemas.js"() {
     init_checks();
     init_core();
     init_doc();
@@ -3952,7 +3952,7 @@ var init_schemas = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ar.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ar.js
 function ar_default() {
   return {
     localeError: error()
@@ -3960,7 +3960,7 @@ function ar_default() {
 }
 var error;
 var init_ar = __esm({
-  "node_modules/zod/v4/locales/ar.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ar.js"() {
     init_util();
     error = () => {
       const Sizable = {
@@ -4065,7 +4065,7 @@ var init_ar = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/az.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/az.js
 function az_default() {
   return {
     localeError: error2()
@@ -4073,7 +4073,7 @@ function az_default() {
 }
 var error2;
 var init_az = __esm({
-  "node_modules/zod/v4/locales/az.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/az.js"() {
     init_util();
     error2 = () => {
       const Sizable = {
@@ -4177,7 +4177,7 @@ var init_az = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/be.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/be.js
 function getBelarusianPlural(count, one, few, many) {
   const absCount = Math.abs(count);
   const lastDigit = absCount % 10;
@@ -4200,7 +4200,7 @@ function be_default() {
 }
 var error3;
 var init_be = __esm({
-  "node_modules/zod/v4/locales/be.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/be.js"() {
     init_util();
     error3 = () => {
       const Sizable = {
@@ -4340,7 +4340,7 @@ var init_be = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/bg.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/bg.js
 function bg_default() {
   return {
     localeError: error4()
@@ -4348,7 +4348,7 @@ function bg_default() {
 }
 var error4;
 var init_bg = __esm({
-  "node_modules/zod/v4/locales/bg.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/bg.js"() {
     init_util();
     error4 = () => {
       const Sizable = {
@@ -4467,7 +4467,7 @@ var init_bg = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ca.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ca.js
 function ca_default() {
   return {
     localeError: error5()
@@ -4475,7 +4475,7 @@ function ca_default() {
 }
 var error5;
 var init_ca = __esm({
-  "node_modules/zod/v4/locales/ca.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ca.js"() {
     init_util();
     error5 = () => {
       const Sizable = {
@@ -4582,7 +4582,7 @@ var init_ca = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/cs.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/cs.js
 function cs_default() {
   return {
     localeError: error6()
@@ -4590,7 +4590,7 @@ function cs_default() {
 }
 var error6;
 var init_cs = __esm({
-  "node_modules/zod/v4/locales/cs.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/cs.js"() {
     init_util();
     error6 = () => {
       const Sizable = {
@@ -4700,7 +4700,7 @@ var init_cs = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/da.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/da.js
 function da_default() {
   return {
     localeError: error7()
@@ -4708,7 +4708,7 @@ function da_default() {
 }
 var error7;
 var init_da = __esm({
-  "node_modules/zod/v4/locales/da.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/da.js"() {
     init_util();
     error7 = () => {
       const Sizable = {
@@ -4822,7 +4822,7 @@ var init_da = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/de.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/de.js
 function de_default() {
   return {
     localeError: error8()
@@ -4830,7 +4830,7 @@ function de_default() {
 }
 var error8;
 var init_de = __esm({
-  "node_modules/zod/v4/locales/de.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/de.js"() {
     init_util();
     error8 = () => {
       const Sizable = {
@@ -4937,7 +4937,7 @@ var init_de = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/el.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/el.js
 function el_default() {
   return {
     localeError: error9()
@@ -4945,7 +4945,7 @@ function el_default() {
 }
 var error9;
 var init_el = __esm({
-  "node_modules/zod/v4/locales/el.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/el.js"() {
     init_util();
     error9 = () => {
       const Sizable = {
@@ -5053,7 +5053,7 @@ var init_el = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/en.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/en.js
 function en_default2() {
   return {
     localeError: error10()
@@ -5061,7 +5061,7 @@ function en_default2() {
 }
 var error10;
 var init_en = __esm({
-  "node_modules/zod/v4/locales/en.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/en.js"() {
     init_util();
     error10 = () => {
       const Sizable = {
@@ -5172,7 +5172,7 @@ var init_en = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/eo.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/eo.js
 function eo_default() {
   return {
     localeError: error11()
@@ -5180,7 +5180,7 @@ function eo_default() {
 }
 var error11;
 var init_eo = __esm({
-  "node_modules/zod/v4/locales/eo.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/eo.js"() {
     init_util();
     error11 = () => {
       const Sizable = {
@@ -5288,7 +5288,7 @@ var init_eo = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/es.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/es.js
 function es_default() {
   return {
     localeError: error12()
@@ -5296,7 +5296,7 @@ function es_default() {
 }
 var error12;
 var init_es = __esm({
-  "node_modules/zod/v4/locales/es.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/es.js"() {
     init_util();
     error12 = () => {
       const Sizable = {
@@ -5427,7 +5427,7 @@ var init_es = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/fa.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/fa.js
 function fa_default() {
   return {
     localeError: error13()
@@ -5435,7 +5435,7 @@ function fa_default() {
 }
 var error13;
 var init_fa = __esm({
-  "node_modules/zod/v4/locales/fa.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/fa.js"() {
     init_util();
     error13 = () => {
       const Sizable = {
@@ -5548,7 +5548,7 @@ var init_fa = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/fi.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/fi.js
 function fi_default() {
   return {
     localeError: error14()
@@ -5556,7 +5556,7 @@ function fi_default() {
 }
 var error14;
 var init_fi = __esm({
-  "node_modules/zod/v4/locales/fi.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/fi.js"() {
     init_util();
     error14 = () => {
       const Sizable = {
@@ -5667,7 +5667,7 @@ var init_fi = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/fr.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/fr.js
 function fr_default() {
   return {
     localeError: error15()
@@ -5675,7 +5675,7 @@ function fr_default() {
 }
 var error15;
 var init_fr = __esm({
-  "node_modules/zod/v4/locales/fr.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/fr.js"() {
     init_util();
     error15 = () => {
       const Sizable = {
@@ -5799,7 +5799,7 @@ var init_fr = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/fr-CA.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/fr-CA.js
 function fr_CA_default() {
   return {
     localeError: error16()
@@ -5807,7 +5807,7 @@ function fr_CA_default() {
 }
 var error16;
 var init_fr_CA = __esm({
-  "node_modules/zod/v4/locales/fr-CA.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/fr-CA.js"() {
     init_util();
     error16 = () => {
       const Sizable = {
@@ -5913,7 +5913,7 @@ var init_fr_CA = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/he.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/he.js
 function he_default() {
   return {
     localeError: error17()
@@ -5921,7 +5921,7 @@ function he_default() {
 }
 var error17;
 var init_he = __esm({
-  "node_modules/zod/v4/locales/he.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/he.js"() {
     init_util();
     error17 = () => {
       const TypeNames = {
@@ -6114,7 +6114,7 @@ var init_he = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/hr.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/hr.js
 function hr_default() {
   return {
     localeError: error18()
@@ -6122,7 +6122,7 @@ function hr_default() {
 }
 var error18;
 var init_hr = __esm({
-  "node_modules/zod/v4/locales/hr.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/hr.js"() {
     init_util();
     error18 = () => {
       const Sizable = {
@@ -6243,7 +6243,7 @@ var init_hr = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/hu.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/hu.js
 function hu_default() {
   return {
     localeError: error19()
@@ -6251,7 +6251,7 @@ function hu_default() {
 }
 var error19;
 var init_hu = __esm({
-  "node_modules/zod/v4/locales/hu.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/hu.js"() {
     init_util();
     error19 = () => {
       const Sizable = {
@@ -6358,7 +6358,7 @@ var init_hu = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/hy.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/hy.js
 function getArmenianPlural(count, one, many) {
   return Math.abs(count) === 1 ? one : many;
 }
@@ -6376,7 +6376,7 @@ function hy_default() {
 }
 var error20;
 var init_hy = __esm({
-  "node_modules/zod/v4/locales/hy.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/hy.js"() {
     init_util();
     error20 = () => {
       const Sizable = {
@@ -6512,7 +6512,7 @@ var init_hy = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/id.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/id.js
 function id_default() {
   return {
     localeError: error21()
@@ -6520,7 +6520,7 @@ function id_default() {
 }
 var error21;
 var init_id = __esm({
-  "node_modules/zod/v4/locales/id.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/id.js"() {
     init_util();
     error21 = () => {
       const Sizable = {
@@ -6625,7 +6625,7 @@ var init_id = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/is.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/is.js
 function is_default() {
   return {
     localeError: error22()
@@ -6633,7 +6633,7 @@ function is_default() {
 }
 var error22;
 var init_is = __esm({
-  "node_modules/zod/v4/locales/is.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/is.js"() {
     init_util();
     error22 = () => {
       const Sizable = {
@@ -6741,7 +6741,7 @@ var init_is = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/it.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/it.js
 function it_default() {
   return {
     localeError: error23()
@@ -6749,7 +6749,7 @@ function it_default() {
 }
 var error23;
 var init_it = __esm({
-  "node_modules/zod/v4/locales/it.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/it.js"() {
     init_util();
     error23 = () => {
       const Sizable = {
@@ -6856,7 +6856,7 @@ var init_it = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ja.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ja.js
 function ja_default() {
   return {
     localeError: error24()
@@ -6864,7 +6864,7 @@ function ja_default() {
 }
 var error24;
 var init_ja = __esm({
-  "node_modules/zod/v4/locales/ja.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ja.js"() {
     init_util();
     error24 = () => {
       const Sizable = {
@@ -6970,7 +6970,7 @@ var init_ja = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ka.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ka.js
 function ka_default() {
   return {
     localeError: error25()
@@ -6978,7 +6978,7 @@ function ka_default() {
 }
 var error25;
 var init_ka = __esm({
-  "node_modules/zod/v4/locales/ka.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ka.js"() {
     init_util();
     error25 = () => {
       const Sizable = {
@@ -7089,7 +7089,7 @@ var init_ka = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/km.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/km.js
 function km_default() {
   return {
     localeError: error26()
@@ -7097,7 +7097,7 @@ function km_default() {
 }
 var error26;
 var init_km = __esm({
-  "node_modules/zod/v4/locales/km.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/km.js"() {
     init_util();
     error26 = () => {
       const Sizable = {
@@ -7206,17 +7206,17 @@ var init_km = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/kh.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/kh.js
 function kh_default() {
   return km_default();
 }
 var init_kh = __esm({
-  "node_modules/zod/v4/locales/kh.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/kh.js"() {
     init_km();
   }
 });
 
-// node_modules/zod/v4/locales/ko.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ko.js
 function ko_default() {
   return {
     localeError: error27()
@@ -7224,7 +7224,7 @@ function ko_default() {
 }
 var error27;
 var init_ko = __esm({
-  "node_modules/zod/v4/locales/ko.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ko.js"() {
     init_util();
     error27 = () => {
       const Sizable = {
@@ -7334,7 +7334,7 @@ var init_ko = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/lt.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/lt.js
 function getUnitTypeFromNumber(number4) {
   const abs = Math.abs(number4);
   const last = abs % 10;
@@ -7352,7 +7352,7 @@ function lt_default() {
 }
 var capitalizeFirstCharacter, error28;
 var init_lt = __esm({
-  "node_modules/zod/v4/locales/lt.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/lt.js"() {
     init_util();
     capitalizeFirstCharacter = (text) => {
       return text.charAt(0).toUpperCase() + text.slice(1);
@@ -7544,7 +7544,7 @@ var init_lt = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/mk.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/mk.js
 function mk_default() {
   return {
     localeError: error29()
@@ -7552,7 +7552,7 @@ function mk_default() {
 }
 var error29;
 var init_mk = __esm({
-  "node_modules/zod/v4/locales/mk.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/mk.js"() {
     init_util();
     error29 = () => {
       const Sizable = {
@@ -7660,7 +7660,7 @@ var init_mk = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ms.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ms.js
 function ms_default() {
   return {
     localeError: error30()
@@ -7668,7 +7668,7 @@ function ms_default() {
 }
 var error30;
 var init_ms = __esm({
-  "node_modules/zod/v4/locales/ms.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ms.js"() {
     init_util();
     error30 = () => {
       const Sizable = {
@@ -7774,7 +7774,7 @@ var init_ms = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/nl.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/nl.js
 function nl_default() {
   return {
     localeError: error31()
@@ -7782,7 +7782,7 @@ function nl_default() {
 }
 var error31;
 var init_nl = __esm({
-  "node_modules/zod/v4/locales/nl.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/nl.js"() {
     init_util();
     error31 = () => {
       const Sizable = {
@@ -7891,7 +7891,7 @@ var init_nl = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/no.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/no.js
 function no_default() {
   return {
     localeError: error32()
@@ -7899,7 +7899,7 @@ function no_default() {
 }
 var error32;
 var init_no = __esm({
-  "node_modules/zod/v4/locales/no.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/no.js"() {
     init_util();
     error32 = () => {
       const Sizable = {
@@ -8006,7 +8006,7 @@ var init_no = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ota.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ota.js
 function ota_default() {
   return {
     localeError: error33()
@@ -8014,7 +8014,7 @@ function ota_default() {
 }
 var error33;
 var init_ota = __esm({
-  "node_modules/zod/v4/locales/ota.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ota.js"() {
     init_util();
     error33 = () => {
       const Sizable = {
@@ -8122,7 +8122,7 @@ var init_ota = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ps.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ps.js
 function ps_default() {
   return {
     localeError: error34()
@@ -8130,7 +8130,7 @@ function ps_default() {
 }
 var error34;
 var init_ps = __esm({
-  "node_modules/zod/v4/locales/ps.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ps.js"() {
     init_util();
     error34 = () => {
       const Sizable = {
@@ -8243,7 +8243,7 @@ var init_ps = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/pl.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/pl.js
 function pl_default() {
   return {
     localeError: error35()
@@ -8251,7 +8251,7 @@ function pl_default() {
 }
 var error35;
 var init_pl = __esm({
-  "node_modules/zod/v4/locales/pl.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/pl.js"() {
     init_util();
     error35 = () => {
       const Sizable = {
@@ -8359,7 +8359,7 @@ var init_pl = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/pt.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/pt.js
 function pt_default() {
   return {
     localeError: error36()
@@ -8367,7 +8367,7 @@ function pt_default() {
 }
 var error36;
 var init_pt = __esm({
-  "node_modules/zod/v4/locales/pt.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/pt.js"() {
     init_util();
     error36 = () => {
       const Sizable = {
@@ -8474,7 +8474,7 @@ var init_pt = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ro.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ro.js
 function ro_default() {
   return {
     localeError: error37()
@@ -8482,7 +8482,7 @@ function ro_default() {
 }
 var error37;
 var init_ro = __esm({
-  "node_modules/zod/v4/locales/ro.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ro.js"() {
     init_util();
     error37 = () => {
       const Sizable = {
@@ -8600,7 +8600,7 @@ var init_ro = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ru.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ru.js
 function getRussianPlural(count, one, few, many) {
   const absCount = Math.abs(count);
   const lastDigit = absCount % 10;
@@ -8623,7 +8623,7 @@ function ru_default() {
 }
 var error38;
 var init_ru = __esm({
-  "node_modules/zod/v4/locales/ru.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ru.js"() {
     init_util();
     error38 = () => {
       const Sizable = {
@@ -8763,7 +8763,7 @@ var init_ru = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/sl.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/sl.js
 function sl_default() {
   return {
     localeError: error39()
@@ -8771,7 +8771,7 @@ function sl_default() {
 }
 var error39;
 var init_sl = __esm({
-  "node_modules/zod/v4/locales/sl.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/sl.js"() {
     init_util();
     error39 = () => {
       const Sizable = {
@@ -8879,7 +8879,7 @@ var init_sl = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/sv.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/sv.js
 function sv_default() {
   return {
     localeError: error40()
@@ -8887,7 +8887,7 @@ function sv_default() {
 }
 var error40;
 var init_sv = __esm({
-  "node_modules/zod/v4/locales/sv.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/sv.js"() {
     init_util();
     error40 = () => {
       const Sizable = {
@@ -8996,7 +8996,7 @@ var init_sv = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ta.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ta.js
 function ta_default() {
   return {
     localeError: error41()
@@ -9004,7 +9004,7 @@ function ta_default() {
 }
 var error41;
 var init_ta = __esm({
-  "node_modules/zod/v4/locales/ta.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ta.js"() {
     init_util();
     error41 = () => {
       const Sizable = {
@@ -9113,7 +9113,7 @@ var init_ta = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/th.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/th.js
 function th_default() {
   return {
     localeError: error42()
@@ -9121,7 +9121,7 @@ function th_default() {
 }
 var error42;
 var init_th = __esm({
-  "node_modules/zod/v4/locales/th.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/th.js"() {
     init_util();
     error42 = () => {
       const Sizable = {
@@ -9230,7 +9230,7 @@ var init_th = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/tr.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/tr.js
 function tr_default() {
   return {
     localeError: error43()
@@ -9238,7 +9238,7 @@ function tr_default() {
 }
 var error43;
 var init_tr = __esm({
-  "node_modules/zod/v4/locales/tr.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/tr.js"() {
     init_util();
     error43 = () => {
       const Sizable = {
@@ -9342,7 +9342,7 @@ var init_tr = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/uk.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/uk.js
 function uk_default() {
   return {
     localeError: error44()
@@ -9350,7 +9350,7 @@ function uk_default() {
 }
 var error44;
 var init_uk = __esm({
-  "node_modules/zod/v4/locales/uk.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/uk.js"() {
     init_util();
     error44 = () => {
       const Sizable = {
@@ -9457,17 +9457,17 @@ var init_uk = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/ua.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ua.js
 function ua_default() {
   return uk_default();
 }
 var init_ua = __esm({
-  "node_modules/zod/v4/locales/ua.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ua.js"() {
     init_uk();
   }
 });
 
-// node_modules/zod/v4/locales/ur.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ur.js
 function ur_default() {
   return {
     localeError: error45()
@@ -9475,7 +9475,7 @@ function ur_default() {
 }
 var error45;
 var init_ur = __esm({
-  "node_modules/zod/v4/locales/ur.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/ur.js"() {
     init_util();
     error45 = () => {
       const Sizable = {
@@ -9584,7 +9584,7 @@ var init_ur = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/uz.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/uz.js
 function uz_default() {
   return {
     localeError: error46()
@@ -9592,7 +9592,7 @@ function uz_default() {
 }
 var error46;
 var init_uz = __esm({
-  "node_modules/zod/v4/locales/uz.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/uz.js"() {
     init_util();
     error46 = () => {
       const Sizable = {
@@ -9701,7 +9701,7 @@ var init_uz = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/vi.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/vi.js
 function vi_default() {
   return {
     localeError: error47()
@@ -9709,7 +9709,7 @@ function vi_default() {
 }
 var error47;
 var init_vi = __esm({
-  "node_modules/zod/v4/locales/vi.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/vi.js"() {
     init_util();
     error47 = () => {
       const Sizable = {
@@ -9816,7 +9816,7 @@ var init_vi = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/zh-CN.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/zh-CN.js
 function zh_CN_default() {
   return {
     localeError: error48()
@@ -9824,7 +9824,7 @@ function zh_CN_default() {
 }
 var error48;
 var init_zh_CN = __esm({
-  "node_modules/zod/v4/locales/zh-CN.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/zh-CN.js"() {
     init_util();
     error48 = () => {
       const Sizable = {
@@ -9932,7 +9932,7 @@ var init_zh_CN = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/zh-TW.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/zh-TW.js
 function zh_TW_default() {
   return {
     localeError: error49()
@@ -9940,7 +9940,7 @@ function zh_TW_default() {
 }
 var error49;
 var init_zh_TW = __esm({
-  "node_modules/zod/v4/locales/zh-TW.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/zh-TW.js"() {
     init_util();
     error49 = () => {
       const Sizable = {
@@ -10046,7 +10046,7 @@ var init_zh_TW = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/yo.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/yo.js
 function yo_default() {
   return {
     localeError: error50()
@@ -10054,7 +10054,7 @@ function yo_default() {
 }
 var error50;
 var init_yo = __esm({
-  "node_modules/zod/v4/locales/yo.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/yo.js"() {
     init_util();
     error50 = () => {
       const Sizable = {
@@ -10160,7 +10160,7 @@ var init_yo = __esm({
   }
 });
 
-// node_modules/zod/v4/locales/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/index.js
 var locales_exports = {};
 __export(locales_exports, {
   ar: () => ar_default,
@@ -10217,7 +10217,7 @@ __export(locales_exports, {
   zhTW: () => zh_TW_default
 });
 var init_locales = __esm({
-  "node_modules/zod/v4/locales/index.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/locales/index.js"() {
     init_ar();
     init_az();
     init_be();
@@ -10273,13 +10273,13 @@ var init_locales = __esm({
   }
 });
 
-// node_modules/zod/v4/core/registries.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/registries.js
 function registry() {
   return new $ZodRegistry();
 }
 var _a2, $output, $input, $ZodRegistry, globalRegistry;
 var init_registries = __esm({
-  "node_modules/zod/v4/core/registries.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/registries.js"() {
     $output = /* @__PURE__ */ Symbol("ZodOutput");
     $input = /* @__PURE__ */ Symbol("ZodInput");
     $ZodRegistry = class {
@@ -10327,7 +10327,7 @@ var init_registries = __esm({
   }
 });
 
-// node_modules/zod/v4/core/api.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/api.js
 // @__NO_SIDE_EFFECTS__
 function _string(Class2, params) {
   return new Class2({
@@ -11360,7 +11360,7 @@ function _stringFormat(Class2, format, fnOrRegex, _params = {}) {
 }
 var TimePrecision;
 var init_api = __esm({
-  "node_modules/zod/v4/core/api.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/api.js"() {
     init_checks();
     init_registries();
     init_schemas();
@@ -11375,7 +11375,7 @@ var init_api = __esm({
   }
 });
 
-// node_modules/zod/v4/core/to-json-schema.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/to-json-schema.js
 function initializeContext(params) {
   let target = params?.target ?? "draft-2020-12";
   if (target === "draft-4")
@@ -11722,7 +11722,7 @@ function isTransforming(_schema, _ctx) {
 }
 var createToJSONSchemaMethod, createStandardJSONSchemaMethod;
 var init_to_json_schema = __esm({
-  "node_modules/zod/v4/core/to-json-schema.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/to-json-schema.js"() {
     init_registries();
     createToJSONSchemaMethod = (schema, processors = {}) => (params) => {
       const ctx = initializeContext({ ...params, processors });
@@ -11740,7 +11740,7 @@ var init_to_json_schema = __esm({
   }
 });
 
-// node_modules/zod/v4/core/json-schema-processors.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/json-schema-processors.js
 function toJSONSchema(input, params) {
   if ("_idmap" in input) {
     const registry2 = input;
@@ -11777,7 +11777,7 @@ function toJSONSchema(input, params) {
 }
 var formatMap, stringProcessor, numberProcessor, booleanProcessor, bigintProcessor, symbolProcessor, nullProcessor, undefinedProcessor, voidProcessor, neverProcessor, anyProcessor, unknownProcessor, dateProcessor, enumProcessor, literalProcessor, nanProcessor, templateLiteralProcessor, fileProcessor, successProcessor, customProcessor, functionProcessor, transformProcessor, mapProcessor, setProcessor, arrayProcessor, objectProcessor, unionProcessor, intersectionProcessor, tupleProcessor, recordProcessor, nullableProcessor, nonoptionalProcessor, defaultProcessor, prefaultProcessor, catchProcessor, pipeProcessor, readonlyProcessor, promiseProcessor, optionalProcessor, lazyProcessor, allProcessors;
 var init_json_schema_processors = __esm({
-  "node_modules/zod/v4/core/json-schema-processors.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/json-schema-processors.js"() {
     init_to_json_schema();
     init_util();
     formatMap = {
@@ -12291,10 +12291,10 @@ var init_json_schema_processors = __esm({
   }
 });
 
-// node_modules/zod/v4/core/json-schema-generator.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/json-schema-generator.js
 var JSONSchemaGenerator;
 var init_json_schema_generator = __esm({
-  "node_modules/zod/v4/core/json-schema-generator.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/json-schema-generator.js"() {
     init_json_schema_processors();
     init_to_json_schema();
     JSONSchemaGenerator = class {
@@ -12373,14 +12373,14 @@ var init_json_schema_generator = __esm({
   }
 });
 
-// node_modules/zod/v4/core/json-schema.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/json-schema.js
 var json_schema_exports = {};
 var init_json_schema = __esm({
-  "node_modules/zod/v4/core/json-schema.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/json-schema.js"() {
   }
 });
 
-// node_modules/zod/v4/core/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/index.js
 var core_exports2 = {};
 __export(core_exports2, {
   $ZodAny: () => $ZodAny,
@@ -12659,7 +12659,7 @@ __export(core_exports2, {
   version: () => version
 });
 var init_core2 = __esm({
-  "node_modules/zod/v4/core/index.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/core/index.js"() {
     init_core();
     init_parse();
     init_errors();
@@ -12679,7 +12679,7 @@ var init_core2 = __esm({
   }
 });
 
-// node_modules/zod/v4/classic/checks.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/checks.js
 var checks_exports2 = {};
 __export(checks_exports2, {
   endsWith: () => _endsWith,
@@ -12713,12 +12713,12 @@ __export(checks_exports2, {
   uppercase: () => _uppercase
 });
 var init_checks2 = __esm({
-  "node_modules/zod/v4/classic/checks.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/checks.js"() {
     init_core2();
   }
 });
 
-// node_modules/zod/v4/classic/iso.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/iso.js
 var iso_exports2 = {};
 __export(iso_exports2, {
   ZodISODate: () => ZodISODate,
@@ -12744,7 +12744,7 @@ function duration2(params) {
 }
 var ZodISODateTime, ZodISODate, ZodISOTime, ZodISODuration;
 var init_iso = __esm({
-  "node_modules/zod/v4/classic/iso.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/iso.js"() {
     init_core2();
     init_schemas2();
     ZodISODateTime = /* @__PURE__ */ $constructor("ZodISODateTime", (inst, def) => {
@@ -12766,10 +12766,10 @@ var init_iso = __esm({
   }
 });
 
-// node_modules/zod/v4/classic/errors.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/errors.js
 var initializer2, ZodError2, ZodRealError;
 var init_errors2 = __esm({
-  "node_modules/zod/v4/classic/errors.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/errors.js"() {
     init_core2();
     init_core2();
     init_util();
@@ -12814,10 +12814,10 @@ var init_errors2 = __esm({
   }
 });
 
-// node_modules/zod/v4/classic/parse.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/parse.js
 var parse2, parseAsync2, safeParse3, safeParseAsync3, encode2, decode2, encodeAsync2, decodeAsync2, safeEncode2, safeDecode2, safeEncodeAsync2, safeDecodeAsync2;
 var init_parse2 = __esm({
-  "node_modules/zod/v4/classic/parse.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/parse.js"() {
     init_core2();
     init_errors2();
     parse2 = /* @__PURE__ */ _parse(ZodRealError);
@@ -12835,7 +12835,7 @@ var init_parse2 = __esm({
   }
 });
 
-// node_modules/zod/v4/classic/schemas.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/schemas.js
 var schemas_exports2 = {};
 __export(schemas_exports2, {
   ZodAny: () => ZodAny2,
@@ -13519,7 +13519,7 @@ function preprocess(fn, schema) {
 }
 var _installedGroups, ZodType2, _ZodString, ZodString2, ZodStringFormat, ZodEmail, ZodGUID, ZodUUID, ZodURL, ZodEmoji, ZodNanoID, ZodCUID, ZodCUID2, ZodULID, ZodXID, ZodKSUID, ZodIPv4, ZodMAC, ZodIPv6, ZodCIDRv4, ZodCIDRv6, ZodBase64, ZodBase64URL, ZodE164, ZodJWT, ZodCustomStringFormat, ZodNumber2, ZodNumberFormat, ZodBoolean2, ZodBigInt2, ZodBigIntFormat, ZodSymbol2, ZodUndefined2, ZodNull2, ZodAny2, ZodUnknown2, ZodNever2, ZodVoid2, ZodDate2, ZodArray2, ZodObject2, ZodUnion2, ZodXor, ZodDiscriminatedUnion2, ZodIntersection2, ZodTuple2, ZodRecord2, ZodMap2, ZodSet2, ZodEnum2, ZodLiteral2, ZodFile, ZodTransform, ZodOptional2, ZodExactOptional, ZodNullable2, ZodDefault2, ZodPrefault, ZodNonOptional, ZodSuccess, ZodCatch2, ZodNaN2, ZodPipe, ZodCodec, ZodPreprocess, ZodReadonly2, ZodTemplateLiteral, ZodLazy2, ZodPromise2, ZodFunction2, ZodCustom, describe2, meta2, stringbool;
 var init_schemas2 = __esm({
-  "node_modules/zod/v4/classic/schemas.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/schemas.js"() {
     init_core2();
     init_core2();
     init_json_schema_processors();
@@ -14306,7 +14306,7 @@ var init_schemas2 = __esm({
   }
 });
 
-// node_modules/zod/v4/classic/compat.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/compat.js
 function setErrorMap(map2) {
   config({
     customError: map2
@@ -14317,7 +14317,7 @@ function getErrorMap2() {
 }
 var ZodIssueCode2, ZodFirstPartyTypeKind2;
 var init_compat = __esm({
-  "node_modules/zod/v4/classic/compat.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/compat.js"() {
     init_core2();
     ZodIssueCode2 = {
       invalid_type: "invalid_type",
@@ -14337,7 +14337,7 @@ var init_compat = __esm({
   }
 });
 
-// node_modules/zod/v4/classic/from-json-schema.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/from-json-schema.js
 function detectVersion(schema, defaultTarget) {
   const $schema = schema.$schema;
   if ($schema === "https://json-schema.org/draft/2020-12/schema") {
@@ -14742,7 +14742,7 @@ function fromJSONSchema(schema, params) {
 }
 var z, RECOGNIZED_KEYS;
 var init_from_json_schema = __esm({
-  "node_modules/zod/v4/classic/from-json-schema.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/from-json-schema.js"() {
     init_registries();
     init_checks2();
     init_iso();
@@ -14826,7 +14826,7 @@ var init_from_json_schema = __esm({
   }
 });
 
-// node_modules/zod/v4/classic/coerce.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/coerce.js
 var coerce_exports2 = {};
 __export(coerce_exports2, {
   bigint: () => bigint3,
@@ -14851,13 +14851,13 @@ function date4(params) {
   return _coercedDate(ZodDate2, params);
 }
 var init_coerce = __esm({
-  "node_modules/zod/v4/classic/coerce.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/coerce.js"() {
     init_core2();
     init_schemas2();
   }
 });
 
-// node_modules/zod/v4/classic/external.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/external.js
 var external_exports = {};
 __export(external_exports, {
   $brand: () => $brand,
@@ -15100,7 +15100,7 @@ __export(external_exports, {
   xor: () => xor
 });
 var init_external = __esm({
-  "node_modules/zod/v4/classic/external.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/external.js"() {
     init_core2();
     init_schemas2();
     init_checks2();
@@ -15120,24 +15120,24 @@ var init_external = __esm({
   }
 });
 
-// node_modules/zod/v4/classic/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/index.js
 var init_classic = __esm({
-  "node_modules/zod/v4/classic/index.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/classic/index.js"() {
     init_external();
     init_external();
   }
 });
 
-// node_modules/zod/v4/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/index.js
 var init_v4 = __esm({
-  "node_modules/zod/v4/index.js"() {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/index.js"() {
     init_classic();
   }
 });
 
-// node_modules/ajv/dist/compile/codegen/code.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/code.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/codegen/code.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.regexpCode = exports.getEsmExportName = exports.getProperty = exports.safeStringify = exports.stringify = exports.strConcat = exports.addCodeArg = exports.str = exports._ = exports.nil = exports._Code = exports.Name = exports.IDENTIFIER = exports._CodeOrName = void 0;
@@ -15289,9 +15289,9 @@ var require_code = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/codegen/scope.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/codegen/scope.js
 var require_scope = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/scope.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/codegen/scope.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ValueScope = exports.ValueScopeName = exports.Scope = exports.varKinds = exports.UsedValueState = void 0;
@@ -15434,9 +15434,9 @@ var require_scope = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/codegen/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/codegen/index.js
 var require_codegen = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/index.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/codegen/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.or = exports.and = exports.not = exports.CodeGen = exports.operators = exports.varKinds = exports.ValueScopeName = exports.ValueScope = exports.Scope = exports.Name = exports.regexpCode = exports.stringify = exports.getProperty = exports.nil = exports.strConcat = exports.str = exports._ = void 0;
@@ -16154,9 +16154,9 @@ var require_codegen = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/util.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/util.js
 var require_util = __commonJS({
-  "node_modules/ajv/dist/compile/util.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/util.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.checkStrictMode = exports.getErrorPath = exports.Type = exports.useFunc = exports.setEvaluated = exports.evaluatedPropsToName = exports.mergeEvaluated = exports.eachItem = exports.unescapeJsonPointer = exports.escapeJsonPointer = exports.escapeFragment = exports.unescapeFragment = exports.schemaRefOrVal = exports.schemaHasRulesButRef = exports.schemaHasRules = exports.checkUnknownRules = exports.alwaysValidSchema = exports.toHash = void 0;
@@ -16321,9 +16321,9 @@ var require_util = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/names.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/names.js
 var require_names = __commonJS({
-  "node_modules/ajv/dist/compile/names.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/names.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -16360,9 +16360,9 @@ var require_names = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/errors.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/errors.js
 var require_errors = __commonJS({
-  "node_modules/ajv/dist/compile/errors.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/errors.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.extendErrors = exports.resetErrorsCount = exports.reportExtraError = exports.reportError = exports.keyword$DataError = exports.keywordError = void 0;
@@ -16482,9 +16482,9 @@ var require_errors = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/boolSchema.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/boolSchema.js
 var require_boolSchema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/boolSchema.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/boolSchema.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.boolOrEmptySchema = exports.topBoolOrEmptySchema = void 0;
@@ -16533,9 +16533,9 @@ var require_boolSchema = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/rules.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/rules.js
 var require_rules = __commonJS({
-  "node_modules/ajv/dist/compile/rules.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/rules.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getRules = exports.isJSONType = void 0;
@@ -16564,9 +16564,9 @@ var require_rules = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/applicability.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/applicability.js
 var require_applicability = __commonJS({
-  "node_modules/ajv/dist/compile/validate/applicability.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/applicability.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.shouldUseRule = exports.shouldUseGroup = exports.schemaHasRulesForType = void 0;
@@ -16587,9 +16587,9 @@ var require_applicability = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/dataType.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/dataType.js
 var require_dataType = __commonJS({
-  "node_modules/ajv/dist/compile/validate/dataType.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/dataType.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.reportTypeError = exports.checkDataTypes = exports.checkDataType = exports.coerceAndCheckDataType = exports.getJSONTypes = exports.getSchemaTypes = exports.DataType = void 0;
@@ -16771,9 +16771,9 @@ var require_dataType = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/defaults.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/defaults.js
 var require_defaults = __commonJS({
-  "node_modules/ajv/dist/compile/validate/defaults.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/defaults.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.assignDefaults = void 0;
@@ -16808,9 +16808,9 @@ var require_defaults = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/code.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/code.js
 var require_code2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/code.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/code.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.validateUnion = exports.validateArray = exports.usePattern = exports.callValidateCode = exports.schemaProperties = exports.allSchemaProperties = exports.noPropertyInData = exports.propertyInData = exports.isOwnProperty = exports.hasPropFunc = exports.reportMissingProp = exports.checkMissingProp = exports.checkReportMissingProp = void 0;
@@ -16941,9 +16941,9 @@ var require_code2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/keyword.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/keyword.js
 var require_keyword = __commonJS({
-  "node_modules/ajv/dist/compile/validate/keyword.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/keyword.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.validateKeywordUsage = exports.validSchemaType = exports.funcKeywordCode = exports.macroKeywordCode = void 0;
@@ -17059,9 +17059,9 @@ var require_keyword = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/subschema.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/subschema.js
 var require_subschema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/subschema.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/subschema.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.extendSubschemaMode = exports.extendSubschemaData = exports.getSubschema = void 0;
@@ -17142,9 +17142,9 @@ var require_subschema = __commonJS({
   }
 });
 
-// node_modules/fast-deep-equal/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/fast-deep-equal/index.js
 var require_fast_deep_equal = __commonJS({
-  "node_modules/fast-deep-equal/index.js"(exports, module) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/fast-deep-equal/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -17177,9 +17177,9 @@ var require_fast_deep_equal = __commonJS({
   }
 });
 
-// node_modules/json-schema-traverse/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/json-schema-traverse/index.js
 var require_json_schema_traverse = __commonJS({
-  "node_modules/json-schema-traverse/index.js"(exports, module) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/json-schema-traverse/index.js"(exports, module) {
     "use strict";
     var traverse = module.exports = function(schema, opts, cb) {
       if (typeof opts == "function") {
@@ -17265,9 +17265,9 @@ var require_json_schema_traverse = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/resolve.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/resolve.js
 var require_resolve = __commonJS({
-  "node_modules/ajv/dist/compile/resolve.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/resolve.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getSchemaRefs = exports.resolveUrl = exports.normalizeId = exports._getFullPath = exports.getFullPath = exports.inlineRef = void 0;
@@ -17421,9 +17421,9 @@ var require_resolve = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/index.js
 var require_validate = __commonJS({
-  "node_modules/ajv/dist/compile/validate/index.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/validate/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getData = exports.KeywordCxt = exports.validateFunctionCode = void 0;
@@ -17929,9 +17929,9 @@ var require_validate = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/validation_error.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/runtime/validation_error.js
 var require_validation_error = __commonJS({
-  "node_modules/ajv/dist/runtime/validation_error.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/runtime/validation_error.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var ValidationError = class extends Error {
@@ -17945,9 +17945,9 @@ var require_validation_error = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/ref_error.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/ref_error.js
 var require_ref_error = __commonJS({
-  "node_modules/ajv/dist/compile/ref_error.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/ref_error.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var resolve_1 = require_resolve();
@@ -17962,9 +17962,9 @@ var require_ref_error = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/index.js
 var require_compile = __commonJS({
-  "node_modules/ajv/dist/compile/index.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/compile/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.resolveSchema = exports.getCompilingSchema = exports.resolveRef = exports.compileSchema = exports.SchemaEnv = void 0;
@@ -18186,9 +18186,9 @@ var require_compile = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/data.json
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/refs/data.json
 var require_data = __commonJS({
-  "node_modules/ajv/dist/refs/data.json"(exports, module) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/refs/data.json"(exports, module) {
     module.exports = {
       $id: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#",
       description: "Meta-schema for $data reference (JSON AnySchema extension proposal)",
@@ -18205,9 +18205,9 @@ var require_data = __commonJS({
   }
 });
 
-// node_modules/fast-uri/lib/utils.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/fast-uri/lib/utils.js"(exports, module) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/fast-uri/lib/utils.js"(exports, module) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
@@ -18518,9 +18518,9 @@ var require_utils = __commonJS({
   }
 });
 
-// node_modules/fast-uri/lib/schemes.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/fast-uri/lib/schemes.js"(exports, module) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/fast-uri/lib/schemes.js"(exports, module) {
     "use strict";
     var { isUUID } = require_utils();
     var URN_REG = /([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-.:;=@]|%[\da-f]{2})+)/iu;
@@ -18728,9 +18728,9 @@ var require_schemes = __commonJS({
   }
 });
 
-// node_modules/fast-uri/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/fast-uri/index.js"(exports, module) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/fast-uri/index.js"(exports, module) {
     "use strict";
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
@@ -19040,9 +19040,9 @@ var require_fast_uri = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/uri.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/runtime/uri.js
 var require_uri = __commonJS({
-  "node_modules/ajv/dist/runtime/uri.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/runtime/uri.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var uri = require_fast_uri();
@@ -19051,9 +19051,9 @@ var require_uri = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/core.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/core.js
 var require_core = __commonJS({
-  "node_modules/ajv/dist/core.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/core.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = void 0;
@@ -19662,9 +19662,9 @@ var require_core = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/core/id.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/core/id.js
 var require_id = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/id.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/core/id.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var def = {
@@ -19677,9 +19677,9 @@ var require_id = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/core/ref.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/core/ref.js
 var require_ref = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/ref.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/core/ref.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.callRef = exports.getValidate = void 0;
@@ -19799,9 +19799,9 @@ var require_ref = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/core/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/core/index.js
 var require_core2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/index.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/core/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var id_1 = require_id();
@@ -19820,9 +19820,9 @@ var require_core2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitNumber.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/limitNumber.js
 var require_limitNumber = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -19852,9 +19852,9 @@ var require_limitNumber = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/multipleOf.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/multipleOf.js
 var require_multipleOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -19880,9 +19880,9 @@ var require_multipleOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/ucs2length.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS({
-  "node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     function ucs2length(str) {
@@ -19906,9 +19906,9 @@ var require_ucs2length = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitLength.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/limitLength.js
 var require_limitLength = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -19938,9 +19938,9 @@ var require_limitLength = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/pattern.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/pattern.js
 var require_pattern = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -19975,9 +19975,9 @@ var require_pattern = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitProperties.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/limitProperties.js
 var require_limitProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -20004,9 +20004,9 @@ var require_limitProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/required.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/required.js
 var require_required = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/required.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/required.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -20086,9 +20086,9 @@ var require_required = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitItems.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/limitItems.js
 var require_limitItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -20115,9 +20115,9 @@ var require_limitItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/equal.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/runtime/equal.js
 var require_equal = __commonJS({
-  "node_modules/ajv/dist/runtime/equal.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/runtime/equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var equal = require_fast_deep_equal();
@@ -20126,9 +20126,9 @@ var require_equal = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
 var require_uniqueItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var dataType_1 = require_dataType();
@@ -20193,9 +20193,9 @@ var require_uniqueItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/const.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/const.js
 var require_const = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/const.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/const.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -20222,9 +20222,9 @@ var require_const = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/enum.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/enum.js
 var require_enum = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/enum.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/enum.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -20271,9 +20271,9 @@ var require_enum = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/index.js
 var require_validation = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/index.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/validation/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var limitNumber_1 = require_limitNumber();
@@ -20309,9 +20309,9 @@ var require_validation = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
 var require_additionalItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.validateAdditionalItems = void 0;
@@ -20362,9 +20362,9 @@ var require_additionalItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/items.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/items.js
 var require_items = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/items.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.validateTuple = void 0;
@@ -20419,9 +20419,9 @@ var require_items = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
 var require_prefixItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var items_1 = require_items();
@@ -20436,9 +20436,9 @@ var require_prefixItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/items2020.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/items2020.js
 var require_items2020 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -20471,9 +20471,9 @@ var require_items2020 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/contains.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/contains.js
 var require_contains = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -20565,9 +20565,9 @@ var require_contains = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/dependencies.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/dependencies.js
 var require_dependencies = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.validateSchemaDeps = exports.validatePropertyDeps = exports.error = void 0;
@@ -20659,9 +20659,9 @@ var require_dependencies = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
 var require_propertyNames = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -20702,9 +20702,9 @@ var require_propertyNames = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
 var require_additionalProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -20808,9 +20808,9 @@ var require_additionalProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/properties.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/properties.js
 var require_properties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var validate_1 = require_validate();
@@ -20866,9 +20866,9 @@ var require_properties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
 var require_patternProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -20940,9 +20940,9 @@ var require_patternProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/not.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/not.js
 var require_not = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/not.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/not.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util();
@@ -20971,9 +20971,9 @@ var require_not = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/anyOf.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/anyOf.js
 var require_anyOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -20988,9 +20988,9 @@ var require_anyOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/oneOf.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/oneOf.js
 var require_oneOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -21046,9 +21046,9 @@ var require_oneOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/allOf.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/allOf.js
 var require_allOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util();
@@ -21073,9 +21073,9 @@ var require_allOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/if.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/if.js
 var require_if = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/if.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/if.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -21142,9 +21142,9 @@ var require_if = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/thenElse.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/thenElse.js
 var require_thenElse = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util();
@@ -21160,9 +21160,9 @@ var require_thenElse = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/index.js
 var require_applicator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/index.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/applicator/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var additionalItems_1 = require_additionalItems();
@@ -21208,9 +21208,9 @@ var require_applicator = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/format/format.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/format/format.js
 var require_format = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -21298,9 +21298,9 @@ var require_format = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/format/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/format/index.js
 var require_format2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var format_1 = require_format();
@@ -21309,9 +21309,9 @@ var require_format2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/metadata.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/metadata.js
 var require_metadata = __commonJS({
-  "node_modules/ajv/dist/vocabularies/metadata.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/metadata.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.contentVocabulary = exports.metadataVocabulary = void 0;
@@ -21332,9 +21332,9 @@ var require_metadata = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/draft7.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/draft7.js
 var require_draft7 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/draft7.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/draft7.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var core_1 = require_core2();
@@ -21354,9 +21354,9 @@ var require_draft7 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/discriminator/types.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/discriminator/types.js
 var require_types = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DiscrError = void 0;
@@ -21368,9 +21368,9 @@ var require_types = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/discriminator/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/discriminator/index.js
 var require_discriminator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -21473,9 +21473,9 @@ var require_discriminator = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-draft-07.json
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/refs/json-schema-draft-07.json
 var require_json_schema_draft_07 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports, module) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports, module) {
     module.exports = {
       $schema: "http://json-schema.org/draft-07/schema#",
       $id: "http://json-schema.org/draft-07/schema#",
@@ -21630,9 +21630,9 @@ var require_json_schema_draft_07 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/ajv.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/ajv.js
 var require_ajv = __commonJS({
-  "node_modules/ajv/dist/ajv.js"(exports, module) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv/dist/ajv.js"(exports, module) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.MissingRefError = exports.ValidationError = exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = exports.Ajv = void 0;
@@ -21700,9 +21700,9 @@ var require_ajv = __commonJS({
   }
 });
 
-// node_modules/ajv-formats/dist/formats.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv-formats/dist/formats.js
 var require_formats = __commonJS({
-  "node_modules/ajv-formats/dist/formats.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv-formats/dist/formats.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatNames = exports.fastFormats = exports.fullFormats = void 0;
@@ -21903,9 +21903,9 @@ var require_formats = __commonJS({
   }
 });
 
-// node_modules/ajv-formats/dist/limit.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv-formats/dist/limit.js
 var require_limit = __commonJS({
-  "node_modules/ajv-formats/dist/limit.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv-formats/dist/limit.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatLimitDefinition = void 0;
@@ -21975,9 +21975,9 @@ var require_limit = __commonJS({
   }
 });
 
-// node_modules/ajv-formats/dist/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv-formats/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/ajv-formats/dist/index.js"(exports, module) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/ajv-formats/dist/index.js"(exports, module) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var formats_1 = require_formats();
@@ -22017,9 +22017,9 @@ var require_dist = __commonJS({
   }
 });
 
-// node_modules/content-type/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/content-type/index.js
 var require_content_type = __commonJS({
-  "node_modules/content-type/index.js"(exports) {
+  "../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/content-type/index.js"(exports) {
     "use strict";
     var PARAM_REGEXP = /; *([!#$%&'*+.^_`|~0-9A-Za-z-]+) *= *("(?:[\u000b\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\u000b\u0020-\u00ff])*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+) */g;
     var TEXT_REGEXP = /^[\u000b\u0020-\u007e\u0080-\u00ff]+$/;
@@ -22124,10 +22124,11 @@ var require_content_type = __commonJS({
 // mcp/server.mjs
 import { createServer } from "node:http";
 import { readFileSync as readFileSync6 } from "node:fs";
+import { createHash as createHash7, randomBytes, timingSafeEqual } from "node:crypto";
 import { dirname as dirname5, join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// node_modules/zod/v3/helpers/util.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_2) => {
@@ -22261,7 +22262,7 @@ var getParsedType = (data) => {
   }
 };
 
-// node_modules/zod/v3/ZodError.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -22375,7 +22376,7 @@ ZodError.create = (issues) => {
   return error51;
 };
 
-// node_modules/zod/v3/locales/en.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v3/locales/en.js
 var errorMap = (issue2, _ctx) => {
   let message;
   switch (issue2.code) {
@@ -22478,13 +22479,13 @@ var errorMap = (issue2, _ctx) => {
 };
 var en_default = errorMap;
 
-// node_modules/zod/v3/errors.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function getErrorMap() {
   return overrideErrorMap;
 }
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path, errorMaps, issueData } = params;
   const fullPath = [...path, ...issueData.path || []];
@@ -22593,14 +22594,14 @@ var isDirty = (x) => x.status === "dirty";
 var isValid = (x) => x.status === "valid";
 var isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// node_modules/zod/v3/types.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -26003,13 +26004,13 @@ var nullableType = ZodNullable.create;
 var preprocessType = ZodEffects.createWithPreprocess;
 var pipelineType = ZodPipeline.create;
 
-// node_modules/zod/v4/mini/external.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/mini/external.js
 init_core2();
 
-// node_modules/zod/v4/mini/parse.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/mini/parse.js
 init_core2();
 
-// node_modules/zod/v4/mini/schemas.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/mini/schemas.js
 init_core2();
 init_util();
 var ZodMiniType = /* @__PURE__ */ $constructor("ZodMiniType", (inst, def) => {
@@ -26057,11 +26058,11 @@ function object(shape, params) {
   return new ZodMiniObject(def);
 }
 
-// node_modules/zod/v4/mini/external.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/v4/mini/external.js
 init_json_schema_processors();
 init_locales();
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
 function isZ4Schema(s) {
   const schema = s;
   return !!schema._zod;
@@ -26221,7 +26222,7 @@ function getLiteralValue(schema) {
   return void 0;
 }
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/types.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js
 init_v4();
 var LATEST_PROTOCOL_VERSION = "2025-11-25";
 var DEFAULT_NEGOTIATED_PROTOCOL_VERSION = "2025-03-26";
@@ -27755,12 +27756,12 @@ var UrlElicitationRequiredError = class extends McpError {
   }
 };
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js
 function isTerminal(status) {
   return status === "completed" || status === "failed" || status === "cancelled";
 }
 
-// node_modules/zod-to-json-schema/dist/esm/Options.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/Options.js
 var ignoreOverride = /* @__PURE__ */ Symbol("Let zodToJsonSchema decide on which parser to use");
 var defaultOptions = {
   name: void 0,
@@ -27794,7 +27795,7 @@ var getDefaultOptions = (options) => typeof options === "string" ? {
   ...options
 };
 
-// node_modules/zod-to-json-schema/dist/esm/Refs.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/Refs.js
 var getRefs = (options) => {
   const _options = getDefaultOptions(options);
   const currentPath = _options.name !== void 0 ? [..._options.basePath, _options.definitionPath, _options.name] : _options.basePath;
@@ -27815,7 +27816,7 @@ var getRefs = (options) => {
   };
 };
 
-// node_modules/zod-to-json-schema/dist/esm/errorMessages.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/errorMessages.js
 function addErrorMessage(res, key, errorMessage, refs) {
   if (!refs?.errorMessages)
     return;
@@ -27831,7 +27832,7 @@ function setResponseValueAndErrors(res, key, value, errorMessage, refs) {
   addErrorMessage(res, key, errorMessage, refs);
 }
 
-// node_modules/zod-to-json-schema/dist/esm/getRelativePath.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/getRelativePath.js
 var getRelativePath = (pathA, pathB) => {
   let i = 0;
   for (; i < pathA.length && i < pathB.length; i++) {
@@ -27841,7 +27842,7 @@ var getRelativePath = (pathA, pathB) => {
   return [(pathA.length - i).toString(), ...pathB.slice(i)].join("/");
 };
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/any.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/any.js
 function parseAnyDef(refs) {
   if (refs.target !== "openAi") {
     return {};
@@ -27857,7 +27858,7 @@ function parseAnyDef(refs) {
   };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/array.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/array.js
 function parseArrayDef(def, refs) {
   const res = {
     type: "array"
@@ -27881,7 +27882,7 @@ function parseArrayDef(def, refs) {
   return res;
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/bigint.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/bigint.js
 function parseBigintDef(def, refs) {
   const res = {
     type: "integer",
@@ -27927,24 +27928,24 @@ function parseBigintDef(def, refs) {
   return res;
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/boolean.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/boolean.js
 function parseBooleanDef() {
   return {
     type: "boolean"
   };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/branded.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/branded.js
 function parseBrandedDef(_def, refs) {
   return parseDef(_def.type._def, refs);
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/catch.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/catch.js
 var parseCatchDef = (def, refs) => {
   return parseDef(def.innerType._def, refs);
 };
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/date.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/date.js
 function parseDateDef(def, refs, overrideDateStrategy) {
   const strategy = overrideDateStrategy ?? refs.dateStrategy;
   if (Array.isArray(strategy)) {
@@ -28003,7 +28004,7 @@ var integerDateParser = (def, refs) => {
   return res;
 };
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/default.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/default.js
 function parseDefaultDef(_def, refs) {
   return {
     ...parseDef(_def.innerType._def, refs),
@@ -28011,12 +28012,12 @@ function parseDefaultDef(_def, refs) {
   };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/effects.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/effects.js
 function parseEffectsDef(_def, refs) {
   return refs.effectStrategy === "input" ? parseDef(_def.schema._def, refs) : parseAnyDef(refs);
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/enum.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/enum.js
 function parseEnumDef(def) {
   return {
     type: "string",
@@ -28024,7 +28025,7 @@ function parseEnumDef(def) {
   };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/intersection.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/intersection.js
 var isJsonSchema7AllOfType = (type) => {
   if ("type" in type && type.type === "string")
     return false;
@@ -28066,7 +28067,7 @@ function parseIntersectionDef(def, refs) {
   } : void 0;
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/literal.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/literal.js
 function parseLiteralDef(def, refs) {
   const parsedType2 = typeof def.value;
   if (parsedType2 !== "bigint" && parsedType2 !== "number" && parsedType2 !== "boolean" && parsedType2 !== "string") {
@@ -28086,7 +28087,7 @@ function parseLiteralDef(def, refs) {
   };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/string.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/string.js
 var emojiRegex2 = void 0;
 var zodPatterns = {
   /**
@@ -28411,7 +28412,7 @@ function stringifyRegExpWithFlags(regex, refs) {
   return pattern;
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/record.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/record.js
 function parseRecordDef(def, refs) {
   if (refs.target === "openAi") {
     console.warn("Warning: OpenAI may not support records in schemas! Try an array of key-value pairs instead.");
@@ -28463,7 +28464,7 @@ function parseRecordDef(def, refs) {
   return schema;
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/map.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/map.js
 function parseMapDef(def, refs) {
   if (refs.mapStrategy === "record") {
     return parseRecordDef(def, refs);
@@ -28488,7 +28489,7 @@ function parseMapDef(def, refs) {
   };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/nativeEnum.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/nativeEnum.js
 function parseNativeEnumDef(def) {
   const object3 = def.values;
   const actualKeys = Object.keys(def.values).filter((key) => {
@@ -28502,7 +28503,7 @@ function parseNativeEnumDef(def) {
   };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/never.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/never.js
 function parseNeverDef(refs) {
   return refs.target === "openAi" ? void 0 : {
     not: parseAnyDef({
@@ -28512,7 +28513,7 @@ function parseNeverDef(refs) {
   };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/null.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/null.js
 function parseNullDef(refs) {
   return refs.target === "openApi3" ? {
     enum: ["null"],
@@ -28522,7 +28523,7 @@ function parseNullDef(refs) {
   };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/union.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/union.js
 var primitiveMappings = {
   ZodString: "string",
   ZodNumber: "number",
@@ -28590,7 +28591,7 @@ var asAnyOf = (def, refs) => {
   return anyOf.length ? { anyOf } : void 0;
 };
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/nullable.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/nullable.js
 function parseNullableDef(def, refs) {
   if (["ZodString", "ZodNumber", "ZodBigInt", "ZodBoolean", "ZodNull"].includes(def.innerType._def.typeName) && (!def.innerType._def.checks || !def.innerType._def.checks.length)) {
     if (refs.target === "openApi3") {
@@ -28622,7 +28623,7 @@ function parseNullableDef(def, refs) {
   return base && { anyOf: [base, { type: "null" }] };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/number.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/number.js
 function parseNumberDef(def, refs) {
   const res = {
     type: "number"
@@ -28671,7 +28672,7 @@ function parseNumberDef(def, refs) {
   return res;
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/object.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/object.js
 function parseObjectDef(def, refs) {
   const forceOptionalIntoNullable = refs.target === "openAi";
   const result = {
@@ -28741,7 +28742,7 @@ function safeIsOptional(schema) {
   }
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/optional.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/optional.js
 var parseOptionalDef = (def, refs) => {
   if (refs.currentPath.toString() === refs.propertyPath?.toString()) {
     return parseDef(def.innerType._def, refs);
@@ -28760,7 +28761,7 @@ var parseOptionalDef = (def, refs) => {
   } : parseAnyDef(refs);
 };
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/pipeline.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/pipeline.js
 var parsePipelineDef = (def, refs) => {
   if (refs.pipeStrategy === "input") {
     return parseDef(def.in._def, refs);
@@ -28780,12 +28781,12 @@ var parsePipelineDef = (def, refs) => {
   };
 };
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/promise.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/promise.js
 function parsePromiseDef(def, refs) {
   return parseDef(def.type._def, refs);
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/set.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/set.js
 function parseSetDef(def, refs) {
   const items = parseDef(def.valueType._def, {
     ...refs,
@@ -28805,7 +28806,7 @@ function parseSetDef(def, refs) {
   return schema;
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/tuple.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/tuple.js
 function parseTupleDef(def, refs) {
   if (def.rest) {
     return {
@@ -28833,24 +28834,24 @@ function parseTupleDef(def, refs) {
   }
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/undefined.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/undefined.js
 function parseUndefinedDef(refs) {
   return {
     not: parseAnyDef(refs)
   };
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/unknown.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/unknown.js
 function parseUnknownDef(refs) {
   return parseAnyDef(refs);
 }
 
-// node_modules/zod-to-json-schema/dist/esm/parsers/readonly.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parsers/readonly.js
 var parseReadonlyDef = (def, refs) => {
   return parseDef(def.innerType._def, refs);
 };
 
-// node_modules/zod-to-json-schema/dist/esm/selectParser.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/selectParser.js
 var selectParser = (def, typeName, refs) => {
   switch (typeName) {
     case ZodFirstPartyTypeKind.ZodString:
@@ -28926,7 +28927,7 @@ var selectParser = (def, typeName, refs) => {
   }
 };
 
-// node_modules/zod-to-json-schema/dist/esm/parseDef.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/parseDef.js
 function parseDef(def, refs, forceResolution = false) {
   const seenItem = refs.seen.get(def);
   if (refs.override) {
@@ -28982,7 +28983,7 @@ var addMeta = (def, refs, jsonSchema) => {
   return jsonSchema;
 };
 
-// node_modules/zod-to-json-schema/dist/esm/zodToJsonSchema.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod-to-json-schema/dist/esm/zodToJsonSchema.js
 var zodToJsonSchema = (schema, options) => {
   const refs = getRefs(options);
   let definitions = typeof options === "object" && options.definitions ? Object.entries(options.definitions).reduce((acc, [name2, schema2]) => ({
@@ -29044,7 +29045,7 @@ var zodToJsonSchema = (schema, options) => {
   return combined;
 };
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js
 function mapMiniTarget(t) {
   if (!t)
     return "draft-7";
@@ -29086,7 +29087,7 @@ function parseWithCompat(schema, data) {
   return result.data;
 }
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js
 var DEFAULT_REQUEST_TIMEOUT_MSEC = 6e4;
 var Protocol = class {
   constructor(_options) {
@@ -30040,7 +30041,7 @@ function mergeCapabilities(base, additional) {
   return result;
 }
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js
 var import_ajv = __toESM(require_ajv(), 1);
 var import_ajv_formats = __toESM(require_dist(), 1);
 function createDefaultAjvInstance() {
@@ -30108,7 +30109,7 @@ var AjvJsonSchemaValidator = class {
   }
 };
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
 var ExperimentalServerTasks = class {
   constructor(_server) {
     this._server = _server;
@@ -30321,7 +30322,7 @@ var ExperimentalServerTasks = class {
   }
 };
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js
 function assertToolsCallTaskCapability(requests, method, entityName) {
   if (!requests) {
     throw new Error(`${entityName} does not support task creation (required for ${method})`);
@@ -30356,7 +30357,7 @@ function assertClientRequestTaskCapability(requests, method, entityName) {
   }
 }
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js
 var Server = class extends Protocol {
   /**
    * Initializes this server with the given name and version information.
@@ -30727,7 +30728,7 @@ var Server = class extends Protocol {
   }
 };
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/server/completable.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/server/completable.js
 var COMPLETABLE_SYMBOL = /* @__PURE__ */ Symbol.for("mcp.completable");
 function isCompletable(schema) {
   return !!schema && typeof schema === "object" && COMPLETABLE_SYMBOL in schema;
@@ -30741,7 +30742,7 @@ var McpZodTypeKind;
   McpZodTypeKind2["Completable"] = "McpCompletable";
 })(McpZodTypeKind || (McpZodTypeKind = {}));
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/toolNameValidation.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/toolNameValidation.js
 var TOOL_NAME_REGEX = /^[A-Za-z0-9._-]{1,128}$/;
 function validateToolName(name) {
   const warnings = [];
@@ -30799,7 +30800,7 @@ function validateAndWarnToolName(name) {
   return result.isValid;
 }
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/mcp-server.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/mcp-server.js
 var ExperimentalMcpServerTasks = class {
   constructor(_mcpServer) {
     this._mcpServer = _mcpServer;
@@ -30814,11 +30815,11 @@ var ExperimentalMcpServerTasks = class {
   }
 };
 
-// node_modules/zod/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/zod/index.js
 init_external();
 init_external();
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js
 var McpServer = class {
   constructor(serverInfo, options) {
     this._registeredResources = {};
@@ -31610,10 +31611,10 @@ var EMPTY_COMPLETION_RESULT = {
   }
 };
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
 import process3 from "node:process";
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/stdio.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/stdio.js
 var STDIO_DEFAULT_MAX_BUFFER_SIZE = 10 * 1024 * 1024;
 var ReadBuffer = class {
   constructor(options) {
@@ -31650,7 +31651,7 @@ function serializeMessage(message) {
   return JSON.stringify(message) + "\n";
 }
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
 var StdioServerTransport = class {
   constructor(_stdin = process3.stdin, _stdout = process3.stdout, options) {
     this._stdin = _stdin;
@@ -31717,14 +31718,14 @@ var StdioServerTransport = class {
   }
 };
 
-// node_modules/@hono/node-server/dist/constants-BLSFu_RU.mjs
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@hono/node-server/dist/constants-BLSFu_RU.mjs
 var X_ALREADY_SENT = "x-hono-already-sent";
 
-// node_modules/@hono/node-server/dist/index.mjs
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@hono/node-server/dist/index.mjs
 import { Http2ServerRequest, constants } from "node:http2";
 import { Readable } from "node:stream";
 
-// node_modules/hono/dist/helper/websocket/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/hono/dist/helper/websocket/index.js
 var defineWebSocketHelper = (handler) => {
   return ((...args) => {
     if (typeof args[0] === "function") {
@@ -31750,7 +31751,7 @@ var defineWebSocketHelper = (handler) => {
   });
 };
 
-// node_modules/@hono/node-server/dist/index.mjs
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@hono/node-server/dist/index.mjs
 var RequestError = class extends Error {
   constructor(message, options) {
     super(message, options);
@@ -32753,7 +32754,7 @@ var upgradeWebSocket = defineWebSocketHelper(async (c, events, options) => {
   return new Response();
 });
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/mediaType.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/mediaType.js
 var import_content_type = __toESM(require_content_type(), 1);
 function mediaTypeEssence(header) {
   if (!header) {
@@ -32776,7 +32777,7 @@ function isJsonContentType(header) {
   return mediaTypeEssence(header) === "application/json";
 }
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/server/sseKeepAlive.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/server/sseKeepAlive.js
 var DEFAULT_SSE_KEEP_ALIVE_MS = 15e3;
 var MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 function armSseKeepAlive(intervalMs, onTick) {
@@ -32788,7 +32789,7 @@ function armSseKeepAlive(intervalMs, onTick) {
   return timer;
 }
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.js
 var WebStandardStreamableHTTPServerTransport = class {
   constructor(options = {}) {
     this._started = false;
@@ -33520,7 +33521,7 @@ data:
   }
 };
 
-// node_modules/@modelcontextprotocol/sdk/dist/esm/server/streamableHttp.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/sdk/dist/esm/server/streamableHttp.js
 var StreamableHTTPServerTransport = class {
   constructor(options = {}) {
     this._requestContext = /* @__PURE__ */ new WeakMap();
@@ -33622,7 +33623,7 @@ var StreamableHTTPServerTransport = class {
   }
 };
 
-// node_modules/@modelcontextprotocol/ext-apps/dist/src/server/index.js
+// ../../../Runtime-Asset-Tracker-worktree-lifecycle-v0.3.0/plugins/runtime-asset-tracker/node_modules/@modelcontextprotocol/ext-apps/dist/src/server/index.js
 init_v4();
 var r = ((Z) => typeof __require < "u" ? __require : typeof Proxy < "u" ? new Proxy(Z, { get: ($, J) => (typeof __require < "u" ? __require : $)[J] }) : Z)(function(Z) {
   if (typeof __require < "u") return __require.apply(this, arguments);
@@ -33722,7 +33723,8 @@ import { execFileSync as execFileSync3 } from "node:child_process";
 import { appendFileSync as appendFileSync4, closeSync, existsSync as existsSync4, mkdirSync as mkdirSync4, openSync, readFileSync as readFileSync5, readSync, statfsSync, statSync, writeFileSync as writeFileSync2 } from "node:fs";
 import { homedir as homedir4, hostname as hostname6, platform as platform4 } from "node:os";
 import { dirname as dirname4, join as join4, parse as parse3, resolve as resolve5 } from "node:path";
-import { randomUUID as randomUUID5 } from "node:crypto";
+import { createHash as createHash6, randomUUID as randomUUID5 } from "node:crypto";
+import { StringDecoder } from "node:string_decoder";
 
 // mcp/remote.mjs
 import { execFileSync } from "node:child_process";
@@ -33896,8 +33898,14 @@ function buildPostCleanupVerification(before, after, results = []) {
   const removedImagesStillPresent = removedIds.filter((id) => remainingImageIds.has(id));
   const freeBytesBefore = Number(before?.disk?.freeBytes || 0);
   const freeBytesAfter = Number(after?.disk?.freeBytes || 0);
+  const nonSuccess = results.filter((item) => item.status !== "removed");
+  const safetyStatus = missingActiveContainers.length === 0 && removedContainersStillPresent.length === 0 && removedImagesStillPresent.length === 0 ? "pass" : "fail";
+  const operationStatus = nonSuccess.length === 0 ? "complete" : results.some((item) => item.status === "removed") ? "partial" : "not_completed";
   return {
-    status: missingActiveContainers.length === 0 && removedContainersStillPresent.length === 0 && removedImagesStillPresent.length === 0 ? "pass" : "fail",
+    status: safetyStatus === "pass" && operationStatus === "complete" ? "pass" : safetyStatus === "fail" ? "fail" : "partial",
+    safetyStatus,
+    operationStatus,
+    nonSuccessCount: nonSuccess.length,
     checkedAt: (/* @__PURE__ */ new Date()).toISOString(),
     activeContainerCountBefore: beforeActive.size,
     activeContainerCountAfter: afterActive.size,
@@ -34196,7 +34204,7 @@ if build_cache.get("reclaimableBytes", 0) > 0:
 release_root = CONTEXT.get("releaseRoot") or ""
 active_link = CONTEXT.get("activeLink") or ""
 active_release = os.path.realpath(active_link) if os.path.exists(active_link) else ""
-if os.path.isdir(release_root):
+if os.path.isdir(release_root) and not os.path.islink(release_root):
     release_entries = sorted(os.scandir(release_root), key=lambda item:item.stat().st_mtime, reverse=True)
     if not CONTEXT.get("includeAllAssets"): release_entries = release_entries[:60]
     for entry in release_entries:
@@ -34208,7 +34216,7 @@ if os.path.isdir(release_root):
 
 for managed in CONTEXT.get("managedPaths") or []:
     root = str(managed.get("path") or "")
-    if not root.startswith("/home/") or not os.path.isdir(root): continue
+    if not root.startswith("/home/") or not os.path.isdir(root) or os.path.islink(root): continue
     managed_entries = sorted(os.scandir(root), key=lambda item:item.stat(follow_symlinks=False).st_mtime, reverse=True)
     if not CONTEXT.get("includeAllAssets"): managed_entries = managed_entries[:240]
     for entry in managed_entries:
@@ -34556,7 +34564,7 @@ function awsDockerCleanupScript(allowlist, sourceConfig = {}) {
       } : void 0
     }))
   }), "utf8").toString("base64");
-  return String.raw`import base64, datetime, gzip, hashlib, json, os, re, shutil, subprocess
+  return String.raw`import base64, datetime, gzip, hashlib, json, os, re, shutil, subprocess, time
 
 payload = json.loads(base64.b64decode("${payload}"))
 items = payload.get("items") or []
@@ -34636,6 +34644,27 @@ def path_is_referenced(path):
                 if source == target or source.startswith(target + "/") or target.startswith(source + "/"): return True
     return False
 
+def canonical_path_is_contained(path, root):
+    try:
+        real_root = os.path.realpath(root).rstrip("/")
+        real_path = os.path.realpath(path).rstrip("/")
+        if not real_root or not real_path or real_path == real_root or not real_path.startswith(real_root + "/"): return False
+        if os.path.islink(root): return False
+        relative = os.path.relpath(path, root)
+        if relative == ".." or relative.startswith("../"): return False
+        cursor = root
+        for part in relative.split(os.sep):
+            if not part or part == ".": continue
+            cursor = os.path.join(cursor, part)
+            if os.path.islink(cursor): return False
+        return True
+    except Exception:
+        return False
+
+def overlaps_protected_path(path, protected_paths):
+    target = os.path.realpath(path).rstrip("/")
+    return any(target == protected or target.startswith(protected + "/") or protected.startswith(target + "/") for protected in protected_paths)
+
 results = []
 for item in items:
     kind = item.get("type")
@@ -34677,7 +34706,7 @@ for item in items:
         active_target = os.path.realpath(active_link) if active_link and os.path.exists(active_link) else ""
         size = disk_usage(path) if os.path.exists(path) else -1
         expected_size = evidence.get("expectedSizeBytes")
-        safe = bool(evidence_valid(evidence, kind) and root in managed_roots and path.startswith(root + "/") and not os.path.islink(path) and os.path.realpath(path) not in protected_paths and os.path.realpath(path) != active_target and expected_size is not None and size == int(expected_size) and metadata_fingerprint(path,size) == evidence.get("fingerprint") and not path_is_referenced(path))
+        safe = bool(evidence_valid(evidence, kind) and root in managed_roots and canonical_path_is_contained(path, root) and not overlaps_protected_path(path, protected_paths) and os.path.realpath(path) != active_target and expected_size is not None and size == int(expected_size) and metadata_fingerprint(path,size) == evidence.get("fingerprint") and not path_is_referenced(path))
         if not safe:
             results.append({**item,"status":"skipped","reclaimedBytes":0,"reason":"Remote path root, active/protected state, bytes, fingerprint, or bind-mount references drifted."})
             continue
@@ -34726,8 +34755,14 @@ for item in items:
         continue
     command = docker + (["image", "rm"] + (requested_tags if kind == "image" and requested_tags else [identifier]) if kind == "image" else ["volume", "rm", identifier])
     code, _, error = run(command)
-    removed = code == 0 and (kind != "image" or inspect("image", identifier) is None)
-    results.append({**item, "status":"removed" if removed else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if removed else 0, "removedReferences":requested_tags if kind == "image" else None, "reason":reason if removed else (error[-300:] or "image still exists after exact tag removal")})
+    if kind == "image" and code == 0:
+        for _ in range(6):
+            if inspect("image", identifier) is None: break
+            time.sleep(0.5)
+    image_gone = kind != "image" or inspect("image", identifier) is None
+    removed_references = [tag for tag in requested_tags if inspect("image", tag) is None] if kind == "image" else None
+    removed = code == 0 and image_gone
+    results.append({**item, "status":"removed" if removed else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if removed else 0, "removedReferences":removed_references, "reason":reason if removed else (error[-300:] or "image still exists after exact tag removal")})
 
 encoded = base64.b64encode(gzip.compress(json.dumps({"results":results}, separators=(",",":"), ensure_ascii=False).encode("utf-8"))).decode("ascii")
 print("RATCLEAN1:" + encoded)`;
@@ -34752,24 +34787,51 @@ function runSsmMutation(sourceConfig, script, comment) {
   const instance = managed.InstanceInformationList?.find((item) => item.InstanceId === instanceId);
   if (!instance || instance.PingStatus !== "Online") throw new Error(`EC2 ${instanceId} \u672A\u901A\u8FC7 Systems Manager \u5728\u7EBF`);
   const command = ssmMutationCommand(script);
-  const sent = runJson("aws", [
-    ...regionArgs,
-    "ssm",
-    "send-command",
-    "--instance-ids",
-    instanceId,
-    "--document-name",
-    "AWS-RunShellScript",
-    "--comment",
-    comment,
-    "--parameters",
-    JSON.stringify({ commands: [command] }),
-    "--timeout-seconds",
-    "180",
-    "--output",
-    "json"
-  ], { timeout: 3e4 });
-  const commandId = sent.Command?.CommandId;
+  const mutationError = (message, mutationState, commandId2) => Object.assign(new Error(message), { mutationState, commandId: commandId2 });
+  const reconcileCommandId = () => {
+    try {
+      const listed = runJson("aws", [
+        ...regionArgs,
+        "ssm",
+        "list-commands",
+        "--filters",
+        `key=Comment,value=${comment}`,
+        "--max-results",
+        "10",
+        "--output",
+        "json"
+      ], { timeout: 2e4 });
+      const matches = (listed.Commands || []).filter((item) => item.Comment === comment && (!Array.isArray(item.InstanceIds) || item.InstanceIds.includes(instanceId)));
+      return matches.length === 1 ? matches[0].CommandId : null;
+    } catch {
+      return null;
+    }
+  };
+  let sent;
+  try {
+    sent = runJson("aws", [
+      ...regionArgs,
+      "ssm",
+      "send-command",
+      "--instance-ids",
+      instanceId,
+      "--document-name",
+      "AWS-RunShellScript",
+      "--comment",
+      comment,
+      "--parameters",
+      JSON.stringify({ commands: [command] }),
+      "--timeout-seconds",
+      "180",
+      "--output",
+      "json"
+    ], { timeout: 3e4 });
+  } catch (error51) {
+    const reconciledCommandId = reconcileCommandId();
+    if (!reconciledCommandId) throw mutationError(`SSM send outcome is unknown; exact operation comment: ${comment}. ${error51.message}`, "outcome_unknown");
+    sent = { Command: { CommandId: reconciledCommandId } };
+  }
+  const commandId = sent.Command?.CommandId || reconcileCommandId();
   if (!commandId) throw new Error("Systems Manager \u672A\u8FD4\u56DE commandId");
   const startedAt = Date.now();
   while (Date.now() - startedAt < 185e3) {
@@ -34789,15 +34851,15 @@ function runSsmMutation(sourceConfig, script, comment) {
       ], { timeout: 2e4 });
     } catch (error51) {
       if (/InvocationDoesNotExist/i.test(error51.message)) continue;
-      throw error51;
+      throw mutationError(error51.message, "outcome_unknown", commandId);
     }
     if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
-    if (invocation.Status !== "Success") throw new Error(invocation.StandardErrorContent || `SSM \u6E05\u7406\u72B6\u6001\uFF1A${invocation.Status}`);
+    if (invocation.Status !== "Success") throw mutationError(invocation.StandardErrorContent || `SSM cleanup status: ${invocation.Status}`, "failed", commandId);
     return { commandId, output: String(invocation.StandardOutputContent || "").slice(-24e3) };
   }
-  throw new Error("\u8FDC\u7A0B\u6E05\u7406\u8D85\u8FC7 185 \u79D2\u4ECD\u672A\u5B8C\u6210");
+  throw mutationError("Remote cleanup did not reach a terminal state within 185 seconds.", "outcome_unknown", commandId);
 }
-function executeAwsDockerCleanup(sourceConfig, allowlist) {
+function executeAwsDockerCleanup(sourceConfig, allowlist, operationId) {
   const fullSourceConfig = { ...sourceConfig, includeAllAssets: true };
   const snapshot = collectAwsSnapshot(fullSourceConfig);
   const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
@@ -34812,7 +34874,7 @@ function executeAwsDockerCleanup(sourceConfig, allowlist) {
   if (!approved.length) return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results: skipped };
   const script = awsDockerCleanupScript(approved, fullSourceConfig);
   const encoded = gzipSync(Buffer.from(script, "utf8"), { level: 9 }).toString("base64");
-  const invocation = runSsmMutation(fullSourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, "Runtime Asset Tracker exact safe Docker cleanup");
+  const invocation = runSsmMutation(fullSourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, `RAT ${operationId}`);
   const match = invocation.output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
   if (!match) throw new Error("\u8FDC\u7A0B\u6E05\u7406\u6CA1\u6709\u8FD4\u56DE\u53EF\u9A8C\u8BC1\u7ED3\u679C");
   const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
@@ -34881,11 +34943,11 @@ function executeGithubCleanup(sourceConfig, allowlist) {
   remoteCache.clear();
   return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results };
 }
-function executeRemoteCleanup({ source, sourceConfig, allowlist }) {
+function executeRemoteCleanup({ source, sourceConfig, allowlist, operationId = randomUUID() }) {
   if (!sourceConfig) throw new Error(`${source} \u6765\u6E90\u5C1A\u672A\u914D\u7F6E`);
   if (sourceConfig.kind === "github") return executeGithubCleanup(sourceConfig, allowlist);
   if (sourceConfig.kind === "ssh") return executeSshDockerCleanup(sourceConfig, allowlist);
-  return executeAwsDockerCleanup(sourceConfig, allowlist);
+  return executeAwsDockerCleanup(sourceConfig, allowlist, operationId);
 }
 function registeredProjectOptions(config2, sourceConfig) {
   const configured = Array.isArray(config2.projects) && config2.projects.length ? config2.projects : sourceConfig?.repository ? [{ id: sourceConfig.repository, repository: sourceConfig.repository }] : [];
@@ -35122,9 +35184,9 @@ function retirementAttestations(events, { project: selectedProject, environment:
     const project = String(event.project || "");
     const environment = String(event.environment || "");
     const owner = String(event.owner || "");
-    const recoverySource = String(details.recoverySource || "");
+    const recoverySource2 = String(details.recoverySource || "");
     if (String(details.disposable).toLowerCase() !== "true" || String(details.retention).toLowerCase() !== "retired") continue;
-    if (!REPORT_SHA.test(reportSha256) || !project || !environment || !owner || !recoverySource) continue;
+    if (!REPORT_SHA.test(reportSha256) || !project || !environment || !owner || !recoverySource2) continue;
     if (type === "image" && (!approvedTags.length || !COMMIT.test(revision))) continue;
     if (type === "container" && (!String(details.expectedName || "") || !IMAGE_ID.test(String(details.expectedImageId || "")) || String(details.preserveVolumes) !== "true")) continue;
     if (["host_artifact", "worktree"].includes(type) && (!String(details.managedRoot || "").startsWith("/home/") || !/^sha256:[0-9a-f]{64}$/i.test(String(details.fingerprint || "")))) continue;
@@ -35138,7 +35200,7 @@ function retirementAttestations(events, { project: selectedProject, environment:
       expectedUniqueBytes: Number(details.expectedUniqueBytes || 0),
       reportSha256,
       group: String(details.group || ""),
-      recoverySource,
+      recoverySource: recoverySource2,
       assetType: type,
       expectedSizeBytes: Number(details.expectedSizeBytes || 0),
       expectedName: String(details.expectedName || ""),
@@ -35159,7 +35221,7 @@ function retirementAttestations(events, { project: selectedProject, environment:
         [`${RUNTIME_PREFIX}asset-kind`]: type,
         [`${RUNTIME_PREFIX}retention`]: "retired",
         [`${RUNTIME_PREFIX}disposable`]: "true",
-        [`${RUNTIME_PREFIX}recovery-source`]: recoverySource,
+        [`${RUNTIME_PREFIX}recovery-source`]: recoverySource2,
         [`${RUNTIME_PREFIX}git-sha`]: revision,
         [`${RUNTIME_PREFIX}release`]: String(event.release || "retired"),
         [`${RUNTIME_PREFIX}retirement-report-sha256`]: reportSha256,
@@ -35191,7 +35253,7 @@ function importRetirementReconciliation({ reportPath, source, project, groups, o
     for (const image of group.images) {
       const key = `${image.id}\0${reportSha256}\0${group.group}`;
       if (existingKeys.has(key)) continue;
-      const recoverySource = String(image.recoverySource || `git:https://github.com/${project}.git@${image.revision}`).trim();
+      const recoverySource2 = String(image.recoverySource || `git:https://github.com/${project}.git@${image.revision}`).trim();
       events.push({
         schemaVersion: 1,
         eventId: randomUUID2(),
@@ -35208,7 +35270,7 @@ function importRetirementReconciliation({ reportPath, source, project, groups, o
         details: {
           disposable: "true",
           retention: "retired",
-          recoverySource: `${recoverySource}; report-sha256:${reportSha256}; group:${group.group}`,
+          recoverySource: `${recoverySource2}; report-sha256:${reportSha256}; group:${group.group}`,
           approvedTags: stableStrings(image.tags),
           expectedUniqueBytes: Number(image.uniqueBytes || 0),
           reportSha256,
@@ -35266,7 +35328,7 @@ function importRetirementReconciliation({ reportPath, source, project, groups, o
 // mcp/path-assets.mjs
 import { execFileSync as execFileSync2 } from "node:child_process";
 import { createHash as createHash3, randomUUID as randomUUID3 } from "node:crypto";
-import { appendFileSync as appendFileSync2, chmodSync, existsSync as existsSync2, lstatSync, mkdirSync as mkdirSync2, readFileSync as readFileSync2, readdirSync, rmdirSync, unlinkSync } from "node:fs";
+import { appendFileSync as appendFileSync2, chmodSync, existsSync as existsSync2, lstatSync, mkdirSync as mkdirSync2, readFileSync as readFileSync2, readdirSync, realpathSync, rmdirSync, unlinkSync } from "node:fs";
 import { homedir as homedir2, hostname as hostname4, platform as platform2 } from "node:os";
 import { basename, dirname as dirname2, extname, isAbsolute as isAbsolute2, join as join2, relative, resolve as resolve2, sep } from "node:path";
 var PATH_RECONCILIATION_SCHEMA = "sparkling.runtime-path-retirement-reconciliation/v1";
@@ -35300,6 +35362,25 @@ function within(path, root) {
   const parent = resolve2(root);
   const rel = relative(parent, child);
   return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute2(rel);
+}
+function canonicalPathContainment(pathValue, rootValue) {
+  const path = resolve2(pathValue);
+  const root = resolve2(rootValue);
+  if (!existsSync2(path) || !existsSync2(root) || !within(path, root)) return false;
+  try {
+    if (lstatSync(root).isSymbolicLink()) return false;
+    const rel = relative(root, path);
+    let cursor = root;
+    for (const part of rel.split(sep).filter(Boolean)) {
+      cursor = join2(cursor, part);
+      if (lstatSync(cursor).isSymbolicLink()) return false;
+    }
+    const realRoot = realpathSync.native(root);
+    const realPath = realpathSync.native(path);
+    return within(realPath, realRoot);
+  } catch {
+    return false;
+  }
 }
 function safeEntries(path) {
   try {
@@ -35685,10 +35766,10 @@ function removeTreeNoFollow(path) {
   }
 }
 function executePathAssetCleanup(asset) {
-  if (!PATH_TYPES.has(asset?.type) || asset.classification !== "reclaimable") throw new Error("Path asset is not reclaimable.");
+  if (!PATH_TYPES.has(asset?.type) || asset.classification !== "reclaimable" && asset.retirementState !== "executable-candidate") throw new Error("Path asset is not reclaimable.");
   const path = resolve2(asset.path || asset.lineage?.path || "");
   const allowedRoot = resolve2(asset.lineage?.allowedRoot || "");
-  if (!path || !allowedRoot || !within(path, allowedRoot) || !existsSync2(path)) throw new Error("Path cleanup target is outside its exact allowed root or no longer exists.");
+  if (!path || !allowedRoot || !canonicalPathContainment(path, allowedRoot)) throw new Error("Path cleanup target is outside its canonical allowed root, crosses a reparse point, or no longer exists.");
   const current = scanPathUsage(path);
   if (current.truncated || current.sizeBytes !== Number(asset.sizeBytes) || current.fingerprint !== asset.lineage?.contentFingerprint) throw new Error("Path content changed after preview.");
   if (asset.type === "worktree") {
@@ -36124,10 +36205,188 @@ function writeUnifiedAssetTable(table, outputPath) {
   return absolutePath;
 }
 
-// mcp/inventory.mjs
+// mcp/candidate-policy.mjs
 var RUNTIME_PREFIX3 = "com.codex.runtime.";
+var GIB = 1024 ** 3;
+function runtimeLabel3(asset, key) {
+  return asset?.labels?.[`${RUNTIME_PREFIX3}${key}`];
+}
+function normalizedTags2(asset) {
+  return [...new Set((asset?.lineage?.tags || []).map(String).filter((tag) => tag && !tag.includes("<none>")))].sort();
+}
+function consumerList(asset) {
+  return Array.isArray(asset?.lineage?.consumers) ? asset.lineage.consumers : [];
+}
+function imageRevision(asset) {
+  return String(asset?.lineage?.revision || runtimeLabel3(asset, "git-sha") || "").trim().toLowerCase();
+}
+function protectedIdentity(asset) {
+  const tags = normalizedTags2(asset);
+  const text = [asset?.name, ...tags, runtimeLabel3(asset, "release"), runtimeLabel3(asset, "retention")].filter(Boolean).join(" ").toLowerCase();
+  return ["active", "protected"].includes(asset?.classification) || runtimeLabel3(asset, "disposable") === "false" || /(?:^|[-_/:])(current|rollback|recovery|restore|backup|primary)(?:$|[-_/:])/.test(text);
+}
+function repositoryName(asset) {
+  const tagged = normalizedTags2(asset)[0] || String(asset?.name || "");
+  const withoutDigest = tagged.split("@")[0];
+  const lastSlash = withoutDigest.lastIndexOf("/");
+  const lastColon = withoutDigest.lastIndexOf(":");
+  const repository = lastColon > lastSlash ? withoutDigest.slice(0, lastColon) : withoutDigest;
+  return repository.toLowerCase().replace(/[^a-z0-9./_-]+/g, "-") || "unknown-repository";
+}
+function serviceFamily(asset) {
+  const tags = normalizedTags2(asset);
+  const text = [asset?.name, ...tags, runtimeLabel3(asset, "service")].filter(Boolean).join(" ").toLowerCase();
+  const service = /(?:^|[-_:])ocr(?:[-_:]|$)/.test(text) ? "ocr" : /(?:^|[-_:])ai[-_]?worker(?:[-_:]|$)/.test(text) ? "ai-worker" : /(?:^|[-_:])transcode[-_]?worker(?:[-_:]|$)/.test(text) ? "transcode-worker" : /(?:^|[-_:])amazon[-_]?service(?:[-_:]|$)/.test(text) ? "amazon-service" : /(?:^|[-_:])web(?:[-_:]|$)/.test(text) ? "web" : /(?:^|[-_:])(?:api|migrate)(?:[-_:]|$)/.test(text) ? "api" : /(?:^|[-_:])worker(?:[-_:]|$)/.test(text) ? "worker" : "other";
+  const project = String(asset?.project || "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return `${project}:${repositoryName(asset)}:${service}`;
+}
+function effectiveCreatedAt(asset) {
+  const tagged = normalizedTags2(asset).flatMap((tag) => {
+    const match = tag.match(/(20\d{6})t(\d{4,6})z/i);
+    if (!match) return [];
+    const time3 = match[2].padEnd(6, "0");
+    return [Date.parse(`${match[1].slice(0, 4)}-${match[1].slice(4, 6)}-${match[1].slice(6, 8)}T${time3.slice(0, 2)}:${time3.slice(2, 4)}:${time3.slice(4, 6)}Z`)];
+  }).filter(Number.isFinite);
+  const created = Date.parse(asset?.createdAt || 0);
+  return tagged.length ? Math.max(...tagged) : created;
+}
+function recoverySource(asset) {
+  const explicit = String(runtimeLabel3(asset, "recovery-source") || asset?.lineage?.recoverySource || asset?.lineage?.source || "").trim();
+  if (explicit) return explicit;
+  const revision = imageRevision(asset);
+  const project = String(asset?.project || "").trim();
+  return /^[0-9a-f]{7,40}$/.test(revision) && project && project !== "unknown" ? `git:${project}@${revision}` : "";
+}
+function buildEvidence(events, project, environment) {
+  const failed = /* @__PURE__ */ new Set();
+  const successful = /* @__PURE__ */ new Set();
+  for (const event of events || []) {
+    if (project && project !== "all" && String(event?.project || "") !== project) continue;
+    if (environment && String(event?.environment || "") !== environment) continue;
+    const id = String(event?.asset?.id || event?.details?.imageId || "");
+    if (!id) continue;
+    if (event?.event === "build.failed") failed.add(id);
+    if (["build.completed", "build.succeeded"].includes(event?.event)) successful.add(id);
+  }
+  return { failed, successful };
+}
+function capacityPressure(disk = {}, policy = {}) {
+  const totalBytes = Number(disk.totalBytes || 0);
+  const freeBytes = Number(disk.freeBytes || 0);
+  const freePercent = totalBytes > 0 ? freeBytes / totalBytes * 100 : null;
+  const warningFreePercent = Number(policy.warningFreePercent ?? 15);
+  const criticalFreePercent = Number(policy.criticalFreePercent ?? 8);
+  const warningFreeBytes = Number(policy.warningFreeBytes ?? 50 * GIB);
+  const criticalFreeBytes = Number(policy.criticalFreeBytes ?? 20 * GIB);
+  const level = totalBytes <= 0 ? "unknown" : freePercent <= criticalFreePercent || freeBytes <= criticalFreeBytes ? "critical" : freePercent <= warningFreePercent || freeBytes <= warningFreeBytes ? "warning" : "normal";
+  return { level, totalBytes, freeBytes, freePercent, warningFreePercent, criticalFreePercent, warningFreeBytes, criticalFreeBytes };
+}
+function discoverRetirementCandidates(assets = [], {
+  source = "local",
+  project = "all",
+  environment = source,
+  disk = {},
+  events = [],
+  now = Date.now(),
+  policy = {}
+} = {}) {
+  const coolingMs = Math.max(1, Number(policy.coolingHours ?? 24)) * 60 * 6e4;
+  const orphanMs = Math.max(1, Number(policy.orphanAfterDays ?? 7)) * 24 * 60 * 6e4;
+  const pressure = capacityPressure(disk, policy);
+  const builds = buildEvidence(events, project, environment);
+  const superseded = /* @__PURE__ */ new Map();
+  const imageFamilies = /* @__PURE__ */ new Map();
+  for (const asset of assets) {
+    if (asset.type !== "image") continue;
+    const key = serviceFamily(asset);
+    imageFamilies.set(key, [...imageFamilies.get(key) || [], asset]);
+  }
+  for (const [family, images] of imageFamilies.entries()) {
+    const ordered = [...images].sort((left, right) => effectiveCreatedAt(right) - effectiveCreatedAt(left) || String(right.id).localeCompare(String(left.id)));
+    if (ordered.length < 2) continue;
+    const keepLatest = Math.max(1, Number(policy.keepLatestSuccessful ?? 1));
+    const retained = ordered.slice(0, keepLatest);
+    for (const asset of ordered.slice(keepLatest)) {
+      const successor = retained[0];
+      if (!Number.isFinite(effectiveCreatedAt(asset)) || !Number.isFinite(effectiveCreatedAt(successor))) continue;
+      const successorSuccessful = builds.successful.has(String(successor.id)) || successor.classification === "active" || consumerList(successor).some((consumer) => ["running", "created", "restarting"].includes(String(consumer?.state || "").toLowerCase()));
+      superseded.set(String(asset.id), {
+        family,
+        successorImageId: successor.id,
+        successorCreatedAt: successor.createdAt,
+        successorTags: normalizedTags2(successor),
+        successorSuccessful
+      });
+    }
+  }
+  const enriched = assets.map((asset) => {
+    const consumers2 = consumerList(asset);
+    const protectedAsset = protectedIdentity(asset);
+    const createdAt = effectiveCreatedAt(asset);
+    const ageMs = Number.isFinite(createdAt) ? Math.max(0, now - createdAt) : 0;
+    const supersededEvidence = superseded.get(String(asset.id));
+    const failedBuild = builds.failed.has(String(asset.id));
+    const existingExecutable = asset.classification === "reclaimable";
+    const pressureOrphan = asset.type === "image" && pressure.level !== "normal" && consumers2.length === 0 && ageMs >= orphanMs;
+    const recovery = recoverySource(asset);
+    const discoveryReasons = [
+      existingExecutable && "existing-safe-classification",
+      supersededEvidence && "superseded-build",
+      failedBuild && "failed-build",
+      pressureOrphan && "capacity-pressure-orphan"
+    ].filter(Boolean);
+    if (protectedAsset) return { ...asset, retirementState: "protected", retirementCandidate: { state: "protected", reasons: ["active-or-protected-identity"], blockedBy: [] } };
+    if (!discoveryReasons.length) return { ...asset, retirementState: "retained", retirementCandidate: { state: "retained", reasons: [], blockedBy: [] } };
+    const blockedBy = [];
+    if (consumers2.length > 0) blockedBy.push(...consumers2.map((consumer) => ({ type: "runtime-reference", id: consumer.id, name: consumer.name, state: consumer.state })));
+    if (asset.type === "image" && !recovery && !existingExecutable && !failedBuild) blockedBy.push({ type: "missing-recovery-source" });
+    if (supersededEvidence && !supersededEvidence.successorSuccessful && !failedBuild) blockedBy.push({ type: "successor-success-unproven", successorImageId: supersededEvidence.successorImageId });
+    if (asset.type === "image" && ageMs < coolingMs && !existingExecutable) blockedBy.push({ type: "cooling-period", remainingMs: coolingMs - ageMs });
+    if (source !== "local" && !existingExecutable) blockedBy.push({ type: "remote-automatic-execution-not-enabled" });
+    if (asset.type === "volume" && !existingExecutable) blockedBy.push({ type: "persistent-volume-requires-exact-attestation" });
+    const executable = blockedBy.length === 0 && (existingExecutable || asset.type === "image" && Boolean(supersededEvidence || failedBuild));
+    const state = executable ? "executable-candidate" : blockedBy.length ? "blocked-candidate" : "suspected-retired";
+    const automaticEvidence = supersededEvidence || failedBuild ? {
+      schemaVersion: "sparkling.runtime-automatic-retirement/v1",
+      basis: failedBuild ? "failed-build" : "superseded-build",
+      observedAt: new Date(now).toISOString(),
+      imageId: asset.id,
+      tags: normalizedTags2(asset),
+      revision: imageRevision(asset) || null,
+      recoverySource: recovery || null,
+      ...supersededEvidence
+    } : void 0;
+    return {
+      ...asset,
+      retirementState: state,
+      retirementCandidate: { state, reasons: discoveryReasons, blockedBy, recoverySource: recovery || null, automaticEvidence },
+      lineage: automaticEvidence ? { ...asset.lineage, automaticRetirement: automaticEvidence } : asset.lineage
+    };
+  });
+  const candidates = enriched.filter((asset) => ["suspected-retired", "blocked-candidate", "executable-candidate"].includes(asset.retirementState));
+  return {
+    assets: enriched,
+    pressure,
+    summary: {
+      suspectedCount: candidates.filter((asset) => asset.retirementState === "suspected-retired").length,
+      blockedCount: candidates.filter((asset) => asset.retirementState === "blocked-candidate").length,
+      executableCount: candidates.filter((asset) => asset.retirementState === "executable-candidate").length,
+      candidateBytes: candidates.reduce((total, asset) => total + Number(asset.sizeBytes || 0), 0),
+      blockedBytes: candidates.filter((asset) => asset.retirementState === "blocked-candidate").reduce((total, asset) => total + Number(asset.sizeBytes || 0), 0),
+      executableBytes: candidates.filter((asset) => asset.retirementState === "executable-candidate").reduce((total, asset) => total + Number(asset.sizeBytes || 0), 0)
+    }
+  };
+}
+
+// mcp/inventory.mjs
+var RUNTIME_PREFIX4 = "com.codex.runtime.";
 var previewStore = /* @__PURE__ */ new Map();
 var dashboardCache = /* @__PURE__ */ new Map();
+var ledgerAuthorityCache = /* @__PURE__ */ new Map();
+var RUNTIME_INSTANCE_ID = randomUUID5();
+function runtimeInstanceId() {
+  return RUNTIME_INSTANCE_ID;
+}
 function stateRoot2() {
   if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve5(process.env.RUNTIME_ASSET_STATE_DIR);
   if (platform4() === "win32") return join4(process.env.LOCALAPPDATA || join4(homedir4(), "AppData", "Local"), "RuntimeAssetTracker");
@@ -36180,10 +36439,10 @@ function inspectMany(kind, identifiers) {
   });
 }
 function safeLabels(labels) {
-  return Object.fromEntries(Object.entries(labels || {}).filter(([key]) => key.startsWith(RUNTIME_PREFIX3) || key.startsWith("com.docker.compose.") || ["org.opencontainers.image.revision", "org.opencontainers.image.source"].includes(key)));
+  return Object.fromEntries(Object.entries(labels || {}).filter(([key]) => key.startsWith(RUNTIME_PREFIX4) || key.startsWith("com.docker.compose.") || ["org.opencontainers.image.revision", "org.opencontainers.image.source"].includes(key)));
 }
 function labelValue(labels, key) {
-  return labels?.[`${RUNTIME_PREFIX3}${key}`];
+  return labels?.[`${RUNTIME_PREFIX4}${key}`];
 }
 function classification({ labels = {}, active = false, dangling = false, knownProtected = false, assetType = "generic", createdAt, expiresAt, now = Date.now() }) {
   if (active) return "active";
@@ -36245,10 +36504,10 @@ function localBuildCacheBar(summary = {}) {
     unit: "bytes"
   };
 }
-function dockerInventory() {
+function dockerInventory(selectedProject = "all", authorityEvents = []) {
   const available = Boolean(run("docker", ["version", "--format", "{{.Server.Version}}"]));
   if (!available) return { available: false, assets: [], summary: {} };
-  const retirementOverrides = readRetirementOverrides();
+  const retirementOverrides = selectedProject === "all" ? /* @__PURE__ */ new Map() : retirementOverrideLabels(authorityEvents, { project: selectedProject, environment: "local" });
   const containerRows = jsonLines(run("docker", ["ps", "-a", "--size", "--no-trunc", "--format", "{{json .}}"]));
   const containerDetails = inspectMany("container", containerRows.map((item) => item.ID));
   const verboseSizes = parseVerboseDockerSizes();
@@ -36485,11 +36744,27 @@ function canonicalProjectId(value, projects) {
   }))).filter((candidate) => candidate.token.length >= 4 && compact.startsWith(candidate.token)).sort((left, right) => right.token.length - left.token.length)[0];
   return prefixed?.project.id || value || "unknown";
 }
-function worktreeInventory(config2, projects) {
-  return discoverWorktreeAssets(config2, projects, readRawLedgerEvents());
+function worktreeInventory(config2, projects, authorityEvents = readAuthoritativeLedgerEvents()) {
+  return discoverWorktreeAssets(config2, projects, authorityEvents);
+}
+function runMutation(command, args, options = {}) {
+  try {
+    const output = execFileSync3(command, args, {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: options.timeout || 3e4,
+      maxBuffer: options.maxBuffer || 32 * 1024 * 1024,
+      cwd: options.cwd,
+      env: { ...process.env, ...options.env || {} },
+      stdio: ["ignore", "pipe", "pipe"]
+    }).trim();
+    return { ok: true, output, error: "" };
+  } catch (error51) {
+    return { ok: false, output: String(error51.stdout || "").trim(), error: String(error51.stderr || error51.message || "mutation failed").trim().slice(-1e3) };
+  }
 }
 function readLedger(limit = 24) {
-  return readRawLedgerEvents().slice(-limit).reverse().map((item) => ({
+  return readRecentLedgerEvents().slice(-limit).reverse().map((item) => ({
     id: item.eventId,
     occurredAt: item.occurredAt,
     event: item.event,
@@ -36500,7 +36775,7 @@ function readLedger(limit = 24) {
     status: item.status
   }));
 }
-function readRawLedgerEvents(maxBytes = 8 * 1024 * 1024) {
+function readRecentLedgerEvents(maxBytes = 8 * 1024 * 1024) {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
   if (!existsSync4(ledger)) return [];
   const stats = statSync(ledger);
@@ -36519,52 +36794,174 @@ function readRawLedgerEvents(maxBytes = 8 * 1024 * 1024) {
     }
   });
 }
-function retirementOverrideLabels(events) {
-  const overrides = /* @__PURE__ */ new Map();
+function emptyAuthorityState() {
+  return { retirements: /* @__PURE__ */ new Map(), protections: /* @__PURE__ */ new Map(), lifecycle: /* @__PURE__ */ new Map(), parsedEventCount: 0 };
+}
+function cloneAuthorityState(state) {
+  return {
+    retirements: new Map(state.retirements),
+    protections: new Map(state.protections),
+    lifecycle: new Map(state.lifecycle),
+    parsedEventCount: Number(state.parsedEventCount || 0)
+  };
+}
+function scopedAssetKey(event) {
+  const project = String(event?.project || "").trim();
+  const environment = String(event?.environment || "").trim();
+  const type = String(event?.asset?.type || "").trim();
+  const id = String(event?.asset?.id || "").trim();
+  return project && environment && type && id ? `${project}\0${environment}\0${type}\0${id}` : "";
+}
+function reduceAuthoritativeLedgerEvents(events, initialState = emptyAuthorityState()) {
+  const state = initialState;
   for (const event of events || []) {
+    state.parsedEventCount += 1;
+    const assetKey = scopedAssetKey(event);
+    if (assetKey && event.event === "asset.retirement.revoked") {
+      state.retirements.delete(assetKey);
+      continue;
+    }
+    if (assetKey && event.event === "asset.protection.revoked") {
+      state.protections.delete(assetKey);
+      continue;
+    }
+    if (assetKey && event.event === "asset.protection.bound" && event.status === "protected") {
+      state.protections.set(assetKey, event);
+      continue;
+    }
+    if (assetKey && event.event === "asset.retired" && event.status === "retired") {
+      state.retirements.set(assetKey, event);
+      continue;
+    }
+    if (/^(?:build|compose|deployment|task|outcome|pull_request)\./.test(String(event?.event || ""))) {
+      const lifecycleKey = [event.project, event.environment, event.event, event.asset?.type, event.asset?.id, event.details?.outcomeId, event.details?.threadId].map((value) => String(value || "")).join("\0");
+      state.lifecycle.set(lifecycleKey, event);
+    }
+  }
+  return state;
+}
+function authorityStateEvents(state) {
+  return [...state.retirements.values(), ...state.protections.values(), ...state.lifecycle.values()].sort((left, right) => String(left.occurredAt || "").localeCompare(String(right.occurredAt || "")));
+}
+function scanLedgerAuthority(ledger, startOffset, initialState) {
+  const state = cloneAuthorityState(initialState);
+  const fd = openSync(ledger, "r");
+  const decoder = new StringDecoder("utf8");
+  const buffer = Buffer.alloc(4 * 1024 * 1024);
+  let position = startOffset;
+  let carry = "";
+  try {
+    while (true) {
+      const bytesRead = readSync(fd, buffer, 0, buffer.length, position);
+      if (bytesRead === 0) break;
+      position += bytesRead;
+      const text = carry + decoder.write(buffer.subarray(0, bytesRead));
+      const lines = text.split(/\r?\n/);
+      carry = lines.pop() || "";
+      for (const line of lines) {
+        if (!line) continue;
+        try {
+          reduceAuthoritativeLedgerEvents([JSON.parse(line)], state);
+        } catch (error51) {
+          throw new Error(`Authoritative ledger integrity failure at byte ${position - bytesRead}: ${error51.message}`);
+        }
+      }
+    }
+    carry += decoder.end();
+    if (carry.trim()) {
+      try {
+        reduceAuthoritativeLedgerEvents([JSON.parse(carry)], state);
+      } catch (error51) {
+        throw new Error(`Authoritative ledger has a malformed or truncated final record: ${error51.message}`);
+      }
+    }
+  } finally {
+    closeSync(fd);
+  }
+  return { state, size: position };
+}
+function readAuthoritativeLedgerEvents() {
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
+  if (!existsSync4(ledger)) return [];
+  const stats = statSync(ledger);
+  const cached2 = ledgerAuthorityCache.get(ledger);
+  const canResume = cached2 && stats.size > cached2.size && cached2.size > 0;
+  if (cached2 && stats.size === cached2.size && stats.mtimeMs === cached2.mtimeMs) return cached2.events;
+  const initialState = canResume ? cached2.state : emptyAuthorityState();
+  const startOffset = canResume ? cached2.size : 0;
+  const scanned = scanLedgerAuthority(ledger, startOffset, initialState);
+  const events = authorityStateEvents(scanned.state);
+  ledgerAuthorityCache.set(ledger, { size: stats.size, mtimeMs: stats.mtimeMs, state: scanned.state, events });
+  return events;
+}
+function ledgerAuthorityStatus() {
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join4(stateRoot2(), "events.jsonl");
+  if (!existsSync4(ledger)) return { path: ledger, exists: false, integrity: "empty", bytes: 0, effectiveEvents: 0 };
+  const events = readAuthoritativeLedgerEvents();
+  const stats = statSync(ledger);
+  const cache = ledgerAuthorityCache.get(ledger);
+  return { path: ledger, exists: true, integrity: "verified-full-history", bytes: stats.size, parsedEventCount: cache?.state?.parsedEventCount || 0, effectiveEvents: events.length };
+}
+function retirementOverrideLabels(events, { project, environment } = {}) {
+  const retirements = /* @__PURE__ */ new Map();
+  const protections = /* @__PURE__ */ new Map();
+  for (const event of events || []) {
+    if (project && String(event?.project || "") !== String(project)) continue;
+    if (environment && String(event?.environment || "") !== String(environment)) continue;
     const type = String(event?.asset?.type || "");
     const id = String(event?.asset?.id || "");
     if (!id || !["image", "container", "volume"].includes(type)) continue;
     const key = `${type}:${id}`;
     if (event.event === "asset.retirement.revoked") {
-      overrides.delete(key);
+      retirements.delete(key);
+      continue;
+    }
+    if (event.event === "asset.protection.revoked") {
+      protections.delete(key);
+      continue;
+    }
+    if (event.event === "asset.protection.bound" && event.status === "protected") {
+      protections.set(key, {
+        [`${RUNTIME_PREFIX4}project`]: String(event.project),
+        [`${RUNTIME_PREFIX4}environment`]: String(event.environment),
+        [`${RUNTIME_PREFIX4}owner`]: String(event.owner || "authority"),
+        [`${RUNTIME_PREFIX4}asset-kind`]: type,
+        [`${RUNTIME_PREFIX4}retention`]: "protected",
+        [`${RUNTIME_PREFIX4}disposable`]: "false"
+      });
       continue;
     }
     if (event.event !== "asset.retired" || event.status !== "retired") continue;
     const details = event.details || {};
-    const recoverySource = String(details.recoverySource || "").trim();
+    const recoverySource2 = String(details.recoverySource || "").trim();
     const dataClassification = String(details.dataClassification || "").trim();
     const contentFingerprint = String(details.contentFingerprint || "").trim();
-    const project = String(event.project || "").trim();
+    const eventProject = String(event.project || "").trim();
     const owner = String(event.owner || "").trim();
     if (String(details.disposable).toLowerCase() !== "true") continue;
     if (String(details.retention).toLowerCase() !== "retired") continue;
-    if (!recoverySource || !project || project === "unknown" || !owner || owner === "unknown") continue;
+    if (!recoverySource2 || !eventProject || eventProject === "unknown" || !owner || owner === "unknown") continue;
     if (type === "volume" && (dataClassification !== "synthetic-test-fixture" || !/^sha256:[0-9a-f]{64}$/i.test(contentFingerprint))) continue;
     const labels = {
-      [`${RUNTIME_PREFIX3}project`]: project,
-      [`${RUNTIME_PREFIX3}environment`]: String(event.environment || "local"),
-      [`${RUNTIME_PREFIX3}owner`]: owner,
-      [`${RUNTIME_PREFIX3}asset-kind`]: type,
-      [`${RUNTIME_PREFIX3}retention`]: "retired",
-      [`${RUNTIME_PREFIX3}disposable`]: "true",
-      [`${RUNTIME_PREFIX3}recovery-source`]: recoverySource
+      [`${RUNTIME_PREFIX4}project`]: eventProject,
+      [`${RUNTIME_PREFIX4}environment`]: String(event.environment || "local"),
+      [`${RUNTIME_PREFIX4}owner`]: owner,
+      [`${RUNTIME_PREFIX4}asset-kind`]: type,
+      [`${RUNTIME_PREFIX4}retention`]: "retired",
+      [`${RUNTIME_PREFIX4}disposable`]: "true",
+      [`${RUNTIME_PREFIX4}recovery-source`]: recoverySource2
     };
-    if (event.release && event.release !== "unknown") labels[`${RUNTIME_PREFIX3}release`] = String(event.release);
-    if (event.gitSha && event.gitSha !== "unknown") labels[`${RUNTIME_PREFIX3}git-sha`] = String(event.gitSha);
+    if (event.release && event.release !== "unknown") labels[`${RUNTIME_PREFIX4}release`] = String(event.release);
+    if (event.gitSha && event.gitSha !== "unknown") labels[`${RUNTIME_PREFIX4}git-sha`] = String(event.gitSha);
     if (type === "volume") {
-      labels[`${RUNTIME_PREFIX3}data-classification`] = dataClassification;
-      labels[`${RUNTIME_PREFIX3}content-fingerprint`] = contentFingerprint;
+      labels[`${RUNTIME_PREFIX4}data-classification`] = dataClassification;
+      labels[`${RUNTIME_PREFIX4}content-fingerprint`] = contentFingerprint;
     }
-    overrides.set(key, labels);
+    retirements.set(key, labels);
   }
+  const overrides = new Map(retirements);
+  for (const [key, labels] of protections) overrides.set(key, labels);
   return overrides;
-}
-function readRetirementOverrides() {
-  return retirementOverrideLabels(readRawLedgerEvents());
-}
-function readRetirementGovernance(project, environment) {
-  return retirementAttestations(readRawLedgerEvents(), { project, environment });
 }
 function importReconciliation(input) {
   const result = importRetirementReconciliation(input);
@@ -36642,13 +37039,23 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
   const cached2 = dashboardCache.get(cacheKey2);
   if (cached2 && Date.now() - cached2.createdAt < 2e4) return { ...cached2.value, generatedAt: (/* @__PURE__ */ new Date()).toISOString(), cached: true };
   const sources = projectSourceCards(config2, projects, selectedProject, true);
+  const authorityEvents = readAuthoritativeLedgerEvents();
   if (selectedSource !== "local") {
     const scopedConfig = { ...config2, sources: sourceConfigs.filter((item) => item.id !== "local") };
     const dashboard2 = collectRemoteDashboard({ source: selectedSource, scope: "project", project: selectedProject, config: scopedConfig, sources, includeAllAssets });
-    return applyRemoteRetirementGovernance(dashboard2, readRetirementGovernance(selectedProject, selectedSource));
+    const governed = applyRemoteRetirementGovernance(dashboard2, retirementAttestations(authorityEvents, { project: selectedProject, environment: selectedSource }));
+    const candidateAnalysis2 = discoverRetirementCandidates(governed.assets || [], {
+      source: selectedSource,
+      project: selectedProject,
+      environment: selectedSource,
+      disk: governed.disk,
+      events: authorityEvents,
+      policy: config2.capacityPolicy || {}
+    });
+    return { ...governed, assets: candidateAnalysis2.assets, retirementCandidates: candidateAnalysis2.summary, capacityPressure: candidateAnalysis2.pressure, ledgerAuthority: ledgerAuthorityStatus() };
   }
-  const docker = dockerInventory();
-  const worktrees = worktreeInventory(config2, projects);
+  const docker = dockerInventory(selectedProject, authorityEvents);
+  const worktrees = worktreeInventory(config2, projects, authorityEvents);
   const allAssets = [...worktrees, ...docker.assets].map((asset) => ({ ...asset, project: canonicalProjectId(asset.project, projects) }));
   const hostScope = selectedProject === "all";
   const filtered = hostScope ? allAssets : allAssets.filter((asset) => asset.project === selectedProject);
@@ -36659,12 +37066,21 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
     disk = { totalBytes: Number(stats.blocks) * Number(stats.bsize), freeBytes: Number(stats.bavail) * Number(stats.bsize) };
   } catch {
   }
+  const candidateAnalysis = discoverRetirementCandidates(filtered, {
+    source: "local",
+    project: selectedProject,
+    environment: "local",
+    disk,
+    events: authorityEvents,
+    policy: config2.capacityPolicy || {}
+  });
+  const analyzedAssets = candidateAnalysis.assets;
   const bars = [
-    aggregate2("worktree", filtered),
-    aggregate2("worktree_residual", filtered),
-    aggregate2("host_artifact", filtered),
-    aggregate2("image", filtered),
-    aggregate2("volume", filtered),
+    aggregate2("worktree", analyzedAssets),
+    aggregate2("worktree_residual", analyzedAssets),
+    aggregate2("host_artifact", analyzedAssets),
+    aggregate2("image", analyzedAssets),
+    aggregate2("volume", analyzedAssets),
     localBuildCacheBar(docker.summary)
   ];
   const dashboard = {
@@ -36680,14 +37096,17 @@ function collectDashboard({ scope = "project", source = "local", project = "all"
     sources: projectSourceCards(config2, projects, selectedProject, docker.available),
     projects: projects.map((item) => item.id),
     projectOptions: publicProjectOptions(projects),
-    assets: filtered.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, includeAllAssets ? void 0 : 320),
+    assets: analyzedAssets.sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, includeAllAssets ? void 0 : 320),
     events: hostScope ? readLedger() : readLedger().filter((event) => canonicalProjectId(event.project, projects) === selectedProject),
-    schedule: config2.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" }
+    schedule: config2.schedule || { enabled: false, cadence: "weekly", mode: "preview-only", day: "sunday", time: "03:00" },
+    retirementCandidates: candidateAnalysis.summary,
+    capacityPressure: candidateAnalysis.pressure,
+    ledgerAuthority: ledgerAuthorityStatus()
   };
   dashboardCache.set(cacheKey2, { createdAt: Date.now(), value: dashboard });
   return dashboard;
 }
-function normalizedTags2(tags) {
+function normalizedTags3(tags) {
   return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.includes("<none>")))].sort();
 }
 function createUnifiedAssetTable({ project, sources = ["local", "production", "staging"], authorityReportPath, outputPath, coolingHours = 24 } = {}) {
@@ -36751,10 +37170,10 @@ function applyRemoteRetirementGovernance(dashboard, governance) {
       return { ...asset, classification: "reclaimable", labels: { ...asset.labels || {}, ...retirement.labels }, lineage: { ...asset.lineage, retirement }, reason: "Exact retirement evidence confirms zero references and matching bytes; recovery evidence remains bound." };
     }
     if (asset.type !== "image") return asset;
-    const liveTags = normalizedTags2(asset.lineage?.tags);
-    const approvedTags = normalizedTags2(retirement.approvedTags);
+    const liveTags = normalizedTags3(asset.lineage?.tags);
+    const approvedTags = normalizedTags3(retirement.approvedTags);
     const tagSetMatches = liveTags.length === approvedTags.length && liveTags.every((tag, index) => tag === approvedTags[index]);
-    const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX3}git-sha`] || "").toLowerCase();
+    const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX4}git-sha`] || "").toLowerCase();
     const revisionMatches2 = revision === retirement.revision;
     if (referenced) {
       return {
@@ -36833,11 +37252,12 @@ function lineageFinding(asset, dashboard) {
   const lineage = asset.lineage || {};
   const consumers2 = Array.isArray(lineage.consumers) ? lineage.consumers : [];
   const owner = labelValue(labels, "owner");
-  const recoverySource = labelValue(labels, "recovery-source") || lineage.source || lineage.remote || (asset.type === "cache" ? "\u53EF\u7531\u6784\u5EFA\u91CD\u65B0\u751F\u6210" : void 0);
+  const recoverySource2 = labelValue(labels, "recovery-source") || lineage.source || lineage.remote || (asset.type === "cache" ? "\u53EF\u7531\u6784\u5EFA\u91CD\u65B0\u751F\u6210" : void 0);
   const revision = labelValue(labels, "git-sha") || lineage.revision || asset.gitSha;
   const release = labelValue(labels, "release");
   const retention = labelValue(labels, "retention");
   const matchingEvents = (dashboard.events || []).filter((event) => String(event.assetId || "") === String(asset.id || ""));
+  const retirementCandidate = asset.retirementCandidate || {};
   const evidence = [
     owner && `\u5F52\u5C5E\uFF1A${owner}`,
     consumers2.length > 0 ? `\u6D88\u8D39\u8005\uFF1A${consumers2.length} \u4E2A` : lineage.consumers ? "\u6D88\u8D39\u8005\uFF1A0 \u4E2A" : void 0,
@@ -36845,12 +37265,14 @@ function lineageFinding(asset, dashboard) {
     release && `Release\uFF1A${release}`,
     retention && `\u4FDD\u7559\u7B56\u7565\uFF1A${retention}`,
     asset.expiresAt && `\u5230\u671F\uFF1A${asset.expiresAt}`,
-    recoverySource && `\u6062\u590D\u6765\u6E90\uFF1A${recoverySource}`,
-    matchingEvents.length > 0 && `\u4E8B\u4EF6\u8D26\u672C\uFF1A${matchingEvents.length} \u6761`
+    recoverySource2 && `\u6062\u590D\u6765\u6E90\uFF1A${recoverySource2}`,
+    matchingEvents.length > 0 && `\u4E8B\u4EF6\u8D26\u672C\uFF1A${matchingEvents.length} \u6761`,
+    retirementCandidate.reasons?.length > 0 && `\u5019\u9009\u4F9D\u636E\uFF1A${retirementCandidate.reasons.join("\u3001")}`,
+    retirementCandidate.blockedBy?.length > 0 && `\u6267\u884C\u963B\u585E\uFF1A${retirementCandidate.blockedBy.map((item) => item.type).join("\u3001")}`
   ].filter(Boolean);
   const missing = [];
   if (!owner && !["pull_request", "artifact", "actions_cache", "workflow_run", "cache", "worktree", "worktree_residual", "host_artifact"].includes(asset.type)) missing.push("owner");
-  if (!recoverySource && !["container", "pull_request", "workflow_run"].includes(asset.type)) missing.push("\u6062\u590D\u6765\u6E90");
+  if (!recoverySource2 && !["container", "pull_request", "workflow_run"].includes(asset.type)) missing.push("\u6062\u590D\u6765\u6E90");
   if (!["active", "protected", "reclaimable"].includes(asset.classification) && !asset.expiresAt) missing.push("\u5230\u671F\u65F6\u95F4/TTL");
   if (["image", "volume"].includes(asset.type) && !Array.isArray(lineage.consumers)) missing.push("\u6D88\u8D39\u8005\u5173\u7CFB");
   const suggestedLabels = [];
@@ -36862,6 +37284,9 @@ function lineageFinding(asset, dashboard) {
     name: asset.name,
     type: asset.type,
     classification: asset.classification,
+    retirementState: asset.retirementState || "retained",
+    candidateReasons: retirementCandidate.reasons || [],
+    blockedBy: retirementCandidate.blockedBy || [],
     sizeBytes: Number(asset.sizeBytes || 0),
     expiresAt: asset.expiresAt,
     reason: asset.reason,
@@ -36875,8 +37300,8 @@ function detectSupersededBuildChains(assets) {
   const families = /* @__PURE__ */ new Map();
   for (const asset of assets || []) {
     if (asset.type !== "image" || (asset.lineage?.consumers || []).length > 0) continue;
-    const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX3}git-sha`] || "").toLowerCase();
-    const tags = normalizedTags2(asset.lineage?.tags);
+    const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX4}git-sha`] || "").toLowerCase();
+    const tags = normalizedTags3(asset.lineage?.tags);
     const service = tags.some((tag) => /(?:^|[-_:])ocr(?:[-_:]|$)/i.test(tag)) ? "ocr" : tags.some((tag) => /(?:^|[-_:])ai[-_]?worker(?:[-_:]|$)/i.test(tag)) ? "ai-worker" : tags.some((tag) => /(?:^|[-_:])transcode[-_]?worker(?:[-_:]|$)/i.test(tag)) ? "transcode-worker" : tags.some((tag) => /(?:^|[-_:])amazon[-_]?service(?:[-_:]|$)/i.test(tag)) ? "amazon-service" : tags.some((tag) => /(?:^|[-_:])web(?:[-_:]|$)/i.test(tag)) ? "web" : tags.some((tag) => /(?:^|[-_:])(?:api|migrate)(?:[-_:]|$)/i.test(tag)) ? "api" : tags.some((tag) => /(?:^|[-_:])worker(?:[-_:]|$)/i.test(tag)) ? "worker" : "other";
     const attestedGroup = asset.lineage?.retirement?.group;
     const protectedSignal = tags.some((tag) => /(?:^|[-_:])(?:recovery|rollback|restore|backup)(?:[-_:]|$)/i.test(tag));
@@ -36987,8 +37412,10 @@ function runDeepScan({ source = "local", project = "all" } = {}) {
     newlyReclaimableCount: newlyReclaimable.length,
     expiringCount: findings.filter((item) => item.classification === "expiring").length,
     unresolvedCount: findings.filter((item) => item.missing.length > 0).length,
+    retirementCandidates: dashboard.retirementCandidates || { suspectedCount: 0, blockedCount: 0, executableCount: 0, candidateBytes: 0, blockedBytes: 0, executableBytes: 0 },
+    capacityPressure: dashboard.capacityPressure,
     supersededBuildChains: detectSupersededBuildChains(assets),
-    findings: findings.filter((item) => item.classification === "expiring" || item.classification === "reclaimable" || item.missing.length > 0).sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 80)
+    findings: findings.filter((item) => ["suspected-retired", "blocked-candidate", "executable-candidate"].includes(item.retirementState) || item.classification === "expiring" || item.classification === "reclaimable" || item.missing.length > 0).sort((a, b) => Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0)).slice(0, 80)
   };
   return {
     report,
@@ -37006,7 +37433,7 @@ function cleanupSourceSupportsType(source, type) {
   if (source === "local") return ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact"].includes(type);
   return ["container", "image", "volume", "cache", "worktree", "host_artifact"].includes(type);
 }
-function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact", "artifact", "actions_cache"], assetIds } = {}) {
+function createCleanupPreview({ source = "local", project = "all", types = ["container", "image", "volume", "cache", "worktree", "worktree_residual", "host_artifact", "artifact", "actions_cache"], assetIds } = {}, context = {}) {
   const dashboard = collectDashboard({ source, project, includeAllAssets: true });
   const selectedSource = dashboard.selectedSource || source;
   if (dashboard.releaseRuntimeDrift?.cleanupBlocked) throw new Error("Cleanup is blocked by an unacknowledged release/runtime image revision drift.");
@@ -37014,9 +37441,9 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
   if (dashboard.selectedProject === "all" && !requestedIds) throw new Error("Host-wide cleanup preview requires exact assetIds; broad all-project cleanup is not allowed.");
   if (selectedSource !== "local" && !dashboard.remoteSnapshotAvailable) throw new Error(dashboard.remoteError || `${selectedSource} \u5FEB\u7167\u4E0D\u53EF\u7528`);
   const allowlist = dashboard.assets.filter((asset) => {
-    if (!types.includes(asset.type) || asset.classification !== "reclaimable") return false;
+    if (!types.includes(asset.type) || asset.retirementState !== "executable-candidate") return false;
     if (requestedIds && !requestedIds.has(String(asset.id))) return false;
-    if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX3}disposable`] === "true";
+    if (selectedSource === "local" && asset.type === "container") return asset.labels?.[`${RUNTIME_PREFIX4}disposable`] === "true";
     return cleanupSourceSupportsType(selectedSource, asset.type);
   }).map((asset) => ({
     type: asset.type,
@@ -37026,12 +37453,12 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
     sizeBytes: asset.sizeBytes,
     reason: asset.reason,
     recoverySource: labelValue(asset.labels || {}, "recovery-source") || asset.lineage?.source || asset.lineage?.remote,
-    tags: asset.type === "image" ? normalizedTags2(asset.lineage?.tags) : void 0,
+    tags: asset.type === "image" ? normalizedTags3(asset.lineage?.tags) : void 0,
     revision: asset.type === "image" ? asset.lineage?.revision : void 0,
     retirementEvidence: asset.lineage?.retirement ? {
       reportSha256: asset.lineage.retirement.reportSha256,
       group: asset.lineage.retirement.group,
-      approvedTags: normalizedTags2(asset.lineage.retirement.approvedTags),
+      approvedTags: normalizedTags3(asset.lineage.retirement.approvedTags),
       revision: asset.lineage.retirement.revision,
       assetType: asset.lineage.retirement.assetType,
       expectedSizeBytes: asset.lineage.retirement.expectedSizeBytes,
@@ -37046,6 +37473,20 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
       fingerprint: asset.lineage.retirement.fingerprint,
       expectedReferences: asset.lineage.retirement.expectedReferences,
       lifecycle: asset.lineage.retirement.lifecycle
+    } : void 0,
+    automaticRetirement: asset.lineage?.automaticRetirement ? {
+      schemaVersion: asset.lineage.automaticRetirement.schemaVersion,
+      basis: asset.lineage.automaticRetirement.basis,
+      observedAt: asset.lineage.automaticRetirement.observedAt,
+      imageId: asset.lineage.automaticRetirement.imageId,
+      tags: normalizedTags3(asset.lineage.automaticRetirement.tags),
+      revision: asset.lineage.automaticRetirement.revision,
+      recoverySource: asset.lineage.automaticRetirement.recoverySource,
+      family: asset.lineage.automaticRetirement.family,
+      successorImageId: asset.lineage.automaticRetirement.successorImageId,
+      successorCreatedAt: asset.lineage.automaticRetirement.successorCreatedAt,
+      successorTags: normalizedTags3(asset.lineage.automaticRetirement.successorTags),
+      successorSuccessful: asset.lineage.automaticRetirement.successorSuccessful === true
     } : void 0,
     remoteKind: asset.remoteKind
   }));
@@ -37068,11 +37509,19 @@ function createCleanupPreview({ source = "local", project = "all", types = ["con
     }
   }
   const token = randomUUID5();
+  const actorId = String(context.actorId || "internal-direct");
+  const serverInstanceId = String(context.serverInstanceId || RUNTIME_INSTANCE_ID);
+  const operationId = randomUUID5();
+  const confirmationDigest = createHash6("sha256").update(JSON.stringify({ source: selectedSource, project: dashboard.selectedProject || project, operationId, allowlist })).digest("hex");
   const preview = {
     token,
+    operationId,
+    confirmationDigest,
+    actorId,
+    serverInstanceId,
     source: selectedSource,
     project: dashboard.selectedProject || project,
-    policy: selectedSource === "github" ? "\u53EA\u5220\u9664\u5DF2\u8FC7\u671F\u5236\u54C1\u3001\u5DF2\u5173\u95ED PR \u7684\u7F13\u5B58\u548C\u8D85\u8FC7 30 \u5929\u672A\u8BBF\u95EE\u7684\u7F13\u5B58" : selectedSource === "local" ? "\u53EA\u5220\u9664\u672A\u88AB\u4EFB\u4F55\u5BB9\u5668\u5F15\u7528\u7684\u60AC\u7A7A/\u663E\u5F0F disposable \u955C\u50CF\u3001\u672A\u6302\u8F7D\u4E14\u663E\u5F0F disposable \u7684\u5377\uFF0C\u4EE5\u53CA Docker \u672A\u4F7F\u7528\u7684 Build Cache" : "\u53EA\u5220\u9664\u590D\u6838\u540E\u4ECD\u672A\u88AB\u5BB9\u5668\u5F15\u7528\u7684\u60AC\u7A7A/\u663E\u5F0F disposable \u955C\u50CF\u3001\u672A\u6302\u8F7D\u4E14\u663E\u5F0F disposable \u7684\u5377\uFF0C\u4EE5\u53CA Docker \u672A\u4F7F\u7528\u7684 Build Cache\uFF1B\u5BB9\u5668\u548C release \u6C38\u4E0D\u8FDB\u5165\u6E05\u5355",
+    policy: selectedSource === "github" ? "\u53EA\u5220\u9664\u5DF2\u8FC7\u671F\u5236\u54C1\u3001\u5DF2\u5173\u95ED PR \u7684\u7F13\u5B58\u548C\u8D85\u8FC7 30 \u5929\u672A\u8BBF\u95EE\u7684\u7F13\u5B58" : selectedSource === "local" ? "\u5BBD\u53D1\u73B0\u6240\u6709\u7591\u4F3C\u9000\u4F11\u548C\u963B\u585E\u8D44\u4EA7\uFF1B\u6267\u884C\u6E05\u5355\u53EA\u5305\u542B\u5B9E\u65F6\u96F6\u5F15\u7528\u3001\u975E current/rollback/recovery\u3001\u5177\u6709\u673A\u5668\u6062\u590D\u6765\u6E90\u7684\u88AB\u66FF\u4EE3/\u5931\u8D25\u955C\u50CF\uFF0C\u4E25\u683C\u8BC1\u660E\u53EF\u4E22\u5F03\u7684\u5377\uFF0C\u4EE5\u53CA Docker \u672A\u4F7F\u7528\u7684 Build Cache" : "\u53EA\u5220\u9664\u590D\u6838\u540E\u4ECD\u672A\u88AB\u5BB9\u5668\u5F15\u7528\u7684\u60AC\u7A7A/\u663E\u5F0F disposable \u955C\u50CF\u3001\u672A\u6302\u8F7D\u4E14\u663E\u5F0F disposable \u7684\u5377\uFF0C\u4EE5\u53CA Docker \u672A\u4F7F\u7528\u7684 Build Cache\uFF1B\u5BB9\u5668\u548C release \u6C38\u4E0D\u8FDB\u5165\u6E05\u5355",
     createdAt: (/* @__PURE__ */ new Date()).toISOString(),
     expiresAt: new Date(Date.now() + 10 * 6e4).toISOString(),
     allowlist,
@@ -37115,32 +37564,58 @@ function localCleanupArgs(asset) {
 function localCleanupTimeoutMs(asset) {
   return asset?.type === "cache" && asset?.id === "docker-build-cache" ? 15 * 6e4 : 3e4;
 }
-function executeCleanup({ token, confirmed = false }) {
-  const preview = previewStore.get(token);
+function consumeCleanupPreview({ token, confirmed = false, confirmationDigest }, context = {}, store = previewStore) {
+  const preview = store.get(token);
   if (!preview) throw new Error("Cleanup preview is missing or expired. Generate a new preview.");
   if (Date.parse(preview.expiresAt) < Date.now()) {
-    previewStore.delete(token);
+    store.delete(token);
     throw new Error("Cleanup preview expired. Generate a new preview.");
   }
   if (!confirmed) throw new Error("Cleanup requires confirmation for the exact preview allowlist.");
+  const actorId = String(context.actorId || "internal-direct");
+  const serverInstanceId = String(context.serverInstanceId || RUNTIME_INSTANCE_ID);
+  if (actorId !== preview.actorId) throw new Error("Cleanup preview belongs to a different authenticated actor.");
+  if (serverInstanceId !== preview.serverInstanceId) throw new Error("Cleanup preview belongs to a different server instance.");
+  if (!/^[0-9a-f]{64}$/i.test(String(confirmationDigest || "")) || String(confirmationDigest).toLowerCase() !== preview.confirmationDigest) throw new Error("Cleanup confirmation digest does not match the exact preview allowlist.");
+  store.delete(token);
+  return preview;
+}
+function executeCleanup(input, context = {}) {
+  const { token } = input;
+  const preview = consumeCleanupPreview(input, context);
+  appendCleanupEvent("cleanup.operation.started", { previewToken: token, operationId: preview.operationId, source: preview.source, actorId: preview.actorId, confirmationDigest: preview.confirmationDigest }, preview.source);
   if (preview.source !== "local") {
     const config2 = loadConfig();
     const baseSourceConfig = projectSourceConfigs(config2, preview.project).find((item) => item.id === preview.source);
     const sourceConfig = preview.source === "github" && preview.project && preview.project !== "all" ? { ...baseSourceConfig, repository: preview.project } : baseSourceConfig;
-    const cleanup = executeRemoteCleanup({ source: preview.source, sourceConfig, allowlist: preview.allowlist });
-    previewStore.delete(token);
-    dashboardCache.clear();
-    appendCleanupEvent("cleanup.remote.executed", {
-      previewToken: token,
-      source: preview.source,
-      removed: String(cleanup.results.filter((item) => item.status === "removed").length),
-      failed: String(cleanup.results.filter((item) => item.status === "failed").length)
-    }, preview.source);
-    return cleanup;
+    try {
+      const cleanup = executeRemoteCleanup({ source: preview.source, sourceConfig, allowlist: preview.allowlist, operationId: preview.operationId });
+      dashboardCache.clear();
+      const failed2 = cleanup.results.filter((item) => item.status === "failed").length;
+      const skipped2 = cleanup.results.filter((item) => item.status === "skipped").length;
+      const status2 = cleanup.verification?.status === "pass" && failed2 === 0 && skipped2 === 0 ? "complete" : cleanup.results.some((item) => item.status === "removed") ? "partial" : "failed";
+      const completed = { ...cleanup, status: status2, operationId: preview.operationId };
+      appendCleanupEvent("cleanup.remote.executed", {
+        previewToken: token,
+        operationId: preview.operationId,
+        source: preview.source,
+        status: status2,
+        removed: String(cleanup.results.filter((item) => item.status === "removed").length),
+        failed: String(failed2),
+        skipped: String(skipped2)
+      }, preview.source);
+      return completed;
+    } catch (error51) {
+      const mutationState = String(error51.mutationState || "outcome_unknown");
+      const resultStatus = ["not_sent", "failed"].includes(mutationState) ? "failed" : "outcome_unknown";
+      const results2 = preview.allowlist.map((item) => ({ ...item, status: resultStatus, reclaimedBytes: 0, reason: error51.message }));
+      appendCleanupEvent(resultStatus === "outcome_unknown" ? "cleanup.remote.outcome_unknown" : "cleanup.remote.failed", { previewToken: token, operationId: preview.operationId, source: preview.source, mutationState, commandId: error51.commandId || null, reason: error51.message }, preview.source);
+      return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), operationId: preview.operationId, commandId: error51.commandId || null, resumeToken: resultStatus === "outcome_unknown" && error51.commandId ? { commandId: error51.commandId, operationId: preview.operationId, source: preview.source } : null, status: resultStatus, results: results2 };
+    }
   }
   dashboardCache.clear();
   const current = collectDashboard({ source: "local", project: preview.project, includeAllAssets: true });
-  const safeAssets = new Map(current.assets.filter((item) => item.classification === "reclaimable").map((item) => [`${item.type}:${item.id}`, item]));
+  const safeAssets = new Map(current.assets.filter((item) => item.retirementState === "executable-candidate").map((item) => [`${item.type}:${item.id}`, item]));
   const currentCache = current.bars.find((item) => item.type === "cache");
   if (Number(currentCache?.reclaimableBytes || 0) > 0) {
     safeAssets.set("cache:docker-build-cache", {
@@ -37156,6 +37631,17 @@ function executeCleanup({ token, confirmed = false }) {
     if (!asset) {
       results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "\u6267\u884C\u524D\u590D\u6838\u4E0D\u518D\u6EE1\u8DB3\u5B89\u5168\u6E05\u7406\u6761\u4EF6" });
       continue;
+    }
+    if (asset.type === "image") {
+      const previewTags = normalizedTags3(requested.tags);
+      const currentTags = normalizedTags3(asset.lineage?.tags);
+      const currentAutomatic = asset.lineage?.automaticRetirement;
+      const tagsChanged = JSON.stringify(previewTags) !== JSON.stringify(currentTags);
+      const successorChanged = requested.automaticRetirement && (requested.automaticRetirement.successorImageId !== currentAutomatic?.successorImageId || requested.automaticRetirement.successorSuccessful !== (currentAutomatic?.successorSuccessful === true));
+      if (tagsChanged || successorChanged) {
+        results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "Image tags or automatic retirement successor evidence changed after preview." });
+        continue;
+      }
     }
     if (["worktree", "worktree_residual", "host_artifact"].includes(asset.type)) {
       try {
@@ -37176,34 +37662,71 @@ function executeCleanup({ token, confirmed = false }) {
         continue;
       }
     }
-    const output = run("docker", args, { timeout: localCleanupTimeoutMs(asset) });
+    const mutation = runMutation("docker", args, { timeout: localCleanupTimeoutMs(asset) });
+    const requestedReferences = asset.type === "image" ? args.slice(2) : [];
+    const removedReferences = asset.type === "image" ? requestedReferences.filter((reference) => !run("docker", ["image", "inspect", reference, "--format", "{{.Id}}"], { timeout: 1e4 })) : void 0;
+    const objectGone = asset.type === "image" ? !run("docker", ["image", "inspect", asset.id, "--format", "{{.Id}}"], { timeout: 1e4 }) : asset.type === "container" ? !run("docker", ["container", "inspect", asset.id, "--format", "{{.Id}}"], { timeout: 1e4 }) : asset.type === "volume" ? !run("docker", ["volume", "inspect", asset.id, "--format", "{{.Name}}"], { timeout: 1e4 }) : mutation.ok;
+    const removed2 = mutation.ok && objectGone;
     results.push({
       ...requested,
       sizeBytes: asset.sizeBytes,
-      removedReferences: asset.type === "image" ? args.slice(2) : void 0,
-      status: output ? "removed" : "failed",
-      reclaimedBytes: output ? Number(asset.sizeBytes || 0) : 0
+      removedReferences,
+      status: removed2 ? "removed" : "failed",
+      reclaimedBytes: removed2 ? Number(asset.sizeBytes || 0) : 0,
+      reason: removed2 ? asset.reason : mutation.error || "Exact asset still exists after mutation."
     });
   }
-  previewStore.delete(token);
   dashboardCache.clear();
-  appendCleanupEvent("cleanup.executed", { previewToken: token, removed: String(results.filter((item) => item.status === "removed").length), failed: String(results.filter((item) => item.status === "failed").length) });
-  return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), results };
+  const failed = results.filter((item) => item.status === "failed").length;
+  const skipped = results.filter((item) => item.status === "skipped").length;
+  const removed = results.filter((item) => item.status === "removed").length;
+  const status = failed === 0 && skipped === 0 ? "complete" : removed > 0 ? "partial" : "failed";
+  appendCleanupEvent("cleanup.executed", { previewToken: token, operationId: preview.operationId, status, removed: String(removed), failed: String(failed), skipped: String(skipped) });
+  return { completedAt: (/* @__PURE__ */ new Date()).toISOString(), operationId: preview.operationId, status, results };
 }
 
 // mcp/server.mjs
 var moduleDirectory = dirname5(fileURLToPath(import.meta.url));
 var DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
 var dashboardHtml = readFileSync6(join5(moduleDirectory, "dashboard.html"), "utf8");
+var pluginRoot = join5(moduleDirectory, "..");
+function readJson3(path, fallback = {}) {
+  try {
+    return JSON.parse(readFileSync6(path, "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+function runtimeIdentity() {
+  const manifest = readJson3(join5(pluginRoot, ".codex-plugin", "plugin.json"));
+  const packageJson = readJson3(join5(pluginRoot, "package.json"));
+  const provenance = readJson3(join5(pluginRoot, "dist", "build-provenance.json"));
+  const serverPath = fileURLToPath(import.meta.url);
+  const serverSha256 = createHash7("sha256").update(readFileSync6(serverPath)).digest("hex");
+  return {
+    pluginId: String(manifest.name || "runtime-asset-tracker"),
+    manifestVersion: String(manifest.version || "unknown"),
+    packageVersion: String(packageJson.version || "unknown"),
+    sourceCommit: provenance.sourceCommit || null,
+    sourceTree: provenance.sourceTree || null,
+    sourceDirty: provenance.sourceDirty ?? null,
+    sourceDigest: provenance.sourceDigest || null,
+    buildDigest: provenance.buildDigest || serverSha256,
+    serverSha256,
+    serverInstanceId: runtimeInstanceId()
+  };
+}
 function toolResult(structuredContent, text) {
   return {
     structuredContent,
     content: [{ type: "text", text }]
   };
 }
-function createRuntimeAssetServer() {
+function createRuntimeAssetServer(context = {}) {
+  const identity = runtimeIdentity();
+  const actorContext = { actorId: String(context.actorId || "mcp-stdio"), serverInstanceId: identity.serverInstanceId };
   const server = new McpServer(
-    { name: "runtime-asset-tracker", version: "0.4.0" },
+    { name: "runtime-asset-tracker", version: identity.packageVersion },
     { instructions: "Use open_runtime_dashboard for a visual inventory. Always call preview_cleanup before execute_cleanup. Never infer that an unlabeled volume is disposable." }
   );
   N3(server, "Runtime Asset Dashboard", DASHBOARD_URI, {
@@ -37244,7 +37767,7 @@ function createRuntimeAssetServer() {
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } }
   }, async (input) => {
-    const preview = createCleanupPreview(input);
+    const preview = createCleanupPreview(input, actorContext);
     return toolResult({ preview }, `Cleanup preview contains ${preview.allowlist.length} explicitly disposable assets.`);
   });
   K3(server, "import_retirement_reconciliation", {
@@ -37334,14 +37857,16 @@ function createRuntimeAssetServer() {
     description: "Delete only the exact assets from a non-expired preview after the user confirms that allowlist.",
     inputSchema: {
       token: external_exports.string().uuid(),
-      confirmed: external_exports.literal(true)
+      confirmed: external_exports.literal(true),
+      confirmationDigest: external_exports.string().regex(/^[0-9a-f]{64}$/i)
     },
     outputSchema: { cleanup: external_exports.record(external_exports.string(), external_exports.unknown()) },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } }
   }, async (input) => {
-    const cleanup = executeCleanup(input);
-    return toolResult({ cleanup }, `Cleanup completed with ${cleanup.results.filter((item) => item.status === "removed").length} removed assets.`);
+    const cleanup = executeCleanup(input, actorContext);
+    const counts = Object.fromEntries(["removed", "failed", "skipped", "outcome_unknown"].map((status) => [status, cleanup.results.filter((item) => item.status === status).length]));
+    return toolResult({ cleanup }, `Cleanup status ${cleanup.status}: ${counts.removed} removed, ${counts.failed} failed, ${counts.skipped} skipped, ${counts.outcome_unknown} outcome unknown.`);
   });
   K3(server, "save_cleanup_schedule", {
     title: "Save cleanup preview schedule",
@@ -37361,27 +37886,87 @@ function createRuntimeAssetServer() {
   });
   return server;
 }
-async function readBody(request) {
+async function readBody(request, maxBytes = 1024 * 1024) {
   const chunks2 = [];
-  for await (const chunk of request) chunks2.push(chunk);
+  let bytes = 0;
+  for await (const chunk of request) {
+    bytes += chunk.length;
+    if (bytes > maxBytes) {
+      const error51 = new Error("Request body exceeds the 1 MiB limit.");
+      error51.httpStatus = 413;
+      throw error51;
+    }
+    chunks2.push(chunk);
+  }
   if (chunks2.length === 0) return {};
   return JSON.parse(Buffer.concat(chunks2).toString("utf8"));
 }
-function sendJson(response, status, payload) {
-  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+function sendJson(response, status, payload, headers = {}) {
+  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers });
   response.end(JSON.stringify(payload));
+}
+function constantTimeEqual(left, right) {
+  const first = Buffer.from(String(left || ""));
+  const second = Buffer.from(String(right || ""));
+  return first.length === second.length && timingSafeEqual(first, second);
+}
+function cookieValue(request, name) {
+  return String(request.headers.cookie || "").split(";").map((item) => item.trim()).flatMap((item) => {
+    const index = item.indexOf("=");
+    return index > 0 && item.slice(0, index) === name ? [decodeURIComponent(item.slice(index + 1))] : [];
+  })[0];
+}
+function authenticatedActor(request, accessToken, expectedOrigin) {
+  const authorization = String(request.headers.authorization || "");
+  const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const cookie = cookieValue(request, "rat_session");
+  const token = bearer || cookie;
+  if (!constantTimeEqual(token, accessToken)) {
+    const error51 = new Error("Authenticated Runtime Asset Tracker session required.");
+    error51.httpStatus = 401;
+    throw error51;
+  }
+  const origin = String(request.headers.origin || "");
+  if (origin && origin !== expectedOrigin) {
+    const error51 = new Error("Cross-origin Runtime Asset Tracker request rejected.");
+    error51.httpStatus = 403;
+    throw error51;
+  }
+  return `http:${createHash7("sha256").update(token).digest("hex").slice(0, 24)}`;
 }
 async function startHttp() {
   const host = process.env.RUNTIME_ASSET_DASHBOARD_HOST || "127.0.0.1";
   const port = Number(process.env.RUNTIME_ASSET_DASHBOARD_PORT || 47831);
+  if (!(/* @__PURE__ */ new Set(["127.0.0.1", "localhost"])).has(host)) throw new Error("Runtime Asset Tracker HTTP mode is loopback-only. Use the authenticated MCP/SSM adapters for remote inventory.");
+  const accessToken = process.env.RUNTIME_ASSET_HTTP_TOKEN || randomBytes(32).toString("hex");
+  const expectedOrigin = `http://${host}:${port}`;
+  const identity = runtimeIdentity();
   const httpServer = createServer(async (request, response) => {
     try {
+      const requestHost = String(request.headers.host || "");
+      if (requestHost !== `${host}:${port}` && requestHost !== `localhost:${port}` && requestHost !== `127.0.0.1:${port}`) {
+        sendJson(response, 403, { error: "invalid_host" });
+        return;
+      }
       const url2 = new URL(request.url || "/", `http://${host}:${port}`);
+      if (request.method === "GET" && url2.pathname === "/api/version") {
+        sendJson(response, 200, { identity });
+        return;
+      }
       if (request.method === "GET" && url2.pathname === "/") {
+        const supplied = url2.searchParams.get("access");
+        if (supplied && constantTimeEqual(supplied, accessToken)) {
+          response.writeHead(303, { Location: "/", "Set-Cookie": `rat_session=${encodeURIComponent(accessToken)}; HttpOnly; SameSite=Strict; Path=/`, "Cache-Control": "no-store" });
+          response.end();
+          return;
+        }
+        authenticatedActor(request, accessToken, expectedOrigin);
         response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
         response.end(dashboardHtml);
         return;
       }
+      const actorId = authenticatedActor(request, accessToken, expectedOrigin);
+      const actorContext = { actorId, serverInstanceId: identity.serverInstanceId };
       if (request.method === "GET" && url2.pathname === "/api/dashboard") {
         sendJson(response, 200, { dashboard: collectDashboard({
           scope: url2.searchParams.get("scope") || "project",
@@ -37391,7 +37976,7 @@ async function startHttp() {
         return;
       }
       if (request.method === "POST" && url2.pathname === "/api/cleanup-preview") {
-        sendJson(response, 200, { preview: createCleanupPreview(await readBody(request)) });
+        sendJson(response, 200, { preview: createCleanupPreview(await readBody(request), actorContext) });
         return;
       }
       if (request.method === "POST" && url2.pathname === "/api/reconciliation-import") {
@@ -37416,7 +38001,7 @@ async function startHttp() {
         return;
       }
       if (request.method === "POST" && url2.pathname === "/api/cleanup-execute") {
-        sendJson(response, 200, { cleanup: executeCleanup(await readBody(request)) });
+        sendJson(response, 200, { cleanup: executeCleanup(await readBody(request), actorContext) });
         return;
       }
       if (request.method === "POST" && url2.pathname === "/api/schedule") {
@@ -37424,9 +38009,7 @@ async function startHttp() {
         return;
       }
       if (url2.pathname === "/mcp" && ["POST", "GET", "DELETE"].includes(request.method || "")) {
-        response.setHeader("Access-Control-Allow-Origin", "*");
-        response.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
-        const server = createRuntimeAssetServer();
+        const server = createRuntimeAssetServer(actorContext);
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: void 0, enableJsonResponse: true });
         response.on("close", () => {
           transport.close();
@@ -37438,12 +38021,12 @@ async function startHttp() {
       }
       sendJson(response, 404, { error: "not_found" });
     } catch (error51) {
-      sendJson(response, 500, { error: "runtime_asset_dashboard_error", message: error51.message });
+      sendJson(response, Number(error51.httpStatus || 500), { error: "runtime_asset_dashboard_error", message: error51.message });
     }
   });
   httpServer.listen(port, host, () => {
-    console.log(`Runtime Asset Tracker dashboard: http://${host}:${port}`);
-    console.log(`MCP endpoint: http://${host}:${port}/mcp`);
+    console.log(`Runtime Asset Tracker dashboard: http://${host}:${port}/?access=${accessToken}`);
+    console.log(`Runtime Asset Tracker identity: ${identity.manifestVersion} ${identity.sourceCommit || "dirty-or-unbuilt-source"} ${identity.sourceDigest || "unknown-source"} ${identity.serverSha256}`);
   });
 }
 async function startStdio() {
@@ -37454,7 +38037,8 @@ async function startStdio() {
 if (process.argv.includes("--http")) await startHttp();
 else await startStdio();
 export {
-  createRuntimeAssetServer
+  createRuntimeAssetServer,
+  runtimeIdentity
 };
 /*! Bundled license information:
 
