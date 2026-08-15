@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir, hostname, platform } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,24 @@ const FINGERPRINT = /^sha256:[0-9a-f]{64}$/i;
 const ARCHIVE = /(?:\.tar\.gz|\.tar|\.tgz|\.zip|\.gz|\.7z|\.bundle)$/i;
 const ARTIFACT_DIR = /^(?:node_modules|dist|build|coverage|smoke-artifacts|test-results|playwright-report|\.next|\.nuxt|\.turbo|\.cache|\.pytest_cache|__pycache__|\.prod-artifacts|\.codex-(?:execution|artifacts?|deploy|release).*)$/i;
 const scanCache = new Map();
+const moduleDirectory = dirname(fileURLToPath(import.meta.url));
+const pluginRoot = resolve(moduleDirectory, "..");
+
+export function safeDeleteHelperIntegrity() {
+  const helperPath = join(pluginRoot, "scripts", "safe-delete-path.py");
+  const provenancePath = join(pluginRoot, "dist", "build-provenance.json");
+  try {
+    const provenance = JSON.parse(readFileSync(provenancePath, "utf8"));
+    const observedSha256 = createHash("sha256").update(readFileSync(helperPath)).digest("hex");
+    const declaredSha256 = String(provenance.safeDeleteHelperSha256 || "");
+    const stats = statSync(helperPath);
+    const ownerSafe = platform() === "win32" || typeof process.geteuid !== "function" || Number(stats.uid) === Number(process.geteuid());
+    const modeSafe = platform() === "win32" || (Number(stats.mode) & 0o022) === 0;
+    return { ok: /^[0-9a-f]{64}$/.test(declaredSha256) && observedSha256 === declaredSha256 && ownerSafe && modeSafe, helperPath, declaredSha256, observedSha256, ownerSafe, modeSafe };
+  } catch (error) {
+    return { ok: false, helperPath, declaredSha256: null, observedSha256: null, ownerSafe: false, modeSafe: false, reason: error.message };
+  }
+}
 
 function defaultStateRoot() {
   if (process.env.RUNTIME_ASSET_STATE_DIR) return resolve(process.env.RUNTIME_ASSET_STATE_DIR);
@@ -214,6 +232,8 @@ function applyAttestation(asset, attestations) {
   if (platform() === "win32") {
     return { ...attested, classification: "review", retirementBlocked: true, reason: "Windows path deletion remains blocked until a native handle-relative, open-reparse-point helper is available." };
   }
+  const helperIntegrity = safeDeleteHelperIntegrity();
+  if (!helperIntegrity.ok) return { ...attested, classification: "review", retirementBlocked: true, reason: "POSIX path deletion helper identity, owner, or permissions do not match the frozen build provenance." };
   return attested;
 }
 
@@ -439,8 +459,9 @@ function handleRelativeRemove(path, allowedRoot) {
   const rootIdentity = fileIdentity(allowedRoot);
   const targetIdentity = fileIdentity(path);
   if (rootIdentity.reparse || targetIdentity.reparse) throw new Error("Path cleanup cannot target a reparse point.");
-  const helper = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "safe-delete-path.py");
-  if (!existsSync(helper)) throw new Error("Handle-relative path cleanup helper is unavailable.");
+  const integrity = safeDeleteHelperIntegrity();
+  const helper = integrity.helperPath;
+  if (!integrity.ok) throw new Error("Handle-relative path cleanup helper identity, owner, or permissions do not match the frozen build provenance.");
   execFileSync("python3", [
     helper,
     "--root", allowedRoot,

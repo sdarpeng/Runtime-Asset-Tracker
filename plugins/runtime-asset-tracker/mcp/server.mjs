@@ -27,6 +27,9 @@ export function runtimeIdentity() {
   const provenance = readJson(join(pluginRoot, "dist", "build-provenance.json"));
   const serverPath = fileURLToPath(import.meta.url);
   const serverSha256 = createHash("sha256").update(readFileSync(serverPath)).digest("hex");
+  const helperPath = join(pluginRoot, "scripts", "safe-delete-path.py");
+  const safeDeleteHelperSha256Observed = existsSync(helperPath) ? createHash("sha256").update(readFileSync(helperPath)).digest("hex") : null;
+  const safeDeleteHelperSha256Declared = provenance.safeDeleteHelperSha256 || null;
   return {
     pluginId: String(manifest.name || "runtime-asset-tracker"),
     manifestVersion: String(manifest.version || "unknown"),
@@ -37,6 +40,9 @@ export function runtimeIdentity() {
     sourceDigest: provenance.sourceDigest || null,
     buildDigest: provenance.buildDigest || serverSha256,
     serverSha256,
+    safeDeleteHelperSha256Declared,
+    safeDeleteHelperSha256Observed,
+    safeDeleteHelperIntegrity: Boolean(safeDeleteHelperSha256Declared && safeDeleteHelperSha256Observed === safeDeleteHelperSha256Declared),
     serverInstanceId: runtimeInstanceId(),
   };
 }

@@ -947,6 +947,28 @@ if code != 0:
 if code != 0:
     raise SystemExit("Docker daemon is unavailable")
 
+result_path = safety.get("resultPath") or ""
+result_dir = os.path.dirname(result_path) if result_path else ""
+result_name = os.path.basename(result_path) if result_path else ""
+result_dir_fd = None
+result_descriptor = None
+staged_info = None
+if result_path:
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise RuntimeError("O_NOFOLLOW and O_DIRECTORY are required for staged cleanup transport")
+    os.mkdir(result_dir, 0o700)
+    result_dir_fd = os.open(result_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    directory_info = os.fstat(result_dir_fd)
+    if not stat.S_ISDIR(directory_info.st_mode) or directory_info.st_uid != os.geteuid() or stat.S_IMODE(directory_info.st_mode) != 0o700:
+        os.close(result_dir_fd)
+        raise RuntimeError("staged cleanup directory identity is unsafe")
+    result_descriptor = os.open(result_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=result_dir_fd)
+    staged_info = os.fstat(result_descriptor)
+    if not stat.S_ISREG(staged_info.st_mode) or staged_info.st_uid != os.geteuid() or stat.S_IMODE(staged_info.st_mode) != 0o600 or staged_info.st_nlink != 1:
+        os.close(result_descriptor)
+        os.close(result_dir_fd)
+        raise RuntimeError("staged cleanup file identity is unsafe")
+
 def inspect(kind, identifier):
     code, out, _ = run(docker + [kind, "inspect", identifier])
     if code != 0: return None
@@ -1040,22 +1062,38 @@ def fd_identity(info):
 def stable_path_identity(expected):
     return (int(expected[0]), int(expected[1]), int(stat.S_IFMT(expected[2])))
 
+def fd_mount_id(descriptor):
+    try:
+        with open("/proc/self/fdinfo/%d" % descriptor, "r", encoding="ascii") as handle:
+            for line in handle:
+                if line.startswith("mnt_id:"): return int(line.split(":", 1)[1].strip())
+    except Exception as error:
+        raise RuntimeError("Mount identity is unavailable") from error
+    raise RuntimeError("Mount identity is unavailable")
+
 def open_directory_no_follow(name, dir_fd=None):
     if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
         raise RuntimeError("O_DIRECTORY and O_NOFOLLOW are required for remote path cleanup")
     return os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
 
-def remove_directory_contents_fd(directory_fd, expected_device):
+def remove_directory_contents_fd(directory_fd, expected_device, expected_mount_id):
     for name in os.listdir(directory_fd):
         if name in [".", ".."]: raise RuntimeError("Unexpected directory entry")
         before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
         if int(before.st_dev) != int(expected_device): raise RuntimeError("Cross-device path cleanup is blocked")
+        if not hasattr(os, "O_PATH"): raise RuntimeError("O_PATH is required for mount-safe cleanup")
+        entry_fd = os.open(name, os.O_PATH | os.O_NOFOLLOW, dir_fd=directory_fd)
+        try:
+            if fd_identity(os.fstat(entry_fd)) != fd_identity(before) or fd_mount_id(entry_fd) != expected_mount_id:
+                raise RuntimeError("Entry identity or mount changed before removal")
+        finally:
+            os.close(entry_fd)
         if stat.S_ISDIR(before.st_mode):
             child_fd = open_directory_no_follow(name, dir_fd=directory_fd)
             try:
                 opened = os.fstat(child_fd)
-                if fd_identity(opened) != fd_identity(before): raise RuntimeError("Directory identity changed before traversal")
-                remove_directory_contents_fd(child_fd, expected_device)
+                if fd_identity(opened) != fd_identity(before) or fd_mount_id(child_fd) != expected_mount_id: raise RuntimeError("Directory identity or mount changed before traversal")
+                remove_directory_contents_fd(child_fd, expected_device, expected_mount_id)
                 current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
                 if fd_identity(current) != fd_identity(opened): raise RuntimeError("Directory identity changed before removal")
             finally:
@@ -1074,12 +1112,23 @@ def remove_managed_path_handle_relative(path, root, expected_root, expected_targ
     target_name = parts[-1]
     try:
         if fd_identity(os.fstat(root_fd)) != stable_path_identity(expected_root): raise RuntimeError("Managed root identity changed")
+        root_mount_id = fd_mount_id(root_fd)
         for part in parts[:-1]:
             next_fd = open_directory_no_follow(part, dir_fd=parent_fd)
+            if fd_mount_id(next_fd) != root_mount_id:
+                os.close(next_fd)
+                raise RuntimeError("Mount transition below managed root is blocked")
             if parent_fd != root_fd: os.close(parent_fd)
             parent_fd = next_fd
         before = os.stat(target_name, dir_fd=parent_fd, follow_symlinks=False)
         if fd_identity(before) != stable_path_identity(expected_target) or stat.S_ISLNK(before.st_mode): raise RuntimeError("Target identity changed before isolation")
+        if not hasattr(os, "O_PATH"): raise RuntimeError("O_PATH is required for mount-safe cleanup")
+        target_identity_fd = os.open(target_name, os.O_PATH | os.O_NOFOLLOW, dir_fd=parent_fd)
+        try:
+            if fd_identity(os.fstat(target_identity_fd)) != fd_identity(before) or fd_mount_id(target_identity_fd) != root_mount_id:
+                raise RuntimeError("Target mount transition is blocked")
+        finally:
+            os.close(target_identity_fd)
         quarantine = ".runtime-asset-trash-" + hashlib.sha256((path + str(time.time_ns())).encode("utf-8")).hexdigest()[:24]
         os.rename(target_name, quarantine, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
         isolated = os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
@@ -1096,7 +1145,8 @@ def remove_managed_path_handle_relative(path, root, expected_root, expected_targ
             try:
                 opened = os.fstat(target_fd)
                 if fd_identity(opened) != fd_identity(isolated): raise RuntimeError("Isolated directory identity changed")
-                remove_directory_contents_fd(target_fd, isolated.st_dev)
+                if fd_mount_id(target_fd) != root_mount_id: raise RuntimeError("Isolated target mount transition is blocked")
+                remove_directory_contents_fd(target_fd, isolated.st_dev, root_mount_id)
                 current = os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
                 if fd_identity(current) != fd_identity(opened): raise RuntimeError("Isolated directory identity changed before removal")
             finally:
@@ -1222,21 +1272,14 @@ for item in items:
     results.append({**item, "status":"removed" if removed else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if removed else 0, "removedReferences":removed_references, "reason":reason if removed else (error[-300:] or "image still exists after exact tag removal")})
 
 encoded = base64.b64encode(gzip.compress(json.dumps({"results":results}, separators=(",",":"), ensure_ascii=False).encode("utf-8"))).decode("ascii")
-result_path = safety.get("resultPath") or ""
-if result_path and len(encoded) > 16000:
-    if not hasattr(os, "O_NOFOLLOW"): raise RuntimeError("O_NOFOLLOW is required for staged cleanup transport")
-    result_dir = os.path.dirname(result_path)
-    os.mkdir(result_dir, 0o700)
-    directory_info = os.lstat(result_dir)
-    if not stat.S_ISDIR(directory_info.st_mode) or stat.S_ISLNK(directory_info.st_mode) or directory_info.st_uid != os.geteuid() or stat.S_IMODE(directory_info.st_mode) != 0o700:
-        raise RuntimeError("staged cleanup directory identity is unsafe")
-    descriptor = os.open(result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    staged_info = os.fstat(descriptor)
-    if not stat.S_ISREG(staged_info.st_mode) or staged_info.st_uid != os.geteuid() or stat.S_IMODE(staged_info.st_mode) != 0o600 or staged_info.st_nlink != 1:
-        os.close(descriptor)
-        raise RuntimeError("staged cleanup file identity is unsafe")
-    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
-        handle.write(encoded)
+if result_path:
+    payload_bytes = encoded.encode("ascii")
+    offset = 0
+    while offset < len(payload_bytes):
+        offset += os.write(result_descriptor, payload_bytes[offset:])
+    os.fsync(result_descriptor)
+    os.close(result_descriptor)
+    os.close(result_dir_fd)
     print("RATCLEAN2:%d:%s:%d:%d:%d" % (len(encoded), hashlib.sha256(encoded.encode("ascii")).hexdigest(), staged_info.st_dev, staged_info.st_ino, staged_info.st_uid))
 else:
     print("RATCLEAN1:" + encoded)`;
@@ -1328,7 +1371,7 @@ function pollExistingSsmMutation(sourceConfig, commandId, comment, waitMs = 185_
       throw mutationError(error.message, "outcome_unknown");
     }
     if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
-    if (invocation.Status !== "Success") throw mutationError(invocation.StandardErrorContent || `SSM cleanup status: ${invocation.Status}`, "failed");
+    if (invocation.Status !== "Success") throw Object.assign(mutationError(invocation.StandardErrorContent || `SSM cleanup status: ${invocation.Status}`, "outcome_unknown"), { output: String(invocation.StandardOutputContent || ""), terminalStatus: invocation.Status });
     return { commandId, output: String(invocation.StandardOutputContent || "") };
   }
   throw mutationError(`Remote cleanup command ${commandId} did not reach a terminal state within ${Math.ceil(waitMs / 1_000)} seconds.`, "outcome_unknown");
@@ -1430,7 +1473,7 @@ function executeAwsDockerCleanup(sourceConfig, allowlist, operationId) {
   return { completedAt: new Date().toISOString(), commandId: invocation.commandId, results, verification: buildPostCleanupVerification(snapshot, after, results), resultTransportCleanup };
 }
 
-export function resumeAwsCleanup({ sourceConfig, operationId, commandId } = {}) {
+export function resumeAwsCleanup({ sourceConfig, operationId, commandId, allowlist = [] } = {}) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(operationId || ""))) throw new Error("A valid cleanup operationId is required.");
   const instanceId = sourceConfig?.instanceId;
   if (!instanceId) throw new Error("EC2 instanceId is not configured.");
@@ -1444,17 +1487,28 @@ export function resumeAwsCleanup({ sourceConfig, operationId, commandId } = {}) 
     exactCommandId = reconcileSsmCommandId(sourceConfig, comment, { attempts: 8, delayMs: 1_000 }) || "";
   }
   if (!exactCommandId) return { completedAt: new Date().toISOString(), operationId, commandId: null, status: "outcome_unknown", results: [], resumeToken: { operationId, commandId: null }, reason: "Exact commandId is not visible yet; retry this resume operation without sending a new cleanup command." };
-  const invocation = pollExistingSsmMutation(sourceConfig, exactCommandId, comment);
+  let invocation;
+  try {
+    invocation = pollExistingSsmMutation(sourceConfig, exactCommandId, comment);
+  } catch (error) {
+    if (error.mutationState !== "outcome_unknown" || error.commandId !== exactCommandId) throw error;
+    invocation = { commandId: exactCommandId, output: String(error.output || ""), terminalStatus: error.terminalStatus || "Unknown" };
+  }
   const resultPath = `/tmp/runtime-asset-tracker-cleanup-${String(operationId).replace(/[^a-zA-Z0-9-]/g, "")}/result.b64`;
-  const payload = decodeAwsCleanupResult(invocation, sourceConfig, resultPath);
-  const results = payload.results || [];
+  const hasResultMarker = /RATCLEAN[12]:/.test(invocation.output);
+  const payload = hasResultMarker ? decodeAwsCleanupResult(invocation, sourceConfig, resultPath) : { results: [] };
+  const results = hasResultMarker ? (payload.results || []) : (allowlist || []).map((item) => ({ ...item, status: "outcome_unknown", reclaimedBytes: 0, reason: `SSM terminal status ${invocation.terminalStatus || "unknown"} had no durable result marker; live reconciliation is required.` }));
+  if (!hasResultMarker && results.length === 0) throw Object.assign(new Error("The failed SSM operation has no result marker or persisted exact allowlist for live reconciliation."), { mutationState: "outcome_unknown", commandId: exactCommandId });
   remoteCache.clear();
   const after = collectPostCleanupSnapshot({ ...sourceConfig, includeAllAssets: true }, exactCommandId, results);
-  const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(sourceConfig, exactCommandId, resultPath, invocation.output) : { status: "not-staged" };
+  const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(sourceConfig, exactCommandId, resultPath, invocation.output) : { status: hasResultMarker ? "not-staged" : "retained-or-unavailable-for-reconciliation" };
   const remaining = new Set((after.assets || []).map((asset) => `${asset.type}:${asset.id}`));
-  const reconciledResults = results.map((item) => item.status === "removed" && remaining.has(`${item.type}:${item.id}`)
-    ? { ...item, status: "outcome_unknown", reclaimedBytes: 0, reason: "Command reported removal but the exact object is still present during resume reconciliation." }
-    : item);
+  const reconciledResults = results.map((item) => {
+    const stillPresent = remaining.has(`${item.type}:${item.id}`);
+    if (!hasResultMarker && item.type !== "cache" && !stillPresent) return { ...item, status: "removed", reclaimedBytes: Number(item.sizeBytes || 0), reason: "Exact object is absent in the live post-command inventory; removal was reconciled without resending." };
+    if (item.status === "removed" && stillPresent) return { ...item, status: "outcome_unknown", reclaimedBytes: 0, reason: "Command reported removal but the exact object is still present during resume reconciliation." };
+    return item;
+  });
   const incomplete = reconciledResults.filter((item) => item.status !== "removed").length;
   return {
     completedAt: new Date().toISOString(), operationId, commandId: exactCommandId,

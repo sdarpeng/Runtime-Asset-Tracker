@@ -50,7 +50,12 @@ describe("authenticated loopback HTTP", () => {
   after(() => { child?.kill(); });
 
   it("requires authentication and consumes the bootstrap nonce exactly once", async () => {
-    assert.equal((await fetch(`${baseUrl}/api/version`)).status, 200);
+    const versionResponse = await fetch(`${baseUrl}/api/version`);
+    assert.equal(versionResponse.status, 200);
+    const identity = (await versionResponse.json()).identity;
+    assert.match(identity.safeDeleteHelperSha256Declared || "", /^[0-9a-f]{64}$/);
+    assert.equal(identity.safeDeleteHelperSha256Observed, identity.safeDeleteHelperSha256Declared);
+    assert.equal(identity.safeDeleteHelperIntegrity, true);
     assert.equal((await fetch(`${baseUrl}/`)).status, 401);
     const bootstrap = await fetch(bootstrapUrl, { redirect: "manual" });
     assert.equal(bootstrap.status, 303);

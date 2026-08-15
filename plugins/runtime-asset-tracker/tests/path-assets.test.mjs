@@ -10,6 +10,7 @@ import {
   executePathAssetCleanup,
   importPathRetirementReconciliation,
   pathAssetId,
+  safeDeleteHelperIntegrity,
   scanPathUsage,
   validatePathRetirementReconciliation,
 } from "../mcp/path-assets.mjs";
@@ -256,7 +257,12 @@ describe("worktree and host artifact lifecycle", () => {
     assert.match(helper, /dir_fd=parent_fd/);
     assert.match(helper, /os\.listdir\(directory_fd\)/);
     assert.match(helper, /follow_symlinks=False/);
+    assert.match(helper, /mnt_id:/);
+    assert.match(helper, /mount transition/i);
     assert.doesNotMatch(helper, /shutil\.rmtree|os\.walk/);
+    const integrity = safeDeleteHelperIntegrity();
+    assert.equal(typeof integrity.ok, "boolean");
+    assert.match(String(integrity.observedSha256 || integrity.reason), /[0-9a-f]{64}|provenance/i);
   });
 
   it("rejects vague retirement reports and imports exact path attestations idempotently", () => {

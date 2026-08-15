@@ -508,7 +508,7 @@ function readRecentLedgerEvents(maxBytes = 8 * 1024 * 1024) {
 }
 
 function emptyAuthorityState() {
-  return { retirements: new Map(), protections: new Map(), lifecycle: new Map(), parsedEventCount: 0 };
+  return { retirements: new Map(), protections: new Map(), lifecycle: new Map(), orders: new Map(), parsedEventCount: 0 };
 }
 
 function cloneAuthorityState(state) {
@@ -516,6 +516,7 @@ function cloneAuthorityState(state) {
     retirements: new Map(state.retirements),
     protections: new Map(state.protections),
     lifecycle: new Map(state.lifecycle),
+    orders: new Map(state.orders || []),
     parsedEventCount: Number(state.parsedEventCount || 0),
   };
 }
@@ -530,36 +531,49 @@ function scopedAssetKey(event) {
 
 export function reduceAuthoritativeLedgerEvents(events, initialState = emptyAuthorityState()) {
   const state = initialState;
+  if (!state.orders) state.orders = new Map();
   for (const event of events || []) {
     state.parsedEventCount += 1;
+    const appendOrdinal = state.parsedEventCount;
     const assetKey = scopedAssetKey(event);
     if (assetKey && event.event === "asset.retirement.revoked") {
       state.retirements.delete(assetKey);
+      state.orders.delete(`retirement\0${assetKey}`);
       continue;
     }
     if (assetKey && event.event === "asset.protection.revoked") {
       state.protections.delete(assetKey);
+      state.orders.delete(`protection\0${assetKey}`);
       continue;
     }
     if (assetKey && event.event === "asset.protection.bound" && event.status === "protected") {
       state.protections.set(assetKey, event);
+      state.orders.set(`protection\0${assetKey}`, appendOrdinal);
       continue;
     }
     if (assetKey && event.event === "asset.retired" && event.status === "retired") {
       state.retirements.set(assetKey, event);
+      state.orders.set(`retirement\0${assetKey}`, appendOrdinal);
       continue;
     }
-    if (/^(?:build|compose|deployment|task|outcome|pull_request)\./.test(String(event?.event || ""))) {
-      const lifecycleKey = [event.project, event.environment, event.event, event.asset?.type, event.asset?.id, event.details?.outcomeId, event.details?.threadId].map((value) => String(value || "")).join("\0");
+    if (/^(?:build|compose|deployment|task|outcome|pull_request|cleanup)\./.test(String(event?.event || ""))) {
+      const eventName = String(event?.event || "");
+      const lifecycleFamily = /^(?:build\.failed|build\.completed|build\.succeeded)$/.test(eventName) ? "build.terminal-state" : eventName;
+      const lifecycleKey = [event.project, event.environment, lifecycleFamily, event.asset?.type, event.asset?.id, event.details?.outcomeId, event.details?.threadId, event.details?.operationId].map((value) => String(value || "")).join("\0");
       state.lifecycle.set(lifecycleKey, event);
+      state.orders.set(`lifecycle\0${lifecycleKey}`, appendOrdinal);
     }
   }
   return state;
 }
 
 function authorityStateEvents(state) {
-  return [...state.retirements.values(), ...state.protections.values(), ...state.lifecycle.values()]
-    .sort((left, right) => String(left.occurredAt || "").localeCompare(String(right.occurredAt || "")));
+  const ordered = [
+    ...[...state.retirements].map(([key, event]) => ({ event, order: state.orders.get(`retirement\0${key}`) || 0 })),
+    ...[...state.protections].map(([key, event]) => ({ event, order: state.orders.get(`protection\0${key}`) || 0 })),
+    ...[...state.lifecycle].map(([key, event]) => ({ event, order: state.orders.get(`lifecycle\0${key}`) || 0 })),
+  ];
+  return ordered.sort((left, right) => left.order - right.order).map((item) => item.event);
 }
 
 function scanLedgerAuthority(ledger, startOffset, initialState) {
@@ -1355,7 +1369,7 @@ export function consumeCleanupPreview({ token, confirmed = false, confirmationDi
 export function executeCleanup(input, context = {}) {
   const { token } = input;
   const preview = consumeCleanupPreview(input, context);
-  appendCleanupEvent("cleanup.operation.started", { previewToken: token, operationId: preview.operationId, source: preview.source, actorId: preview.actorId, confirmationDigest: preview.confirmationDigest }, preview.source);
+  appendCleanupEvent("cleanup.operation.started", { previewToken: token, operationId: preview.operationId, source: preview.source, project: preview.project, actorId: preview.actorId, confirmationDigest: preview.confirmationDigest, allowlist: preview.allowlist }, preview.source);
   if (preview.source !== "local") {
     const config = loadConfig();
     const baseSourceConfig = projectSourceConfigs(config, preview.project).find((item) => item.id === preview.source);
@@ -1463,7 +1477,9 @@ export function resumeCleanup({ source, project, operationId, commandId } = {}) 
   const config = loadConfig();
   const sourceConfig = projectSourceConfigs(config, project).find((item) => item.id === source);
   if (!sourceConfig || (sourceConfig.transport || "aws-ssm") !== "aws-ssm") throw new Error("The selected project/source is not configured for AWS SSM cleanup recovery.");
-  const result = resumeAwsCleanup({ sourceConfig, operationId, commandId });
+  const started = readAuthoritativeLedgerEvents().filter((event) => event.event === "cleanup.operation.started" && event.details?.operationId === operationId && event.details?.source === source && event.details?.project === project).at(-1);
+  const allowlist = Array.isArray(started?.details?.allowlist) ? started.details.allowlist : [];
+  const result = resumeAwsCleanup({ sourceConfig, operationId, commandId, allowlist });
   appendCleanupEvent("cleanup.remote.resumed", { source, project, operationId, commandId: result.commandId || null, status: result.status }, source);
   return result;
 }

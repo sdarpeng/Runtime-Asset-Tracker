@@ -244,15 +244,24 @@ describe("remote read-only adapters", () => {
     assert.throws(() => findExactSsmCommandId([...commands, { ...commands[0], CommandId: "33333333-3333-4333-8333-333333333333" }], { comment: "RAT operation-a", instanceId: "i-one" }), /ambiguous recovery/);
   });
 
-  it("stages oversized cleanup results with a checksum marker", () => {
+  it("reserves and stages every cleanup result with a checksum marker", () => {
     const script = awsDockerCleanupScript([], { cleanupResultPath: "/tmp/rat-cleanup-operation/result.b64" });
-    assert.match(script, /len\(encoded\) > 16000/);
     assert.match(script, /RATCLEAN2:%d:%s:%d:%d:%d/);
     assert.match(script, /os\.mkdir\(result_dir, 0o700\)/);
     assert.match(script, /os\.O_WRONLY \| os\.O_CREAT \| os\.O_EXCL \| os\.O_NOFOLLOW, 0o600/);
     assert.doesNotMatch(script, /os\.O_TRUNC/);
     assert.match(script, /staged_info\.st_nlink != 1/);
     assert.match(script, /hashlib\.sha256/);
+    assert.ok(script.indexOf("os.mkdir(result_dir, 0o700)") < script.indexOf("results = []"));
+    assert.match(script, /os\.fsync\(result_descriptor\)/);
+  });
+
+  it("treats every post-send terminal SSM failure as outcome unknown and keeps resume reconciliation", () => {
+    const source = readFileSync(new URL("../mcp/remote.mjs", import.meta.url), "utf8");
+    assert.match(source, /SSM cleanup status:[^\n]+"outcome_unknown"/);
+    assert.match(source, /allowlist = \[\]/);
+    assert.match(source, /live reconciliation is required/);
+    assert.match(source, /without resending/);
   });
 
   it("resume logic never calls the cleanup send path", () => {

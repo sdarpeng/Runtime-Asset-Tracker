@@ -62,4 +62,47 @@ describe("authoritative ledger state", () => {
       else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
     }
   });
+
+  it("preserves physical append order for terminal build state despite timestamp skew", () => {
+    const root = mkdtempSync(join(tmpdir(), "rat-ledger-build-order-"));
+    const ledger = join(root, "events.jsonl");
+    const build = (kind, occurredAt) => ({
+      schemaVersion: 1, eventId: `${kind}-${Math.random()}`, occurredAt, event: kind,
+      project: "cms", environment: "local", asset: { type: "image", id: "sha256:new" }, details: {},
+    });
+    const success = build("build.succeeded", "2026-08-10T01:02:00Z");
+    const failure = build("build.failed", "2026-08-10T01:01:00Z");
+    const filler = { schemaVersion: 1, eventId: "build-order-filler", occurredAt: "2026-08-10T01:03:00Z", event: "diagnostic.noise", details: { payload: "x".repeat(9 * 1024 * 1024) } };
+    writeFileSync(ledger, `${JSON.stringify(success)}\n${JSON.stringify(filler)}\n${JSON.stringify(failure)}\n`, "utf8");
+    const previous = process.env.RUNTIME_ASSET_LEDGER_FILE;
+    process.env.RUNTIME_ASSET_LEDGER_FILE = ledger;
+    try {
+      const builds = readAuthoritativeLedgerEvents().filter((item) => item.event.startsWith("build."));
+      assert.deepEqual(builds.map((item) => item.event), ["build.failed"]);
+    } finally {
+      if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
+      else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
+    }
+  });
+
+  it("keeps the final recovery success across incremental cache resume", () => {
+    const root = mkdtempSync(join(tmpdir(), "rat-ledger-build-resume-"));
+    const ledger = join(root, "events.jsonl");
+    const occurredAt = "2026-08-10T01:01:00Z";
+    const build = (kind, suffix) => ({
+      schemaVersion: 1, eventId: `${kind}-${suffix}`, occurredAt, event: kind,
+      project: "cms", environment: "local", asset: { type: "image", id: "sha256:new" }, details: {},
+    });
+    writeFileSync(ledger, `${JSON.stringify(build("build.succeeded", "one"))}\n${JSON.stringify(build("build.failed", "two"))}\n`, "utf8");
+    const previous = process.env.RUNTIME_ASSET_LEDGER_FILE;
+    process.env.RUNTIME_ASSET_LEDGER_FILE = ledger;
+    try {
+      assert.deepEqual(readAuthoritativeLedgerEvents().filter((item) => item.event.startsWith("build.")).map((item) => item.event), ["build.failed"]);
+      writeFileSync(ledger, `${JSON.stringify(build("build.succeeded", "one"))}\n${JSON.stringify(build("build.failed", "two"))}\n${JSON.stringify(build("build.succeeded", "three"))}\n`, "utf8");
+      assert.deepEqual(readAuthoritativeLedgerEvents().filter((item) => item.event.startsWith("build.")).map((item) => item.event), ["build.succeeded"]);
+    } finally {
+      if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
+      else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
+    }
+  });
 });
