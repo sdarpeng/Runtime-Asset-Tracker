@@ -37,6 +37,7 @@ describe("unified runtime asset table", () => {
     });
     assert.equal(table.schemaVersion, UNIFIED_ASSET_TABLE_SCHEMA);
     assert.equal(table.assets.find((row) => row.exactIdentity.name === "cms-pr28-worker").decision, "candidate-stop-then-remove");
+    assert.equal(table.assets.find((row) => row.exactIdentity.name === "cms-pr28-worker").exactIdentity.state, "running");
     assert.equal(table.assets.find((row) => row.exactIdentity.name === "cms-prod-api-1").decision, "protected");
     assert.equal(table.summary.candidateCount, 1);
   });
@@ -102,5 +103,19 @@ describe("unified runtime asset table", () => {
       ] } }],
     });
     assert.equal(table.assets[0].decision, "review");
+  });
+
+  it("accepts a unique GitHub revision prefix in a managed path but not a date token", () => {
+    const table = buildUnifiedAssetTable({
+      project: PROJECT,
+      generatedAt: "2026-08-14T00:00:00Z",
+      githubAuthority: authority(),
+      dashboards: [{ source: "staging", dashboard: { assets: [
+        asset({ type: "host_artifact", id: `/managed/pr28-${REVISION.slice(0, 8)}`, name: `pr28-${REVISION.slice(0, 8)}`, lineage: { consumers: [], managedRoot: "/managed", fingerprint: `sha256:${"1".repeat(64)}` } }),
+        asset({ type: "host_artifact", id: "/managed/pr28-20260814", name: "pr28-20260814", labels: { "org.opencontainers.image.revision": "" }, lineage: { consumers: [], managedRoot: "/managed", fingerprint: `sha256:${"2".repeat(64)}` } }),
+      ] } }],
+    });
+    assert.equal(table.assets.find((row) => row.exactIdentity.name.includes(REVISION.slice(0, 8))).decision, "candidate-retirement");
+    assert.equal(table.assets.find((row) => row.exactIdentity.name.includes("20260814")).decision, "review");
   });
 });

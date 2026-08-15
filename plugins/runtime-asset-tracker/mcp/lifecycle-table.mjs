@@ -24,8 +24,8 @@ function assetRevision(asset) {
     asset?.gitSha,
   ].map(normalizeSha).find(Boolean);
   if (direct) return direct;
-  const text = [asset?.id, asset?.name, ...(asset?.lineage?.tags || [])].filter(Boolean).join(" ");
-  return normalizeSha(text.match(/(?:^|[^0-9a-f])([0-9a-f]{40})(?:$|[^0-9a-f])/i)?.[1]);
+  const text = [asset?.name, runtimeLabel(asset, "release"), asset?.lineage?.composeProject, ...(asset?.lineage?.tags || [])].filter(Boolean).join(" ");
+  return normalizeSha(text.match(/(?:^|[^0-9a-f])([0-9a-f]{7,40})(?:$|[^0-9a-f])/i)?.[1]);
 }
 
 function pullRequestHint(asset) {
@@ -143,6 +143,7 @@ function exactIdentity(asset) {
     name: String(asset.name || ""),
     tags: [...(asset?.lineage?.tags || [])].map(String).sort(),
     imageId: asset?.lineage?.imageId || null,
+    state: asset?.status || null,
     composeProject: asset?.lineage?.composeProject || null,
     mounts: [...(asset?.lineage?.mounts || [])],
     managedRoot: asset?.lineage?.managedRoot || null,
