@@ -616,7 +616,10 @@ function scanLedgerAuthority(ledger) {
 
 export function readAuthoritativeLedgerEvents(io = {}) {
   const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
-  if (!existsSync(ledger)) return [];
+  if (!existsSync(ledger)) {
+    ledgerAuthorityCache.delete(ledger);
+    return [];
+  }
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const scanned = scanLedgerAuthority(ledger);
     io.afterScan?.({ attempt, ledger, scanned });
@@ -1406,10 +1409,102 @@ export function consumeCleanupPreview({ token, confirmed = false, confirmationDi
   return preview;
 }
 
+function stableAuthorityValue(value) {
+  if (Array.isArray(value)) return value.map(stableAuthorityValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableAuthorityValue(value[key])]));
+}
+
+function authorityDigest(value) {
+  return createHash("sha256").update(JSON.stringify(stableAuthorityValue(value))).digest("hex");
+}
+
+function remoteRetirementEvidenceBinding(evidence = {}) {
+  return {
+    reportSha256: String(evidence.reportSha256 || ""),
+    group: String(evidence.group || ""),
+    approvedTags: normalizedTags(evidence.approvedTags).sort(),
+    revision: String(evidence.revision || ""),
+    assetType: String(evidence.assetType || ""),
+    expectedSizeBytes: Number(evidence.expectedSizeBytes || 0),
+    expectedName: String(evidence.expectedName || ""),
+    expectedState: String(evidence.expectedState || ""),
+    expectedImageId: String(evidence.expectedImageId || ""),
+    expectedComposeProject: String(evidence.expectedComposeProject || ""),
+    expectedMounts: Array.isArray(evidence.expectedMounts) ? evidence.expectedMounts : [],
+    preserveVolumes: evidence.preserveVolumes === true,
+    stopBeforeRemoval: evidence.stopBeforeRemoval === true,
+    managedRoot: String(evidence.managedRoot || ""),
+    fingerprint: String(evidence.fingerprint || ""),
+    expectedReferences: Number(evidence.expectedReferences || 0),
+    lifecycle: evidence.lifecycle && typeof evidence.lifecycle === "object" ? evidence.lifecycle : undefined,
+  };
+}
+
+export function remoteCleanupAuthoritySnapshot(preview) {
+  const events = readAuthoritativeLedgerEvents();
+  const ledger = process.env.RUNTIME_ASSET_LEDGER_FILE || join(stateRoot(), "events.jsonl");
+  const cache = ledgerAuthorityCache.get(ledger);
+  const governed = retirementAttestations(events, { project: preview.project, environment: preview.source });
+  const items = [...new Map((preview.allowlist || []).map((requested) => [`${requested.type}:${requested.id}`, requested])).entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, requested]) => {
+      const protection = governed.protections.get(key);
+      const retirement = governed.retirements.get(key);
+      const state = protection ? "protected" : retirement ? "retired" : "none";
+      const evidenceDigest = retirement ? authorityDigest(remoteRetirementEvidenceBinding(retirement)) : null;
+      const requestedEvidenceDigest = requested.retirementEvidence ? authorityDigest(remoteRetirementEvidenceBinding(requested.retirementEvidence)) : null;
+      const recoverySource = retirement ? String(retirement.recoverySource || "") : null;
+      const requestedRecoverySource = requested.retirementEvidence ? String(requested.recoverySource || "") : null;
+      const valid = state !== "protected" && (!requestedEvidenceDigest || (state === "retired" && requestedEvidenceDigest === evidenceDigest && requestedRecoverySource === recoverySource));
+      return { key, state, evidenceDigest, requestedEvidenceDigest, recoverySource, requestedRecoverySource, valid };
+    });
+  return {
+    ordinal: Number(cache?.state?.parsedEventCount || 0),
+    ledgerDigest: String(cache?.digest || ""),
+    governanceDigest: authorityDigest({ project: preview.project, environment: preview.source, items: items.map(({ key, state, evidenceDigest, recoverySource }) => ({ key, state, evidenceDigest, recoverySource })) }),
+    invalidAssetKeys: items.filter((item) => !item.valid).map((item) => item.key),
+    observedStarted: events.some((event) => event.event === "cleanup.operation.started" && event.details?.operationId === preview.operationId && event.details?.confirmationDigest === preview.confirmationDigest),
+  };
+}
+
+export function executeAuthorityBoundRemoteCleanup({ token, preview, sourceConfig }, io = {}) {
+  const readAuthority = io.readAuthority || remoteCleanupAuthoritySnapshot;
+  const appendEvent = io.appendEvent || appendCleanupEvent;
+  const executeRemote = io.executeRemote || executeRemoteCleanup;
+  const before = readAuthority(preview);
+  appendEvent("cleanup.operation.started", {
+    previewToken: token,
+    operationId: preview.operationId,
+    source: preview.source,
+    project: preview.project,
+    actorId: preview.actorId,
+    serverInstanceId: preview.serverInstanceId,
+    confirmationDigest: preview.confirmationDigest,
+    authorityOrdinal: before.ordinal,
+    authorityDigest: before.governanceDigest,
+    authorityLedgerDigest: before.ledgerDigest,
+    allowlist: preview.allowlist,
+  }, preview.source);
+  const after = readAuthority(preview);
+  const stable = after.observedStarted
+    && after.ordinal === before.ordinal + 1
+    && after.governanceDigest === before.governanceDigest
+    && before.invalidAssetKeys.length === 0
+    && after.invalidAssetKeys.length === 0;
+  if (!stable) {
+    throw Object.assign(new Error("Remote cleanup authority changed after preview or is no longer executable; no command was sent."), {
+      mutationState: "not_sent",
+      authorityBefore: before,
+      authorityAfter: after,
+    });
+  }
+  return executeRemote({ source: preview.source, sourceConfig, allowlist: preview.allowlist, operationId: preview.operationId });
+}
+
 export function executeCleanup(input, context = {}) {
   const { token } = input;
   const preview = consumeCleanupPreview(input, context);
-  appendCleanupEvent("cleanup.operation.started", { previewToken: token, operationId: preview.operationId, source: preview.source, project: preview.project, actorId: preview.actorId, confirmationDigest: preview.confirmationDigest, allowlist: preview.allowlist }, preview.source);
   if (preview.source !== "local") {
     const config = loadConfig();
     const baseSourceConfig = projectSourceConfigs(config, preview.project).find((item) => item.id === preview.source);
@@ -1417,7 +1512,7 @@ export function executeCleanup(input, context = {}) {
       ? { ...baseSourceConfig, repository: preview.project }
       : baseSourceConfig;
     try {
-      const cleanup = executeRemoteCleanup({ source: preview.source, sourceConfig, allowlist: preview.allowlist, operationId: preview.operationId });
+      const cleanup = executeAuthorityBoundRemoteCleanup({ token, preview, sourceConfig });
       dashboardCache.clear();
       const failed = cleanup.results.filter((item) => item.status === "failed").length;
       const skipped = cleanup.results.filter((item) => item.status === "skipped").length;
@@ -1443,6 +1538,7 @@ export function executeCleanup(input, context = {}) {
       return { completedAt: new Date().toISOString(), operationId: preview.operationId, commandId: error.commandId || null, resumeToken: resultStatus === "outcome_unknown" ? { commandId: error.commandId || null, operationId: preview.operationId, source: preview.source, project: preview.project } : null, status: resultStatus, results };
     }
   }
+  appendCleanupEvent("cleanup.operation.started", { previewToken: token, operationId: preview.operationId, source: preview.source, project: preview.project, actorId: preview.actorId, serverInstanceId: preview.serverInstanceId, confirmationDigest: preview.confirmationDigest, allowlist: preview.allowlist }, preview.source);
   dashboardCache.clear();
   const current = collectDashboard({ source: "local", project: preview.project, includeAllAssets: true });
   const safeAssets = new Map(current.assets.filter((item) => item.retirementState === "executable-candidate").map((item) => [`${item.type}:${item.id}`, item]));

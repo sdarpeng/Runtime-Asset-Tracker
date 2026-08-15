@@ -3,7 +3,8 @@ import { appendFileSync, mkdtempSync, readFileSync, renameSync, statSync, writeF
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { appendCleanupEvent, readAuthoritativeLedgerEvents, retirementOverrideLabels } from "../mcp/inventory.mjs";
+import { appendCleanupEvent, executeAuthorityBoundRemoteCleanup, readAuthoritativeLedgerEvents, retirementOverrideLabels } from "../mcp/inventory.mjs";
+import { retirementAttestations } from "../mcp/reconciliation.mjs";
 
 function event(kind, environment, details = {}) {
   return {
@@ -40,6 +41,15 @@ describe("authoritative ledger state", () => {
       assert.equal(labels["com.codex.runtime.retention"], "protected");
       assert.equal(labels["com.codex.runtime.disposable"], "false");
     }
+  });
+
+  it("does not retain remote protection after an explicit protection revocation", () => {
+    const protection = event("asset.protection.bound", "production", { reason: "rollback" });
+    const revocation = event("asset.protection.revoked", "production", { reason: "cooling-complete" });
+    protection.asset.id = `sha256:${"a".repeat(64)}`;
+    revocation.asset.id = protection.asset.id;
+    const governed = retirementAttestations([protection, revocation], { project: "cms", environment: "production" });
+    assert.equal(governed.protections.size, 0);
   });
 
   it("retains protection authority beyond the old 8 MiB tail", () => {
@@ -209,8 +219,84 @@ describe("authoritative ledger state", () => {
       const started = readAuthoritativeLedgerEvents().find((item) => item.event === "cleanup.operation.started" && item.details?.operationId === "operation-durable");
       assert.deepEqual(started?.details?.allowlist, [{ type: "image", id: "sha256:durable", sizeBytes: 10 }]);
       const source = readFileSync(new URL("../mcp/inventory.mjs", import.meta.url), "utf8");
-      assert.ok(source.indexOf('appendCleanupEvent("cleanup.operation.started"') < source.indexOf('if (preview.source !== "local")'));
+      assert.ok(source.indexOf('appendEvent("cleanup.operation.started"') < source.indexOf("return executeRemote("));
       assert.match(source, /FS_CONSTANTS\.O_WRONLY \| FS_CONSTANTS\.O_CREAT \| FS_CONSTANTS\.O_APPEND/);
+    } finally {
+      if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
+      else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;
+    }
+  });
+
+  for (const drift of [
+    { kind: "asset.protection.bound", status: "protected", sourceKind: "aws-ssm" },
+    { kind: "asset.retirement.revoked", status: "revoked", sourceKind: "ssh" },
+  ]) it(`sends zero ${drift.sourceKind} commands when ${drift.kind} lands after preview`, () => {
+    const root = mkdtempSync(join(tmpdir(), "rat-remote-authority-drift-"));
+    const ledger = join(root, "events.jsonl");
+    const imageId = `sha256:${"a".repeat(64)}`;
+    const retirement = {
+      schemaVersion: 1,
+      eventId: "remote-retirement",
+      occurredAt: "2026-08-15T00:00:00Z",
+      event: "asset.retired",
+      project: "cms",
+      environment: "production",
+      owner: "platform",
+      status: "retired",
+      release: "old-api",
+      gitSha: "c".repeat(40),
+      asset: { type: "image", id: imageId },
+      details: {
+        disposable: "true",
+        retention: "retired",
+        recoverySource: `registry:cms@${imageId}`,
+        reportSha256: "b".repeat(64),
+        group: "superseded-api",
+        approvedTags: ["cms-api:retired"],
+        expectedSizeBytes: 123,
+      },
+    };
+    writeFileSync(ledger, `${JSON.stringify(retirement)}\n`, "utf8");
+    const previous = process.env.RUNTIME_ASSET_LEDGER_FILE;
+    process.env.RUNTIME_ASSET_LEDGER_FILE = ledger;
+    let sends = 0;
+    try {
+      const preview = {
+        operationId: "12345678-1234-4123-8123-123456789abc",
+        source: "production",
+        project: "cms",
+        actorId: "operator",
+        serverInstanceId: "server",
+        confirmationDigest: "d".repeat(64),
+        allowlist: [{
+          type: "image",
+          id: imageId,
+          recoverySource: `registry:cms@${imageId}`,
+          retirementEvidence: {
+            reportSha256: "b".repeat(64),
+            group: "superseded-api",
+            approvedTags: ["cms-api:retired"],
+            revision: "c".repeat(40),
+            assetType: "image",
+            expectedSizeBytes: 123,
+          },
+        }],
+      };
+      assert.throws(() => executeAuthorityBoundRemoteCleanup({ token: "preview-token", preview, sourceConfig: { kind: drift.sourceKind } }, {
+        appendEvent(kind, details, environment) {
+          appendCleanupEvent(kind, details, environment);
+          appendFileSync(ledger, `${JSON.stringify({
+            ...retirement,
+            eventId: `drift-${drift.kind}`,
+            occurredAt: "2026-08-15T00:00:02Z",
+            event: drift.kind,
+            status: drift.status,
+            details: { reason: "late authority change" },
+          })}\n`, "utf8");
+        },
+        executeRemote() { sends += 1; return { results: [] }; },
+      }), /no command was sent/);
+      assert.equal(sends, 0);
     } finally {
       if (previous === undefined) delete process.env.RUNTIME_ASSET_LEDGER_FILE;
       else process.env.RUNTIME_ASSET_LEDGER_FILE = previous;

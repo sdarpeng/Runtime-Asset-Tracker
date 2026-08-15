@@ -102,6 +102,10 @@ export function retirementAttestations(events, { project: selectedProject, envir
       retirements.delete(key);
       continue;
     }
+    if (event.event === "asset.protection.revoked") {
+      protections.delete(key);
+      continue;
+    }
     if (event.event === "asset.protection.bound" && event.status === "protected") {
       protections.set(key, {
         project: String(event.project || ""),
