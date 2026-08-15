@@ -92,4 +92,15 @@ describe("unified runtime asset table", () => {
     });
     assert.equal(table.assets[0].decision, "protected");
   });
+
+  it("does not inherit a legacy reclaimable container without an exact Compose contract", () => {
+    const table = buildUnifiedAssetTable({
+      project: PROJECT,
+      generatedAt: "2026-08-14T00:00:00Z",
+      dashboards: [{ source: "production", dashboard: { assets: [
+        asset({ classification: "reclaimable", lineage: { imageId: `sha256:${"c".repeat(64)}`, composeProject: null, mounts: [] } }),
+      ] } }],
+    });
+    assert.equal(table.assets[0].decision, "review");
+  });
 });

@@ -115,7 +115,12 @@ function decisionFor(asset, source, lifecycle) {
   if (!REMOVABLE_TYPES.has(asset.type)) return { decision: "inventory-only", reason: "Asset type is not supported by an exact cleanup executor." };
   if (isProtected(asset, source)) return { decision: "protected", reason: "Current, rollback, recovery, or explicitly protected runtime binding." };
   if (lifecycle.conflictingOpenPullRequest) return { decision: "review", reason: "GitHub authority still reports an open pull request for the bound revision." };
-  if (asset.classification === "reclaimable") return { decision: "candidate-existing-attestation", reason: "Tracker already has exact retirement evidence; live state must still be revalidated at execution." };
+  if (asset.classification === "reclaimable") {
+    if (asset.type === "container" && (!asset?.lineage?.imageId || !asset?.lineage?.composeProject || !Array.isArray(asset?.lineage?.mounts))) {
+      return { decision: "review", reason: "Legacy container retirement evidence lacks the v0.4 exact image, Compose project, or mount contract." };
+    }
+    return { decision: "candidate-existing-attestation", reason: "Tracker already has exact retirement evidence; live state must still be revalidated at execution." };
+  }
   if (lifecycle.pullRequest?.state !== "MERGED") return { decision: "review", reason: lifecycle.pullRequest ? "Pull-request hint is not authoritatively merged." : "No authoritative merged-PR binding." };
   if (!lifecycle.coolingComplete) return { decision: "retained-cooling", reason: "Merged PR has not completed the configured cooling period." };
   if (!["exact", "unique-prefix", "runtime-label"].includes(lifecycle.binding)) return { decision: "review", reason: "Lifecycle relationship is inferred only from a name and is not authoritative." };
