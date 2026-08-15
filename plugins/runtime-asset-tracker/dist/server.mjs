@@ -36012,9 +36012,15 @@ function isProtected(asset, source) {
   if (source === "production" && running && /(?:^|[-_])prod(?:uction)?(?:$|[-_])/.test(name)) return true;
   return runtimeLabel2(asset, "disposable") === "false" && runtimeLabel2(asset, "retention") === "protected";
 }
-function decisionFor(asset, source, lifecycle) {
+function revisionMatches(left, right) {
+  const first = normalizeSha(left);
+  const second = normalizeSha(right);
+  return Boolean(first && second && (first.startsWith(second) || second.startsWith(first)));
+}
+function decisionFor(asset, source, lifecycle, protectedRevision = false) {
   const refs = consumers(asset);
   if (!REMOVABLE_TYPES.has(asset.type)) return { decision: "inventory-only", reason: "Asset type is not supported by an exact cleanup executor." };
+  if (protectedRevision) return { decision: "protected", reason: "Asset revision is bound to current, rollback, or recovery state in this environment." };
   if (isProtected(asset, source)) return { decision: "protected", reason: "Current, rollback, recovery, or explicitly protected runtime binding." };
   if (lifecycle.conflictingOpenPullRequest) return { decision: "review", reason: "GitHub authority still reports an open pull request for the bound revision." };
   if (asset.classification === "reclaimable") {
@@ -36069,21 +36075,28 @@ function buildUnifiedAssetTable({ project, dashboards = [], githubAuthority = {}
   const now = Date.parse(generatedAt);
   if (!Number.isFinite(now)) throw new Error("generatedAt must be an ISO timestamp");
   const maps = authorityMaps(githubAuthority);
-  const rows = dashboards.flatMap(({ source, dashboard }) => (dashboard?.assets || []).map((asset) => {
-    const lifecycle = lifecycleAuthority(asset, maps, now, coolingHours);
-    const decision = decisionFor(asset, source, lifecycle);
-    return {
-      key: `${source}:${asset.type}:${asset.id}`,
-      project,
-      source,
-      type: asset.type,
-      classification: asset.classification || "unknown",
-      ...decision,
-      lifecycle,
-      exactIdentity: exactIdentity(asset),
-      recoverySource: runtimeLabel2(asset, "recovery-source") || asset?.lineage?.source || (lifecycle.revision ? `git:${project}@${lifecycle.revision}` : null)
-    };
-  })).sort((left, right) => left.key.localeCompare(right.key));
+  const rows = dashboards.flatMap(({ source, dashboard }) => {
+    const prepared = (dashboard?.assets || []).map((asset) => ({ asset, lifecycle: lifecycleAuthority(asset, maps, now, coolingHours) }));
+    const protectedRevisions = new Set([
+      source === "production" ? normalizeSha(dashboard?.revision) : "",
+      ...prepared.filter(({ asset }) => isProtected(asset, source)).map(({ lifecycle }) => normalizeSha(lifecycle.revision))
+    ].filter(Boolean));
+    return prepared.map(({ asset, lifecycle }) => {
+      const protectedRevision = [...protectedRevisions].some((revision) => revisionMatches(revision, lifecycle.revision));
+      const decision = decisionFor(asset, source, lifecycle, protectedRevision);
+      return {
+        key: `${source}:${asset.type}:${asset.id}`,
+        project,
+        source,
+        type: asset.type,
+        classification: asset.classification || "unknown",
+        ...decision,
+        lifecycle,
+        exactIdentity: exactIdentity(asset),
+        recoverySource: runtimeLabel2(asset, "recovery-source") || asset?.lineage?.source || (lifecycle.revision ? `git:${project}@${lifecycle.revision}` : null)
+      };
+    });
+  }).sort((left, right) => left.key.localeCompare(right.key));
   const authorityDigest = createHash5("sha256").update(JSON.stringify(githubAuthority)).digest("hex");
   return {
     schemaVersion: UNIFIED_ASSET_TABLE_SCHEMA,
@@ -36740,7 +36753,7 @@ function applyRemoteRetirementGovernance(dashboard, governance) {
     const approvedTags = normalizedTags2(retirement.approvedTags);
     const tagSetMatches = liveTags.length === approvedTags.length && liveTags.every((tag, index) => tag === approvedTags[index]);
     const revision = String(asset.lineage?.revision || asset.labels?.[`${RUNTIME_PREFIX3}git-sha`] || "").toLowerCase();
-    const revisionMatches = revision === retirement.revision;
+    const revisionMatches2 = revision === retirement.revision;
     if (referenced) {
       return {
         ...asset,
@@ -36750,7 +36763,7 @@ function applyRemoteRetirementGovernance(dashboard, governance) {
         reason: "Retirement is blocked because a running or stopped container still references the image."
       };
     }
-    if (!tagSetMatches || !revisionMatches) {
+    if (!tagSetMatches || !revisionMatches2) {
       return {
         ...asset,
         classification: "retained",

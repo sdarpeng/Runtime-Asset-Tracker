@@ -26,13 +26,16 @@ function asset(overrides = {}) {
 
 describe("unified runtime asset table", () => {
   it("correlates merged PR authority but preserves current Production runtime", () => {
+    const workerRevision = "d".repeat(40);
+    const githubAuthority = authority();
+    githubAuthority.lineage[workerRevision] = { existsOnGitHub: true, pullRequests: [{ number: 29, state: "MERGED", mergedAt: MERGED_AT, url: "https://example.invalid/pr/29" }] };
     const table = buildUnifiedAssetTable({
       project: PROJECT,
       generatedAt: "2026-08-14T00:00:00Z",
-      githubAuthority: authority(),
+      githubAuthority,
       dashboards: [{ source: "production", dashboard: { assets: [
         asset({ name: "cms-prod-api-1", status: "running", classification: "active", reason: "current-production", lineage: { consumers: [{ id: "x", state: "running" }], protection: { reason: "current-production" } } }),
-        asset({ id: "d".repeat(64), name: "cms-pr28-worker", status: "running" }),
+        asset({ id: "d".repeat(64), name: "cms-pr28-worker", status: "running", labels: { "org.opencontainers.image.revision": workerRevision } }),
       ] } }],
     });
     assert.equal(table.schemaVersion, UNIFIED_ASSET_TABLE_SCHEMA);
@@ -117,5 +120,18 @@ describe("unified runtime asset table", () => {
     });
     assert.equal(table.assets.find((row) => row.exactIdentity.name.includes(REVISION.slice(0, 8))).decision, "candidate-retirement");
     assert.equal(table.assets.find((row) => row.exactIdentity.name.includes("20260814")).decision, "review");
+  });
+
+  it("propagates current and rollback revision protection to related Production paths", () => {
+    const table = buildUnifiedAssetTable({
+      project: PROJECT,
+      generatedAt: "2026-08-14T00:00:00Z",
+      githubAuthority: authority(),
+      dashboards: [{ source: "production", dashboard: { revision: REVISION, assets: [
+        asset({ type: "image", id: `sha256:${"7".repeat(64)}`, name: "cms-api:rollback", classification: "protected", lineage: { revision: REVISION, consumers: [], tags: ["cms-api:rollback"] } }),
+        asset({ type: "worktree", id: `/releases/release-${REVISION.slice(0, 8)}`, name: `release-${REVISION.slice(0, 8)}`, classification: "retained", lineage: { consumers: [], managedRoot: "/releases", fingerprint: `sha256:${"6".repeat(64)}` } }),
+      ] } }],
+    });
+    assert.deepEqual(table.assets.map((row) => row.decision), ["protected", "protected"]);
   });
 });
