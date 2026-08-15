@@ -68,4 +68,16 @@ describe("unified runtime asset table", () => {
     assert.equal(table.assets.find((row) => row.exactIdentity.id === "/managed/pr28").decision, "review");
     assert.equal(table.assets.find((row) => row.exactIdentity.id === "/managed/pr28-good").decision, "candidate-retirement");
   });
+
+  it("lets every Tracker protected classification override merged-PR retirement", () => {
+    const table = buildUnifiedAssetTable({
+      project: PROJECT,
+      generatedAt: "2026-08-14T00:00:00Z",
+      githubAuthority: authority(),
+      dashboards: [{ source: "production", dashboard: { assets: [
+        asset({ type: "image", id: `sha256:${"9".repeat(64)}`, name: "cms-api:previous", classification: "protected", reason: "Immediate previous API image", lineage: { revision: REVISION, consumers: [], tags: ["cms-api:previous"] } }),
+      ] } }],
+    });
+    assert.equal(table.assets[0].decision, "protected");
+  });
 });
