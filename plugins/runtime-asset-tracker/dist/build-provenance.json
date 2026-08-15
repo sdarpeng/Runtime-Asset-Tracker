@@ -1,12 +1,14 @@
 {
   "schemaVersion": "sparkling.tool-build-provenance/v1",
-  "builtAt": "2026-08-15T07:26:43.116Z",
-  "sourceCommit": "f1f51e6a8e3626dcf08b2d7bbb408289b23391e4",
-  "sourceTree": "119326945954ca5288a78d2c53749a6c7b6628db",
+  "builtAt": "2026-08-15T10:04:29.870Z",
+  "sourceCommit": "5bc0928d37ea17d47d3e7642bd33c35ad2bba90b",
+  "sourceTree": "36a87e7c0f628824ae06bc278ec23b7645f5492d",
   "sourceDirty": false,
-  "sourceDigest": "4ab49aa23748f50375fd154b19adbd3fca4f91099e0bdd7721a1ca82205a8028",
-  "serverSha256": "c078365f9fc9b497289983a5ec2bb63f068c08a3fd9fd43d1010d34dc38a5499",
-  "dashboardSha256": "219fe28db1647e21486163f43025ac24cc1bd351017546d009b4c004e03278d9",
+  "sourceDigest": "b5dcee5ba7001818f1dce8aa083c9852d169aab1bd26277db95b0a56a29b23c2",
+  "serverSha256": "4fb8668d6326acaeb3f9cb0bd265c1e232a3ad71c0b80cf129cf6f8e4ce90a63",
+  "dashboardSha256": "452d0fdcafebb8000cdffbf96f78e64443d61d70c2c8cc9c7f7adfb051dbe307",
   "safeDeleteHelperSha256": "f06186e602db71eb84bf7bf307aeffb8b082e1da1449947fd14f75c941e98f2e",
-  "buildDigest": "d6d81da52d750073f44ff3202d786f8d39066fb367721ca12b41d2cb1e091ba0"
+  "safeDeletePosixHelperSha256": "f06186e602db71eb84bf7bf307aeffb8b082e1da1449947fd14f75c941e98f2e",
+  "safeDeleteWindowsHelperSha256": "c433d595e1ef5c6984040b320c56b5680cc9f2d65721252674eb80f7db35a225",
+  "buildDigest": "ee64cf10ca6d94e74ef908a6f4e7af9860a4e474b3c2c63aedb41f686ca767af"
 }
