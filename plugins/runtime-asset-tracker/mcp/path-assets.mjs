@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmdirSync, unlinkSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmdirSync, unlinkSync } from "node:fs";
 import { homedir, hostname, platform } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -421,17 +421,58 @@ export function importPathRetirementReconciliation({ reportPath, owner = "platfo
   return { importedAt: new Date().toISOString(), reportPath, reportSha256, candidatePathCount: report.assets.length, retirementEventsAdded: events.length, idempotentSkipCount: report.assets.length - events.length };
 }
 
-function removeTreeNoFollow(path) {
+function fileIdentity(path) {
+  const stats = lstatSync(path);
+  return { dev: String(stats.dev), ino: String(stats.ino), mode: Number(stats.mode), birthtimeMs: Math.trunc(Number(stats.birthtimeMs || 0)), reparse: stats.isSymbolicLink() };
+}
+
+function sameFileIdentity(left, right) {
+  return left && right && left.dev === right.dev && left.ino === right.ino && left.mode === right.mode && left.birthtimeMs === right.birthtimeMs && left.reparse === right.reparse;
+}
+
+function removeTreeNoFollow(path, guard = () => true) {
+  if (!guard()) throw new Error("Managed root or parent identity changed during cleanup.");
   const stats = lstatSync(path);
   if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    if (!guard()) throw new Error("Managed root or parent identity changed during cleanup.");
     try { unlinkSync(path); } catch (error) { chmodSync(path, 0o600); unlinkSync(path); }
     return;
   }
-  for (const entry of safeEntries(path)) removeTreeNoFollow(join(path, entry.name));
+  for (const entry of safeEntries(path)) removeTreeNoFollow(join(path, entry.name), guard);
+  if (!guard()) throw new Error("Managed root or parent identity changed during cleanup.");
   try { rmdirSync(path); } catch (error) { chmodSync(path, 0o700); rmdirSync(path); }
 }
 
-export function executePathAssetCleanup(asset) {
+function quarantineAndRemove(path, allowedRoot) {
+  if (!canonicalPathContainment(path, allowedRoot)) throw new Error("Path ancestry changed before isolation.");
+  const parent = dirname(path);
+  const rootIdentity = fileIdentity(allowedRoot);
+  const parentIdentity = fileIdentity(parent);
+  const targetIdentity = fileIdentity(path);
+  const quarantine = join(parent, `.runtime-asset-trash-${randomUUID()}`);
+  const guard = () => {
+    try {
+      return sameFileIdentity(rootIdentity, fileIdentity(allowedRoot))
+        && sameFileIdentity(parentIdentity, fileIdentity(parent))
+        && canonicalPathContainment(quarantine, allowedRoot);
+    } catch {
+      return false;
+    }
+  };
+  renameSync(path, quarantine);
+  try {
+    if (existsSync(path) || !sameFileIdentity(targetIdentity, fileIdentity(quarantine)) || !guard()) throw new Error("Path identity changed while isolating the cleanup target.");
+    removeTreeNoFollow(quarantine, guard);
+    if (existsSync(quarantine)) throw new Error("Isolated path still exists after cleanup.");
+  } catch (error) {
+    try {
+      if (!existsSync(path) && existsSync(quarantine) && guard()) renameSync(quarantine, path);
+    } catch {}
+    throw error;
+  }
+}
+
+export function executePathAssetCleanup(asset, { beforeIsolation } = {}) {
   if (!PATH_TYPES.has(asset?.type) || (asset.classification !== "reclaimable" && asset.retirementState !== "executable-candidate")) throw new Error("Path asset is not reclaimable.");
   const path = resolve(asset.path || asset.lineage?.path || "");
   const allowedRoot = resolve(asset.lineage?.allowedRoot || "");
@@ -446,7 +487,8 @@ export function executePathAssetCleanup(asset) {
     if (existsSync(path)) throw new Error(output || "Git did not remove the exact worktree.");
     return { output, removed: true };
   }
-  removeTreeNoFollow(path);
+  if (beforeIsolation) beforeIsolation();
+  quarantineAndRemove(path, allowedRoot);
   if (existsSync(path)) throw new Error("Exact path still exists after cleanup.");
   return { removed: true };
 }

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { gzipSync } from "node:zlib";
-import { assetInSelectedProjectScope, awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, limitDashboardAssets, remoteImageRemovalArgs, remoteSnapshotScript, resolveExpiry, ssmMutationCommand } from "../mcp/remote.mjs";
+import { assetInSelectedProjectScope, awsBuildCacheCleanupScript, awsDockerCleanupScript, buildBars, buildGithubBars, classifyDockerImage, classifyDockerVolume, classifyGithubAsset, collectRemoteDashboard, decodeSnapshotPayload, findExactSsmCommandId, limitDashboardAssets, remoteImageRemovalArgs, remoteSnapshotScript, resolveExpiry, ssmMutationCommand } from "../mcp/remote.mjs";
 
 describe("remote read-only adapters", () => {
   it("keeps the EC2 collector free of cleanup and service mutation commands", () => {
@@ -226,6 +226,35 @@ describe("remote read-only adapters", () => {
     const inner = ssmMutationCommand(`echo '${Buffer.from(python).toString("base64")}' | base64 -d | python3`);
     assert.ok(Buffer.byteLength(inner, "utf8") < 20_000, `compressed command was ${Buffer.byteLength(inner, "utf8")} bytes`);
     assert.match(inner, /gzip -d \| bash$/);
+  });
+
+  it("binds SSM recovery to one exact operation comment and rejects ambiguity", () => {
+    const commands = [
+      { CommandId: "11111111-1111-4111-8111-111111111111", Comment: "RAT operation-a", InstanceIds: ["i-one"] },
+      { CommandId: "22222222-2222-4222-8222-222222222222", Comment: "RAT operation-b", InstanceIds: ["i-one"] },
+    ];
+    assert.equal(findExactSsmCommandId(commands, { comment: "RAT operation-a", instanceId: "i-one" }), commands[0].CommandId);
+    assert.equal(findExactSsmCommandId(commands, { comment: "RAT missing", instanceId: "i-one" }), null);
+    assert.throws(() => findExactSsmCommandId([...commands, { ...commands[0], CommandId: "33333333-3333-4333-8333-333333333333" }], { comment: "RAT operation-a", instanceId: "i-one" }), /ambiguous recovery/);
+  });
+
+  it("stages oversized cleanup results with a checksum marker", () => {
+    const script = awsDockerCleanupScript([], { cleanupResultPath: "/tmp/rat-cleanup-operation.b64" });
+    assert.match(script, /len\(encoded\) > 16000/);
+    assert.match(script, /RATCLEAN2:%d:%s/);
+    assert.match(script, /os\.O_WRONLY \| os\.O_CREAT \| os\.O_TRUNC, 0o600/);
+    assert.match(script, /hashlib\.sha256/);
+  });
+
+  it("resume logic never calls the cleanup send path", () => {
+    const source = readFileSync(new URL("../mcp/remote.mjs", import.meta.url), "utf8");
+    const start = source.indexOf("export function resumeAwsCleanup");
+    const end = source.indexOf("function runSshMutation", start);
+    const resumeSource = source.slice(start, end);
+    assert.ok(start > 0 && end > start);
+    assert.doesNotMatch(resumeSource, /runSsmMutation|ssmMutationCommand|"send-command"/);
+    assert.match(resumeSource, /pollExistingSsmMutation/);
+    assert.match(resumeSource, /reconcileSsmCommandId/);
   });
 
   it("only classifies expired artifacts, closed PR caches, and 30-day stale caches as safe", () => {

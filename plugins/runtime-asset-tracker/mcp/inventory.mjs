@@ -4,7 +4,7 @@ import { homedir, hostname, platform } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
-import { collectRemoteDashboard, executeRemoteCleanup, expiryClassification, resolveExpiry } from "./remote.mjs";
+import { collectRemoteDashboard, executeRemoteCleanup, expiryClassification, resolveExpiry, resumeAwsCleanup } from "./remote.mjs";
 import { importRetirementReconciliation, retirementAttestations } from "./reconciliation.mjs";
 import { discoverWorktreeAssets, executePathAssetCleanup, importPathRetirementReconciliation } from "./path-assets.mjs";
 import { importUnifiedRetirementReconciliation } from "./lifecycle-reconciliation.mjs";
@@ -836,6 +836,21 @@ function normalizedTags(tags) {
   return [...new Set((tags || []).map(String).filter((tag) => tag && !tag.includes("<none>")))].sort();
 }
 
+export function automaticRetirementEvidenceMatches(requested = {}, current = {}) {
+  return String(requested.createdAt || "") === String(current.createdAt || "")
+    && JSON.stringify(normalizedTags(requested.tags)) === JSON.stringify(normalizedTags(current?.lineage?.tags))
+    && (!requested.automaticRetirement || (
+      requested.automaticRetirement.schemaVersion === current?.lineage?.automaticRetirement?.schemaVersion
+      && requested.automaticRetirement.basis === current?.lineage?.automaticRetirement?.basis
+      && requested.automaticRetirement.family === current?.lineage?.automaticRetirement?.family
+      && requested.automaticRetirement.successorImageId === current?.lineage?.automaticRetirement?.successorImageId
+      && String(requested.automaticRetirement.successorCreatedAt || "") === String(current?.lineage?.automaticRetirement?.successorCreatedAt || "")
+      && JSON.stringify(normalizedTags(requested.automaticRetirement.successorTags)) === JSON.stringify(normalizedTags(current?.lineage?.automaticRetirement?.successorTags))
+      && requested.automaticRetirement.successorSuccessful === (current?.lineage?.automaticRetirement?.successorSuccessful === true)
+      && String(requested.automaticRetirement.recoverySource || "") === String(current?.lineage?.automaticRetirement?.recoverySource || "")
+    ));
+}
+
 export function createUnifiedAssetTable({ project, sources = ["local", "production", "staging"], authorityReportPath, outputPath, coolingHours = 24 } = {}) {
   const selectedSources = [...new Set(sources)].filter((source) => ["local", "production", "staging"].includes(source));
   if (!project || project === "all") throw new Error("A registered project is required for a unified asset table.");
@@ -1200,6 +1215,7 @@ export function createCleanupPreview({ source = "local", project = "all", types 
     name: asset.name,
     project: asset.project,
     sizeBytes: asset.sizeBytes,
+    createdAt: asset.createdAt,
     reason: asset.reason,
     recoverySource: labelValue(asset.labels || {}, "recovery-source") || asset.lineage?.source || asset.lineage?.remote,
     tags: asset.type === "image" ? normalizedTags(asset.lineage?.tags) : undefined,
@@ -1366,9 +1382,11 @@ export function executeCleanup(input, context = {}) {
     } catch (error) {
       const mutationState = String(error.mutationState || "outcome_unknown");
       const resultStatus = ["not_sent", "failed"].includes(mutationState) ? "failed" : "outcome_unknown";
-      const results = preview.allowlist.map((item) => ({ ...item, status: resultStatus, reclaimedBytes: 0, reason: error.message }));
+      const results = Array.isArray(error.partialResults) && error.partialResults.length
+        ? error.partialResults.map((item) => ({ ...item, status: item.status === "removed" ? "outcome_unknown" : item.status, reclaimedBytes: 0, reason: item.status === "removed" ? `Command reported removal; post-cleanup verification is pending. ${error.message}` : item.reason }))
+        : preview.allowlist.map((item) => ({ ...item, status: resultStatus, reclaimedBytes: 0, reason: error.message }));
       appendCleanupEvent(resultStatus === "outcome_unknown" ? "cleanup.remote.outcome_unknown" : "cleanup.remote.failed", { previewToken: token, operationId: preview.operationId, source: preview.source, mutationState, commandId: error.commandId || null, reason: error.message }, preview.source);
-      return { completedAt: new Date().toISOString(), operationId: preview.operationId, commandId: error.commandId || null, resumeToken: resultStatus === "outcome_unknown" && error.commandId ? { commandId: error.commandId, operationId: preview.operationId, source: preview.source } : null, status: resultStatus, results };
+      return { completedAt: new Date().toISOString(), operationId: preview.operationId, commandId: error.commandId || null, resumeToken: resultStatus === "outcome_unknown" ? { commandId: error.commandId || null, operationId: preview.operationId, source: preview.source, project: preview.project } : null, status: resultStatus, results };
     }
   }
   dashboardCache.clear();
@@ -1391,16 +1409,8 @@ export function executeCleanup(input, context = {}) {
       continue;
     }
     if (asset.type === "image") {
-      const previewTags = normalizedTags(requested.tags);
-      const currentTags = normalizedTags(asset.lineage?.tags);
-      const currentAutomatic = asset.lineage?.automaticRetirement;
-      const tagsChanged = JSON.stringify(previewTags) !== JSON.stringify(currentTags);
-      const successorChanged = requested.automaticRetirement && (
-        requested.automaticRetirement.successorImageId !== currentAutomatic?.successorImageId
-        || requested.automaticRetirement.successorSuccessful !== (currentAutomatic?.successorSuccessful === true)
-      );
-      if (tagsChanged || successorChanged) {
-        results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "Image tags or automatic retirement successor evidence changed after preview." });
+      if (!automaticRetirementEvidenceMatches(requested, asset)) {
+        results.push({ ...requested, status: "skipped", reclaimedBytes: 0, reason: "Image creation time, tags, or automatic retirement successor evidence changed after preview." });
         continue;
       }
     }
@@ -1446,4 +1456,14 @@ export function executeCleanup(input, context = {}) {
   const status = failed === 0 && skipped === 0 ? "complete" : removed > 0 ? "partial" : "failed";
   appendCleanupEvent("cleanup.executed", { previewToken: token, operationId: preview.operationId, status, removed: String(removed), failed: String(failed), skipped: String(skipped) });
   return { completedAt: new Date().toISOString(), operationId: preview.operationId, status, results };
+}
+
+export function resumeCleanup({ source, project, operationId, commandId } = {}) {
+  if (!new Set(["production", "staging"]).has(source)) throw new Error("Only AWS SSM cleanup operations can be resumed through this tool.");
+  const config = loadConfig();
+  const sourceConfig = projectSourceConfigs(config, project).find((item) => item.id === source);
+  if (!sourceConfig || (sourceConfig.transport || "aws-ssm") !== "aws-ssm") throw new Error("The selected project/source is not configured for AWS SSM cleanup recovery.");
+  const result = resumeAwsCleanup({ sourceConfig, operationId, commandId });
+  appendCleanupEvent("cleanup.remote.resumed", { source, project, operationId, commandId: result.commandId || null, status: result.status }, source);
+  return result;
 }

@@ -23,6 +23,7 @@ try {
     "import_unified_retirement_reconciliation",
     "open_runtime_dashboard",
     "preview_cleanup",
+    "resume_cleanup",
     "save_cleanup_schedule",
   ]);
 

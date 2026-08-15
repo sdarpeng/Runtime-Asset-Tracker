@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,11 +8,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
-import { collectDashboard, createCleanupPreview, createUnifiedAssetTable, executeCleanup, importPathReconciliation, importReconciliation, importUnifiedReconciliation, runDeepScan, runtimeInstanceId, saveSchedule } from "./inventory.mjs";
+import { collectDashboard, createCleanupPreview, createUnifiedAssetTable, executeCleanup, importPathReconciliation, importReconciliation, importUnifiedReconciliation, resumeCleanup, runDeepScan, runtimeInstanceId, saveSchedule } from "./inventory.mjs";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
-const dashboardHtml = readFileSync(join(moduleDirectory, "dashboard.html"), "utf8");
+const dashboardPath = [join(moduleDirectory, "dashboard.html"), join(moduleDirectory, "..", "dist", "dashboard.html")].find(existsSync);
+if (!dashboardPath) throw new Error("Runtime Asset Tracker dashboard.html is missing; run npm run build.");
+const dashboardHtml = readFileSync(dashboardPath, "utf8");
 const pluginRoot = join(moduleDirectory, "..");
 
 function readJson(path, fallback = {}) {
@@ -202,6 +204,23 @@ export function createRuntimeAssetServer(context = {}) {
     return toolResult({ cleanup }, `Cleanup status ${cleanup.status}: ${counts.removed} removed, ${counts.failed} failed, ${counts.skipped} skipped, ${counts.outcome_unknown} outcome unknown.`);
   });
 
+  registerAppTool(server, "resume_cleanup", {
+    title: "Resume exact AWS cleanup reconciliation",
+    description: "Poll an existing exact SSM cleanup operation by operationId/commandId without ever sending the cleanup command again.",
+    inputSchema: {
+      source: z.enum(["production", "staging"]),
+      project: z.string().min(3).max(128),
+      operationId: z.string().uuid(),
+      commandId: z.string().uuid().nullable().optional(),
+    },
+    outputSchema: { cleanup: z.record(z.string(), z.unknown()) },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } },
+  }, async (input) => {
+    const cleanup = resumeCleanup(input);
+    return toolResult({ cleanup }, `Recovered cleanup operation ${cleanup.operationId}: ${cleanup.status}; no cleanup command was resent.`);
+  });
+
   registerAppTool(server, "save_cleanup_schedule", {
     title: "Save cleanup preview schedule",
     description: "Persist a local report-only schedule. It never enables unattended deletion.",
@@ -256,12 +275,14 @@ function cookieValue(request, name) {
   })[0];
 }
 
-function authenticatedActor(request, accessToken, expectedOrigin) {
+function authenticatedActor(request, accessToken, expectedOrigin, sessions = new Map()) {
   const authorization = String(request.headers.authorization || "");
   const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
   const cookie = cookieValue(request, "rat_session");
-  const token = bearer || cookie;
-  if (!constantTimeEqual(token, accessToken)) {
+  const session = cookie ? sessions.get(cookie) : null;
+  const bearerValid = bearer && constantTimeEqual(bearer, accessToken);
+  if (!bearerValid && (!session || session.expiresAt <= Date.now())) {
+    if (cookie) sessions.delete(cookie);
     const error = new Error("Authenticated Runtime Asset Tracker session required.");
     error.httpStatus = 401;
     throw error;
@@ -272,7 +293,7 @@ function authenticatedActor(request, accessToken, expectedOrigin) {
     error.httpStatus = 403;
     throw error;
   }
-  return `http:${createHash("sha256").update(token).digest("hex").slice(0, 24)}`;
+  return bearerValid ? `http-bearer:${createHash("sha256").update(accessToken).digest("hex").slice(0, 24)}` : session.actorId;
 }
 
 async function startHttp() {
@@ -280,6 +301,8 @@ async function startHttp() {
   const port = Number(process.env.RUNTIME_ASSET_DASHBOARD_PORT || 47831);
   if (!new Set(["127.0.0.1", "localhost"]).has(host)) throw new Error("Runtime Asset Tracker HTTP mode is loopback-only. Use the authenticated MCP/SSM adapters for remote inventory.");
   const accessToken = process.env.RUNTIME_ASSET_HTTP_TOKEN || randomBytes(32).toString("hex");
+  let bootstrapNonce = randomBytes(32).toString("hex");
+  const sessions = new Map();
   const expectedOrigin = `http://${host}:${port}`;
   const identity = runtimeIdentity();
   const httpServer = createServer(async (request, response) => {
@@ -296,17 +319,20 @@ async function startHttp() {
       }
       if (request.method === "GET" && url.pathname === "/") {
         const supplied = url.searchParams.get("access");
-        if (supplied && constantTimeEqual(supplied, accessToken)) {
-          response.writeHead(303, { Location: "/", "Set-Cookie": `rat_session=${encodeURIComponent(accessToken)}; HttpOnly; SameSite=Strict; Path=/`, "Cache-Control": "no-store" });
+        if (supplied && bootstrapNonce && constantTimeEqual(supplied, bootstrapNonce)) {
+          bootstrapNonce = "";
+          const sessionToken = randomBytes(32).toString("hex");
+          sessions.set(sessionToken, { actorId: `http-session:${randomBytes(16).toString("hex")}`, expiresAt: Date.now() + 12 * 60 * 60_000 });
+          response.writeHead(303, { Location: "/", "Set-Cookie": `rat_session=${encodeURIComponent(sessionToken)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`, "Cache-Control": "no-store" });
           response.end();
           return;
         }
-        authenticatedActor(request, accessToken, expectedOrigin);
+        authenticatedActor(request, accessToken, expectedOrigin, sessions);
         response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
         response.end(dashboardHtml);
         return;
       }
-      const actorId = authenticatedActor(request, accessToken, expectedOrigin);
+      const actorId = authenticatedActor(request, accessToken, expectedOrigin, sessions);
       const actorContext = { actorId, serverInstanceId: identity.serverInstanceId };
       if (request.method === "GET" && url.pathname === "/api/dashboard") {
         sendJson(response, 200, { dashboard: collectDashboard({
@@ -363,9 +389,10 @@ async function startHttp() {
     }
   });
   httpServer.listen(port, host, () => {
-    console.log(`Runtime Asset Tracker dashboard: http://${host}:${port}/?access=${accessToken}`);
+    console.log(`Runtime Asset Tracker dashboard: http://${host}:${port}/?access=${bootstrapNonce}`);
     console.log(`Runtime Asset Tracker identity: ${identity.manifestVersion} ${identity.sourceCommit || "dirty-or-unbuilt-source"} ${identity.sourceDigest || "unknown-source"} ${identity.serverSha256}`);
   });
+
 }
 
 async function startStdio() {

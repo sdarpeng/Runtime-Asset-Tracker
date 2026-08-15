@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -164,6 +164,39 @@ describe("worktree and host artifact lifecycle", () => {
       symlinkSync(outside, lexicalRoot, process.platform === "win32" ? "junction" : "dir");
       assert.equal(canonicalPathContainment(join(lexicalRoot, "victim"), lexicalRoot), false);
       assert.equal(existsSync(victim), true);
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when the allowed root is replaced after preview validation", () => {
+    const sandbox = temporaryDirectory("tracker-ancestry-race");
+    const allowed = join(sandbox, "allowed");
+    const holding = join(sandbox, "allowed-original");
+    const target = join(allowed, "retired");
+    const outside = join(sandbox, "outside");
+    const outsideTarget = join(outside, "retired");
+    mkdirSync(target, { recursive: true });
+    mkdirSync(outsideTarget, { recursive: true });
+    writeFileSync(join(target, "inside.txt"), "inside");
+    writeFileSync(join(outsideTarget, "sentinel.txt"), "outside");
+    const scan = scanPathUsage(target);
+    try {
+      assert.throws(() => executePathAssetCleanup({
+        id: pathAssetId("worktree_residual", target),
+        type: "worktree_residual",
+        path: target,
+        classification: "reclaimable",
+        sizeBytes: scan.sizeBytes,
+        lineage: { path: target, allowedRoot: allowed, contentFingerprint: scan.fingerprint },
+      }, {
+        beforeIsolation() {
+          renameSync(allowed, holding);
+          symlinkSync(outside, allowed, process.platform === "win32" ? "junction" : "dir");
+        },
+      }), /ancestry changed|canonical allowed root/i);
+      assert.equal(existsSync(join(outsideTarget, "sentinel.txt")), true);
+      assert.equal(existsSync(join(holding, "retired", "inside.txt")), true);
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }

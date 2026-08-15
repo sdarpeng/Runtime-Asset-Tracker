@@ -889,6 +889,7 @@ export function awsDockerCleanupScript(allowlist, sourceConfig = {}) {
       managedRoots: [...(sourceConfig.managedPaths || []).map((item) => String(item.path || "")), String(sourceConfig.releaseRoot || "")].filter(Boolean),
       protectedPaths: [...(sourceConfig.protectedPaths || []).map(String), String(sourceConfig.activeLink || "")].filter(Boolean),
       activeLink: String(sourceConfig.activeLink || ""),
+      resultPath: String(sourceConfig.cleanupResultPath || ""),
     },
     items: allowlist.map((item) => ({
     type: item.type,
@@ -1015,6 +1016,26 @@ def canonical_path_is_contained(path, root):
     except Exception:
         return False
 
+def path_identity(path):
+    info = os.lstat(path)
+    return (int(info.st_dev), int(info.st_ino), int(info.st_mode), int(getattr(info, "st_ctime_ns", 0)), bool(os.path.islink(path)))
+
+def same_path_identity(path, expected):
+    try: return path_identity(path) == expected
+    except Exception: return False
+
+def remove_tree_no_follow(path, guard):
+    if not guard(): raise RuntimeError("Managed root or parent identity changed during cleanup")
+    info = os.lstat(path)
+    if os.path.islink(path) or not os.path.isdir(path):
+        if not guard(): raise RuntimeError("Managed root or parent identity changed during cleanup")
+        os.unlink(path)
+        return
+    for entry in list(os.scandir(path)):
+        remove_tree_no_follow(entry.path, guard)
+    if not guard(): raise RuntimeError("Managed root or parent identity changed during cleanup")
+    os.rmdir(path)
+
 def overlaps_protected_path(path, protected_paths):
     target = os.path.realpath(path).rstrip("/")
     return any(target == protected or target.startswith(protected + "/") or protected.startswith(target + "/") for protected in protected_paths)
@@ -1060,15 +1081,36 @@ for item in items:
         active_target = os.path.realpath(active_link) if active_link and os.path.exists(active_link) else ""
         size = disk_usage(path) if os.path.exists(path) else -1
         expected_size = evidence.get("expectedSizeBytes")
-        safe = bool(evidence_valid(evidence, kind) and root in managed_roots and canonical_path_is_contained(path, root) and not overlaps_protected_path(path, protected_paths) and os.path.realpath(path) != active_target and expected_size is not None and size == int(expected_size) and metadata_fingerprint(path,size) == evidence.get("fingerprint") and not path_is_referenced(path))
+        parent = os.path.dirname(path)
+        try:
+            root_identity = path_identity(root)
+            parent_identity = path_identity(parent)
+            target_identity = path_identity(path)
+        except Exception:
+            root_identity = parent_identity = target_identity = None
+        safe = bool(evidence_valid(evidence, kind) and root in managed_roots and root_identity and not root_identity[-1] and parent_identity and target_identity and canonical_path_is_contained(path, root) and not overlaps_protected_path(path, protected_paths) and os.path.realpath(path) != active_target and expected_size is not None and size == int(expected_size) and metadata_fingerprint(path,size) == evidence.get("fingerprint") and not path_is_referenced(path))
         if not safe:
             results.append({**item,"status":"skipped","reclaimedBytes":0,"reason":"Remote path root, active/protected state, bytes, fingerprint, or bind-mount references drifted."})
             continue
+        quarantine = None
+        guard = lambda: False
         try:
-            shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
-            removed = not os.path.lexists(path)
+            quarantine = os.path.join(parent, ".runtime-asset-trash-" + hashlib.sha256((path + str(time.time_ns())).encode("utf-8")).hexdigest()[:24])
+            if not canonical_path_is_contained(path, root) or not same_path_identity(root, root_identity) or not same_path_identity(parent, parent_identity):
+                raise RuntimeError("Path ancestry changed before isolation")
+            os.rename(path, quarantine)
+            guard = lambda: same_path_identity(root, root_identity) and same_path_identity(parent, parent_identity) and canonical_path_is_contained(quarantine, root)
+            if os.path.lexists(path) or not same_path_identity(quarantine, target_identity) or not guard():
+                raise RuntimeError("Path identity changed while isolating cleanup target")
+            remove_tree_no_follow(quarantine, guard)
+            removed = not os.path.lexists(quarantine)
             results.append({**item,"status":"removed" if removed else "failed","reclaimedBytes":size if removed else 0,"reason":"Exact managed path removed after live revalidation." if removed else "Path still exists after removal."})
         except Exception as error:
+            try:
+                if quarantine and not os.path.lexists(path) and os.path.lexists(quarantine) and guard():
+                    os.rename(quarantine, path)
+            except Exception:
+                pass
             results.append({**item,"status":"failed","reclaimedBytes":0,"reason":str(error)[-300:]})
         continue
     if kind == "image":
@@ -1119,7 +1161,14 @@ for item in items:
     results.append({**item, "status":"removed" if removed else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if removed else 0, "removedReferences":removed_references, "reason":reason if removed else (error[-300:] or "image still exists after exact tag removal")})
 
 encoded = base64.b64encode(gzip.compress(json.dumps({"results":results}, separators=(",",":"), ensure_ascii=False).encode("utf-8"))).decode("ascii")
-print("RATCLEAN1:" + encoded)`;
+result_path = safety.get("resultPath") or ""
+if result_path and len(encoded) > 16000:
+    descriptor = os.open(result_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+        handle.write(encoded)
+    print("RATCLEAN2:%d:%s" % (len(encoded), hashlib.sha256(encoded.encode("ascii")).hexdigest()))
+else:
+    print("RATCLEAN1:" + encoded)`;
 }
 
 export function ssmMutationCommand(script) {
@@ -1127,81 +1176,121 @@ export function ssmMutationCommand(script) {
   return `echo '${encoded}' | base64 -d | gzip -d | bash`;
 }
 
-function runSsmMutation(sourceConfig, script, comment) {
-  const instanceId = sourceConfig?.instanceId;
-  if (!instanceId) throw new Error("未配置 EC2 instanceId");
+export function findExactSsmCommandId(commands, { comment, instanceId } = {}) {
+  const matches = (commands || []).filter((item) => item?.Comment === comment
+    && (!Array.isArray(item?.InstanceIds) || item.InstanceIds.includes(instanceId)));
+  if (matches.length > 1) throw new Error(`Multiple SSM commands matched exact operation comment ${comment}; refusing ambiguous recovery.`);
+  return matches[0]?.CommandId || null;
+}
+
+function reconcileSsmCommandId(sourceConfig, comment, { attempts = 1, delayMs = 0 } = {}) {
+  const instanceId = sourceConfig.instanceId;
   const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
-  const managed = runJson("aws", [
-    ...regionArgs,
-    "ssm", "describe-instance-information",
-    "--filters", `Key=InstanceIds,Values=${instanceId}`,
-    "--output", "json",
-  ]);
-  const instance = managed.InstanceInformationList?.find((item) => item.InstanceId === instanceId);
-  if (!instance || instance.PingStatus !== "Online") throw new Error(`EC2 ${instanceId} 未通过 Systems Manager 在线`);
-
-  const command = ssmMutationCommand(script);
-  const mutationError = (message, mutationState, commandId) => Object.assign(new Error(message), { mutationState, commandId });
-  const reconcileCommandId = () => {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const listed = runJson("aws", [
-        ...regionArgs,
-        "ssm", "list-commands",
-        "--filters", `key=Comment,value=${comment}`,
-        "--max-results", "10",
-        "--output", "json",
-      ], { timeout: 20_000 });
-      const matches = (listed.Commands || []).filter((item) => item.Comment === comment && (!Array.isArray(item.InstanceIds) || item.InstanceIds.includes(instanceId)));
-      return matches.length === 1 ? matches[0].CommandId : null;
-    } catch {
-      return null;
+      const listed = runJson("aws", [...regionArgs, "ssm", "list-commands", "--instance-id", instanceId, "--max-results", "50", "--output", "json"], { timeout: 20_000 });
+      const commandId = findExactSsmCommandId(listed.Commands, { comment, instanceId });
+      if (commandId) return commandId;
+    } catch (error) {
+      if (/Multiple SSM commands/.test(error.message)) throw error;
     }
-  };
-  let sent;
-  try {
-    sent = runJson("aws", [
-    ...regionArgs,
-    "ssm", "send-command",
-    "--instance-ids", instanceId,
-    "--document-name", "AWS-RunShellScript",
-    "--comment", comment,
-    "--parameters", JSON.stringify({ commands: [command] }),
-    "--timeout-seconds", "180",
-    "--output", "json",
-    ], { timeout: 30_000 });
-  } catch (error) {
-    const reconciledCommandId = reconcileCommandId();
-    if (!reconciledCommandId) throw mutationError(`SSM send outcome is unknown; exact operation comment: ${comment}. ${error.message}`, "outcome_unknown");
-    sent = { Command: { CommandId: reconciledCommandId } };
+    if (attempt + 1 < attempts && delayMs > 0) sleep(delayMs);
   }
-  const commandId = sent.Command?.CommandId || reconcileCommandId();
-  if (!commandId) throw new Error("Systems Manager 未返回 commandId");
+  return null;
+}
 
+function pollExistingSsmMutation(sourceConfig, commandId, comment, waitMs = 185_000) {
+  const instanceId = sourceConfig.instanceId;
+  const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
+  const mutationError = (message, mutationState) => Object.assign(new Error(message), { mutationState, commandId, operationComment: comment });
   const startedAt = Date.now();
-  while (Date.now() - startedAt < 185_000) {
+  while (Date.now() - startedAt < waitMs) {
     sleep(1_000);
     let invocation;
     try {
-      invocation = runJson("aws", [
-        ...regionArgs,
-        "ssm", "get-command-invocation",
-        "--command-id", commandId,
-        "--instance-id", instanceId,
-        "--output", "json",
-      ], { timeout: 20_000 });
+      invocation = runJson("aws", [...regionArgs, "ssm", "get-command-invocation", "--command-id", commandId, "--instance-id", instanceId, "--output", "json"], { timeout: 20_000 });
     } catch (error) {
       if (/InvocationDoesNotExist/i.test(error.message)) continue;
-      throw mutationError(error.message, "outcome_unknown", commandId);
+      throw mutationError(error.message, "outcome_unknown");
     }
     if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
-    if (invocation.Status !== "Success") throw mutationError(invocation.StandardErrorContent || `SSM cleanup status: ${invocation.Status}`, "failed", commandId);
-    return { commandId, output: String(invocation.StandardOutputContent || "").slice(-24_000) };
+    if (invocation.Status !== "Success") throw mutationError(invocation.StandardErrorContent || `SSM cleanup status: ${invocation.Status}`, "failed");
+    return { commandId, output: String(invocation.StandardOutputContent || "") };
   }
-  throw mutationError("Remote cleanup did not reach a terminal state within 185 seconds.", "outcome_unknown", commandId);
+  throw mutationError(`Remote cleanup command ${commandId} did not reach a terminal state within ${Math.ceil(waitMs / 1_000)} seconds.`, "outcome_unknown");
+}
+
+function runSsmMutation(sourceConfig, script, comment) {
+  const instanceId = sourceConfig?.instanceId;
+  if (!instanceId) throw new Error("EC2 instanceId is not configured.");
+  const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
+  const managed = runJson("aws", [...regionArgs, "ssm", "describe-instance-information", "--filters", `Key=InstanceIds,Values=${instanceId}`, "--output", "json"]);
+  const instance = managed.InstanceInformationList?.find((item) => item.InstanceId === instanceId);
+  if (!instance || instance.PingStatus !== "Online") throw new Error(`EC2 ${instanceId} is not online through Systems Manager.`);
+  const command = ssmMutationCommand(script);
+  const mutationError = (message, mutationState, commandId) => Object.assign(new Error(message), { mutationState, commandId, operationComment: comment });
+  let sent;
+  try {
+    sent = runJson("aws", [...regionArgs, "ssm", "send-command", "--instance-ids", instanceId, "--document-name", "AWS-RunShellScript", "--comment", comment, "--parameters", JSON.stringify({ commands: [command] }), "--timeout-seconds", "180", "--output", "json"], { timeout: 30_000 });
+  } catch (error) {
+    const reconciledCommandId = reconcileSsmCommandId(sourceConfig, comment, { attempts: 8, delayMs: 1_000 });
+    if (!reconciledCommandId) throw mutationError(`SSM send outcome is unknown; exact operation comment: ${comment}. Resume by operationId without resending. ${error.message}`, "outcome_unknown");
+    sent = { Command: { CommandId: reconciledCommandId } };
+  }
+  const commandId = sent.Command?.CommandId || reconcileSsmCommandId(sourceConfig, comment, { attempts: 3, delayMs: 1_000 });
+  if (!commandId) throw mutationError("Systems Manager did not return a commandId. Resume by operationId without resending.", "outcome_unknown");
+  return pollExistingSsmMutation(sourceConfig, commandId, comment);
+}
+
+function decodeAwsCleanupResult(invocation, sourceConfig, resultPath) {
+  const lines = String(invocation.output || "").split(/\r?\n/);
+  const direct = lines.find((line) => line.startsWith("RATCLEAN1:"));
+  if (direct) return decodeSnapshotPayload(direct.slice("RATCLEAN1:".length));
+  const staged = lines.find((line) => line.startsWith("RATCLEAN2:"));
+  const match = staged?.match(/^RATCLEAN2:(\d+):([a-f0-9]{64})$/);
+  if (!match) throw Object.assign(new Error("Remote cleanup returned no checksum-verifiable result marker."), { mutationState: "outcome_unknown", commandId: invocation.commandId });
+  const expectedLength = Number(match[1]);
+  if (!Number.isSafeInteger(expectedLength) || expectedLength <= 0 || expectedLength > 32 * 1024 * 1024) throw Object.assign(new Error("Remote cleanup result length is outside the safety bound."), { mutationState: "outcome_unknown", commandId: invocation.commandId });
+  const instanceId = sourceConfig.instanceId;
+  const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
+  const chunks = [];
+  try {
+    for (let offset = 0; offset < expectedLength; offset += 16_000) {
+      const count = Math.min(16_000, expectedLength - offset);
+      const command = `python3 -c "p='${resultPath}';f=open(p,'rb');f.seek(${offset});print(f.read(${count}).decode('ascii'))"`;
+      const chunk = runAwsSsmCommand(regionArgs, instanceId, command, `RAT result ${invocation.commandId} ${offset}`, 30);
+      const value = String(chunk.StandardOutputContent || "").trim();
+      if (value.length !== count) throw new Error(`Remote cleanup result chunk ${offset / 16_000 + 1} has an unexpected length.`);
+      chunks.push(value);
+    }
+    return decodeSnapshotPayload(chunks.join(""), { expectedLength, expectedSha256: match[2] });
+  } catch (error) {
+    throw Object.assign(error, { mutationState: "outcome_unknown", commandId: invocation.commandId });
+  }
+}
+
+function cleanupAwsResultFile(sourceConfig, commandId, resultPath) {
+  const instanceId = sourceConfig.instanceId;
+  const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
+  try {
+    runAwsSsmCommand(regionArgs, instanceId, `python3 -c "import os;p='${resultPath}';os.path.exists(p) and os.remove(p)"`, `RAT result cleanup ${commandId}`, 30);
+    return { status: "removed-or-absent" };
+  } catch (error) {
+    return { status: "retained-for-recovery", reason: error.message };
+  }
+}
+
+function collectPostCleanupSnapshot(sourceConfig, commandId, partialResults) {
+  try {
+    return collectAwsSnapshot(sourceConfig);
+  } catch (error) {
+    throw Object.assign(new Error(`Cleanup command ${commandId} completed, but post-cleanup inventory failed: ${error.message}`), { mutationState: "outcome_unknown", commandId, partialResults });
+  }
 }
 
 function executeAwsDockerCleanup(sourceConfig, allowlist, operationId) {
-  const fullSourceConfig = { ...sourceConfig, includeAllAssets: true };
+  const cleanupResultPath = `/tmp/runtime-asset-tracker-cleanup-${String(operationId).replace(/[^a-zA-Z0-9-]/g, "")}.b64`;
+  const fullSourceConfig = { ...sourceConfig, includeAllAssets: true, cleanupResultPath };
   const snapshot = collectAwsSnapshot(fullSourceConfig);
   const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
   const skipped = [];
@@ -1216,13 +1305,47 @@ function executeAwsDockerCleanup(sourceConfig, allowlist, operationId) {
   const script = awsDockerCleanupScript(approved, fullSourceConfig);
   const encoded = gzipSync(Buffer.from(script, "utf8"), { level: 9 }).toString("base64");
   const invocation = runSsmMutation(fullSourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, `RAT ${operationId}`);
-  const match = invocation.output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
-  if (!match) throw new Error("远程清理没有返回可验证结果");
-  const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
+  const payload = decodeAwsCleanupResult(invocation, fullSourceConfig, cleanupResultPath);
   remoteCache.clear();
   const results = [...skipped, ...(payload.results || [])];
-  const after = collectAwsSnapshot(fullSourceConfig);
-  return { completedAt: new Date().toISOString(), commandId: invocation.commandId, results, verification: buildPostCleanupVerification(snapshot, after, results) };
+  const after = collectPostCleanupSnapshot(fullSourceConfig, invocation.commandId, results);
+  const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(fullSourceConfig, invocation.commandId, cleanupResultPath) : { status: "not-staged" };
+  return { completedAt: new Date().toISOString(), commandId: invocation.commandId, results, verification: buildPostCleanupVerification(snapshot, after, results), resultTransportCleanup };
+}
+
+export function resumeAwsCleanup({ sourceConfig, operationId, commandId } = {}) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(operationId || ""))) throw new Error("A valid cleanup operationId is required.");
+  const instanceId = sourceConfig?.instanceId;
+  if (!instanceId) throw new Error("EC2 instanceId is not configured.");
+  const comment = `RAT ${operationId}`;
+  let exactCommandId = String(commandId || "").trim();
+  if (exactCommandId) {
+    const regionArgs = sourceConfig.region ? ["--region", sourceConfig.region] : [];
+    const listed = runJson("aws", [...regionArgs, "ssm", "list-commands", "--command-id", exactCommandId, "--output", "json"], { timeout: 20_000 });
+    if (findExactSsmCommandId(listed.Commands, { comment, instanceId }) !== exactCommandId) throw new Error("The supplied SSM commandId is not bound to the exact cleanup operation and instance.");
+  } else {
+    exactCommandId = reconcileSsmCommandId(sourceConfig, comment, { attempts: 8, delayMs: 1_000 }) || "";
+  }
+  if (!exactCommandId) return { completedAt: new Date().toISOString(), operationId, commandId: null, status: "outcome_unknown", results: [], resumeToken: { operationId, commandId: null }, reason: "Exact commandId is not visible yet; retry this resume operation without sending a new cleanup command." };
+  const invocation = pollExistingSsmMutation(sourceConfig, exactCommandId, comment);
+  const resultPath = `/tmp/runtime-asset-tracker-cleanup-${String(operationId).replace(/[^a-zA-Z0-9-]/g, "")}.b64`;
+  const payload = decodeAwsCleanupResult(invocation, sourceConfig, resultPath);
+  const results = payload.results || [];
+  remoteCache.clear();
+  const after = collectPostCleanupSnapshot({ ...sourceConfig, includeAllAssets: true }, exactCommandId, results);
+  const resultTransportCleanup = invocation.output.includes("RATCLEAN2:") ? cleanupAwsResultFile(sourceConfig, exactCommandId, resultPath) : { status: "not-staged" };
+  const remaining = new Set((after.assets || []).map((asset) => `${asset.type}:${asset.id}`));
+  const reconciledResults = results.map((item) => item.status === "removed" && remaining.has(`${item.type}:${item.id}`)
+    ? { ...item, status: "outcome_unknown", reclaimedBytes: 0, reason: "Command reported removal but the exact object is still present during resume reconciliation." }
+    : item);
+  const incomplete = reconciledResults.filter((item) => item.status !== "removed").length;
+  return {
+    completedAt: new Date().toISOString(), operationId, commandId: exactCommandId,
+    status: incomplete === 0 ? "reconciled-complete" : reconciledResults.some((item) => item.status === "removed") ? "reconciled-partial" : "reconciled-not-complete",
+    results: reconciledResults,
+    verification: { status: "reconciled", exactCommandRecovered: true, remainingApprovedObjects: reconciledResults.filter((item) => remaining.has(`${item.type}:${item.id}`)).map((item) => item.id) },
+    resultTransportCleanup,
+  };
 }
 
 function runSshMutation(sourceConfig, script) {

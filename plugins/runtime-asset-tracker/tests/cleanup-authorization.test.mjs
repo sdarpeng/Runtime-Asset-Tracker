@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { consumeCleanupPreview } from "../mcp/inventory.mjs";
+import { automaticRetirementEvidenceMatches, consumeCleanupPreview } from "../mcp/inventory.mjs";
 
 function preview(overrides = {}) {
   return {
@@ -15,6 +15,30 @@ function preview(overrides = {}) {
 }
 
 describe("cleanup authorization", () => {
+  it("rejects created-at and successor-tag drift after preview", () => {
+    const requested = {
+      createdAt: "2026-08-10T00:00:00Z",
+      tags: ["cms-api:old"],
+      automaticRetirement: {
+        schemaVersion: "sparkling.runtime-automatic-retirement/v1",
+        basis: "superseded-build",
+        family: "cms:cms-api:api",
+        successorImageId: "sha256:new",
+        successorCreatedAt: "2026-08-10T01:00:00Z",
+        successorTags: ["cms-api:new"],
+        successorSuccessful: true,
+        recoverySource: "git:cms@abc",
+      },
+    };
+    const current = {
+      createdAt: requested.createdAt,
+      lineage: { tags: requested.tags, automaticRetirement: { ...requested.automaticRetirement } },
+    };
+    assert.equal(automaticRetirementEvidenceMatches(requested, current), true);
+    assert.equal(automaticRetirementEvidenceMatches(requested, { ...current, createdAt: "2026-08-10T00:00:01Z" }), false);
+    assert.equal(automaticRetirementEvidenceMatches(requested, { ...current, lineage: { ...current.lineage, automaticRetirement: { ...current.lineage.automaticRetirement, successorTags: ["cms-api:retagged"] } } }), false);
+  });
+
   it("binds confirmation to the authenticated actor and server instance", () => {
     const store = new Map([["token-1", preview()]]);
     assert.throws(() => consumeCleanupPreview({ token: "token-1", confirmed: true, confirmationDigest: "a".repeat(64) }, { actorId: "actor-2", serverInstanceId: "server-1" }, store), /different authenticated actor/);

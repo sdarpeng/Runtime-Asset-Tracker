@@ -26,7 +26,8 @@ function protectedIdentity(asset) {
 }
 
 function repositoryName(asset) {
-  const tagged = normalizedTags(asset)[0] || String(asset?.name || "");
+  const tagged = normalizedTags(asset)[0];
+  if (!tagged) return "";
   const withoutDigest = tagged.split("@")[0];
   const lastSlash = withoutDigest.lastIndexOf("/");
   const lastColon = withoutDigest.lastIndexOf(":");
@@ -36,6 +37,11 @@ function repositoryName(asset) {
 
 function serviceFamily(asset) {
   const tags = normalizedTags(asset);
+  const repository = repositoryName(asset);
+  // Docker's dangling <none> images do not carry a stable repository identity.
+  // Keep them visible through failure/pressure evidence, but never infer a
+  // predecessor/successor chain across anonymous image IDs.
+  if (!repository) return "";
   const text = [asset?.name, ...tags, runtimeLabel(asset, "service")].filter(Boolean).join(" ").toLowerCase();
   const service = /(?:^|[-_:])ocr(?:[-_:]|$)/.test(text) ? "ocr"
     : /(?:^|[-_:])ai[-_]?worker(?:[-_:]|$)/.test(text) ? "ai-worker"
@@ -45,7 +51,7 @@ function serviceFamily(asset) {
             : /(?:^|[-_:])(?:api|migrate)(?:[-_:]|$)/.test(text) ? "api"
               : /(?:^|[-_:])worker(?:[-_:]|$)/.test(text) ? "worker" : "other";
   const project = String(asset?.project || "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  return `${project}:${repositoryName(asset)}:${service}`;
+  return `${project}:${repository}:${service}`;
 }
 
 function effectiveCreatedAt(asset) {
@@ -114,6 +120,7 @@ export function discoverRetirementCandidates(assets = [], {
   for (const asset of assets) {
     if (asset.type !== "image") continue;
     const key = serviceFamily(asset);
+    if (!key) continue;
     imageFamilies.set(key, [...(imageFamilies.get(key) || []), asset]);
   }
   for (const [family, images] of imageFamilies.entries()) {
@@ -159,13 +166,14 @@ export function discoverRetirementCandidates(assets = [], {
 
     const blockedBy = [];
     if (consumers.length > 0) blockedBy.push(...consumers.map((consumer) => ({ type: "runtime-reference", id: consumer.id, name: consumer.name, state: consumer.state })));
-    if (asset.type === "image" && !recovery && !existingExecutable && !failedBuild) blockedBy.push({ type: "missing-recovery-source" });
-    if (supersededEvidence && !supersededEvidence.successorSuccessful && !failedBuild) blockedBy.push({ type: "successor-success-unproven", successorImageId: supersededEvidence.successorImageId });
+    if (asset.type === "image" && !recovery && !existingExecutable) blockedBy.push({ type: "missing-recovery-source" });
+    if (supersededEvidence && !supersededEvidence.successorSuccessful) blockedBy.push({ type: "successor-success-unproven", successorImageId: supersededEvidence.successorImageId });
+    if (failedBuild && !supersededEvidence?.successorSuccessful && !existingExecutable) blockedBy.push({ type: "successful-successor-missing" });
     if (asset.type === "image" && ageMs < coolingMs && !existingExecutable) blockedBy.push({ type: "cooling-period", remainingMs: coolingMs - ageMs });
     if (source !== "local" && !existingExecutable) blockedBy.push({ type: "remote-automatic-execution-not-enabled" });
     if (asset.type === "volume" && !existingExecutable) blockedBy.push({ type: "persistent-volume-requires-exact-attestation" });
 
-    const executable = blockedBy.length === 0 && (existingExecutable || (asset.type === "image" && Boolean(supersededEvidence || failedBuild)));
+    const executable = blockedBy.length === 0 && (existingExecutable || (asset.type === "image" && supersededEvidence?.successorSuccessful === true));
     const state = executable ? "executable-candidate" : blockedBy.length ? "blocked-candidate" : "suspected-retired";
     const automaticEvidence = supersededEvidence || failedBuild ? {
       schemaVersion: "sparkling.runtime-automatic-retirement/v1",
