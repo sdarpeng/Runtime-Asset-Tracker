@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   PATH_RECONCILIATION_SCHEMA,
+  canonicalPathContainment,
   discoverWorktreeAssets,
   executePathAssetCleanup,
   importPathRetirementReconciliation,
@@ -149,6 +150,21 @@ describe("worktree and host artifact lifecycle", () => {
       assert.equal(existsSync(join(outside, "sentinel.bin")), true);
     } finally {
       if (!junctionCreated && existsSync(root)) rmSync(root, { recursive: true, force: true });
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a junction or symlink in the allowed-root ancestry", () => {
+    const sandbox = temporaryDirectory("tracker-canonical-root");
+    const outside = join(sandbox, "outside");
+    const victim = join(outside, "victim");
+    const lexicalRoot = join(sandbox, "managed-link");
+    mkdirSync(victim, { recursive: true });
+    try {
+      symlinkSync(outside, lexicalRoot, process.platform === "win32" ? "junction" : "dir");
+      assert.equal(canonicalPathContainment(join(lexicalRoot, "victim"), lexicalRoot), false);
+      assert.equal(existsSync(victim), true);
+    } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }
   });

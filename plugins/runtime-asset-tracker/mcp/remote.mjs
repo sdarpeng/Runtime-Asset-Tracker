@@ -243,8 +243,14 @@ export function buildPostCleanupVerification(before, after, results = []) {
   const removedImagesStillPresent = removedIds.filter((id) => remainingImageIds.has(id));
   const freeBytesBefore = Number(before?.disk?.freeBytes || 0);
   const freeBytesAfter = Number(after?.disk?.freeBytes || 0);
+  const nonSuccess = results.filter((item) => item.status !== "removed");
+  const safetyStatus = missingActiveContainers.length === 0 && removedContainersStillPresent.length === 0 && removedImagesStillPresent.length === 0 ? "pass" : "fail";
+  const operationStatus = nonSuccess.length === 0 ? "complete" : results.some((item) => item.status === "removed") ? "partial" : "not_completed";
   return {
-    status: missingActiveContainers.length === 0 && removedContainersStillPresent.length === 0 && removedImagesStillPresent.length === 0 ? "pass" : "fail",
+    status: safetyStatus === "pass" && operationStatus === "complete" ? "pass" : safetyStatus === "fail" ? "fail" : "partial",
+    safetyStatus,
+    operationStatus,
+    nonSuccessCount: nonSuccess.length,
     checkedAt: new Date().toISOString(),
     activeContainerCountBefore: beforeActive.size,
     activeContainerCountAfter: afterActive.size,
@@ -544,7 +550,7 @@ if build_cache.get("reclaimableBytes", 0) > 0:
 release_root = CONTEXT.get("releaseRoot") or ""
 active_link = CONTEXT.get("activeLink") or ""
 active_release = os.path.realpath(active_link) if os.path.exists(active_link) else ""
-if os.path.isdir(release_root):
+if os.path.isdir(release_root) and not os.path.islink(release_root):
     release_entries = sorted(os.scandir(release_root), key=lambda item:item.stat().st_mtime, reverse=True)
     if not CONTEXT.get("includeAllAssets"): release_entries = release_entries[:60]
     for entry in release_entries:
@@ -556,7 +562,7 @@ if os.path.isdir(release_root):
 
 for managed in CONTEXT.get("managedPaths") or []:
     root = str(managed.get("path") or "")
-    if not root.startswith("/home/") or not os.path.isdir(root): continue
+    if not root.startswith("/home/") or not os.path.isdir(root) or os.path.islink(root): continue
     managed_entries = sorted(os.scandir(root), key=lambda item:item.stat(follow_symlinks=False).st_mtime, reverse=True)
     if not CONTEXT.get("includeAllAssets"): managed_entries = managed_entries[:240]
     for entry in managed_entries:
@@ -912,7 +918,7 @@ export function awsDockerCleanupScript(allowlist, sourceConfig = {}) {
     } : undefined,
   })),
   }), "utf8").toString("base64");
-  return String.raw`import base64, datetime, gzip, hashlib, json, os, re, shutil, subprocess
+  return String.raw`import base64, datetime, gzip, hashlib, json, os, re, shutil, subprocess, time
 
 payload = json.loads(base64.b64decode("${payload}"))
 items = payload.get("items") or []
@@ -992,6 +998,27 @@ def path_is_referenced(path):
                 if source == target or source.startswith(target + "/") or target.startswith(source + "/"): return True
     return False
 
+def canonical_path_is_contained(path, root):
+    try:
+        real_root = os.path.realpath(root).rstrip("/")
+        real_path = os.path.realpath(path).rstrip("/")
+        if not real_root or not real_path or real_path == real_root or not real_path.startswith(real_root + "/"): return False
+        if os.path.islink(root): return False
+        relative = os.path.relpath(path, root)
+        if relative == ".." or relative.startswith("../"): return False
+        cursor = root
+        for part in relative.split(os.sep):
+            if not part or part == ".": continue
+            cursor = os.path.join(cursor, part)
+            if os.path.islink(cursor): return False
+        return True
+    except Exception:
+        return False
+
+def overlaps_protected_path(path, protected_paths):
+    target = os.path.realpath(path).rstrip("/")
+    return any(target == protected or target.startswith(protected + "/") or protected.startswith(target + "/") for protected in protected_paths)
+
 results = []
 for item in items:
     kind = item.get("type")
@@ -1033,7 +1060,7 @@ for item in items:
         active_target = os.path.realpath(active_link) if active_link and os.path.exists(active_link) else ""
         size = disk_usage(path) if os.path.exists(path) else -1
         expected_size = evidence.get("expectedSizeBytes")
-        safe = bool(evidence_valid(evidence, kind) and root in managed_roots and path.startswith(root + "/") and not os.path.islink(path) and os.path.realpath(path) not in protected_paths and os.path.realpath(path) != active_target and expected_size is not None and size == int(expected_size) and metadata_fingerprint(path,size) == evidence.get("fingerprint") and not path_is_referenced(path))
+        safe = bool(evidence_valid(evidence, kind) and root in managed_roots and canonical_path_is_contained(path, root) and not overlaps_protected_path(path, protected_paths) and os.path.realpath(path) != active_target and expected_size is not None and size == int(expected_size) and metadata_fingerprint(path,size) == evidence.get("fingerprint") and not path_is_referenced(path))
         if not safe:
             results.append({**item,"status":"skipped","reclaimedBytes":0,"reason":"Remote path root, active/protected state, bytes, fingerprint, or bind-mount references drifted."})
             continue
@@ -1082,8 +1109,14 @@ for item in items:
         continue
     command = docker + (["image", "rm"] + (requested_tags if kind == "image" and requested_tags else [identifier]) if kind == "image" else ["volume", "rm", identifier])
     code, _, error = run(command)
-    removed = code == 0 and (kind != "image" or inspect("image", identifier) is None)
-    results.append({**item, "status":"removed" if removed else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if removed else 0, "removedReferences":requested_tags if kind == "image" else None, "reason":reason if removed else (error[-300:] or "image still exists after exact tag removal")})
+    if kind == "image" and code == 0:
+        for _ in range(6):
+            if inspect("image", identifier) is None: break
+            time.sleep(0.5)
+    image_gone = kind != "image" or inspect("image", identifier) is None
+    removed_references = [tag for tag in requested_tags if inspect("image", tag) is None] if kind == "image" else None
+    removed = code == 0 and image_gone
+    results.append({**item, "status":"removed" if removed else "failed", "reclaimedBytes":item.get("sizeBytes", 0) if removed else 0, "removedReferences":removed_references, "reason":reason if removed else (error[-300:] or "image still exists after exact tag removal")})
 
 encoded = base64.b64encode(gzip.compress(json.dumps({"results":results}, separators=(",",":"), ensure_ascii=False).encode("utf-8"))).decode("ascii")
 print("RATCLEAN1:" + encoded)`;
@@ -1108,7 +1141,25 @@ function runSsmMutation(sourceConfig, script, comment) {
   if (!instance || instance.PingStatus !== "Online") throw new Error(`EC2 ${instanceId} 未通过 Systems Manager 在线`);
 
   const command = ssmMutationCommand(script);
-  const sent = runJson("aws", [
+  const mutationError = (message, mutationState, commandId) => Object.assign(new Error(message), { mutationState, commandId });
+  const reconcileCommandId = () => {
+    try {
+      const listed = runJson("aws", [
+        ...regionArgs,
+        "ssm", "list-commands",
+        "--filters", `key=Comment,value=${comment}`,
+        "--max-results", "10",
+        "--output", "json",
+      ], { timeout: 20_000 });
+      const matches = (listed.Commands || []).filter((item) => item.Comment === comment && (!Array.isArray(item.InstanceIds) || item.InstanceIds.includes(instanceId)));
+      return matches.length === 1 ? matches[0].CommandId : null;
+    } catch {
+      return null;
+    }
+  };
+  let sent;
+  try {
+    sent = runJson("aws", [
     ...regionArgs,
     "ssm", "send-command",
     "--instance-ids", instanceId,
@@ -1117,8 +1168,13 @@ function runSsmMutation(sourceConfig, script, comment) {
     "--parameters", JSON.stringify({ commands: [command] }),
     "--timeout-seconds", "180",
     "--output", "json",
-  ], { timeout: 30_000 });
-  const commandId = sent.Command?.CommandId;
+    ], { timeout: 30_000 });
+  } catch (error) {
+    const reconciledCommandId = reconcileCommandId();
+    if (!reconciledCommandId) throw mutationError(`SSM send outcome is unknown; exact operation comment: ${comment}. ${error.message}`, "outcome_unknown");
+    sent = { Command: { CommandId: reconciledCommandId } };
+  }
+  const commandId = sent.Command?.CommandId || reconcileCommandId();
   if (!commandId) throw new Error("Systems Manager 未返回 commandId");
 
   const startedAt = Date.now();
@@ -1135,16 +1191,16 @@ function runSsmMutation(sourceConfig, script, comment) {
       ], { timeout: 20_000 });
     } catch (error) {
       if (/InvocationDoesNotExist/i.test(error.message)) continue;
-      throw error;
+      throw mutationError(error.message, "outcome_unknown", commandId);
     }
     if (["Pending", "InProgress", "Delayed"].includes(invocation.Status)) continue;
-    if (invocation.Status !== "Success") throw new Error(invocation.StandardErrorContent || `SSM 清理状态：${invocation.Status}`);
+    if (invocation.Status !== "Success") throw mutationError(invocation.StandardErrorContent || `SSM cleanup status: ${invocation.Status}`, "failed", commandId);
     return { commandId, output: String(invocation.StandardOutputContent || "").slice(-24_000) };
   }
-  throw new Error("远程清理超过 185 秒仍未完成");
+  throw mutationError("Remote cleanup did not reach a terminal state within 185 seconds.", "outcome_unknown", commandId);
 }
 
-function executeAwsDockerCleanup(sourceConfig, allowlist) {
+function executeAwsDockerCleanup(sourceConfig, allowlist, operationId) {
   const fullSourceConfig = { ...sourceConfig, includeAllAssets: true };
   const snapshot = collectAwsSnapshot(fullSourceConfig);
   const currentAssets = new Map(snapshot.assets.map((item) => [`${item.type}:${item.id}`, item]));
@@ -1159,7 +1215,7 @@ function executeAwsDockerCleanup(sourceConfig, allowlist) {
   if (!approved.length) return { completedAt: new Date().toISOString(), results: skipped };
   const script = awsDockerCleanupScript(approved, fullSourceConfig);
   const encoded = gzipSync(Buffer.from(script, "utf8"), { level: 9 }).toString("base64");
-  const invocation = runSsmMutation(fullSourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, "Runtime Asset Tracker exact safe Docker cleanup");
+  const invocation = runSsmMutation(fullSourceConfig, `echo '${encoded}' | base64 -d | gzip -d | python3`, `RAT ${operationId}`);
   const match = invocation.output.match(/RATCLEAN1:([A-Za-z0-9+/=]+)/);
   if (!match) throw new Error("远程清理没有返回可验证结果");
   const payload = JSON.parse(gunzipSync(Buffer.from(match[1], "base64")).toString("utf8"));
@@ -1230,11 +1286,11 @@ function executeGithubCleanup(sourceConfig, allowlist) {
   return { completedAt: new Date().toISOString(), results };
 }
 
-export function executeRemoteCleanup({ source, sourceConfig, allowlist }) {
+export function executeRemoteCleanup({ source, sourceConfig, allowlist, operationId = randomUUID() }) {
   if (!sourceConfig) throw new Error(`${source} 来源尚未配置`);
   if (sourceConfig.kind === "github") return executeGithubCleanup(sourceConfig, allowlist);
   if (sourceConfig.kind === "ssh") return executeSshDockerCleanup(sourceConfig, allowlist);
-  return executeAwsDockerCleanup(sourceConfig, allowlist);
+  return executeAwsDockerCleanup(sourceConfig, allowlist, operationId);
 }
 
 function registeredProjectOptions(config, sourceConfig) {

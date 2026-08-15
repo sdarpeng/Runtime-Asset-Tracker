@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmdirSync, unlinkSync } from "node:fs";
 import { homedir, hostname, platform } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -40,6 +40,26 @@ function within(path, root) {
   const parent = resolve(root);
   const rel = relative(parent, child);
   return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+export function canonicalPathContainment(pathValue, rootValue) {
+  const path = resolve(pathValue);
+  const root = resolve(rootValue);
+  if (!existsSync(path) || !existsSync(root) || !within(path, root)) return false;
+  try {
+    if (lstatSync(root).isSymbolicLink()) return false;
+    const rel = relative(root, path);
+    let cursor = root;
+    for (const part of rel.split(sep).filter(Boolean)) {
+      cursor = join(cursor, part);
+      if (lstatSync(cursor).isSymbolicLink()) return false;
+    }
+    const realRoot = realpathSync.native(root);
+    const realPath = realpathSync.native(path);
+    return within(realPath, realRoot);
+  } catch {
+    return false;
+  }
 }
 
 function safeEntries(path) {
@@ -412,10 +432,10 @@ function removeTreeNoFollow(path) {
 }
 
 export function executePathAssetCleanup(asset) {
-  if (!PATH_TYPES.has(asset?.type) || asset.classification !== "reclaimable") throw new Error("Path asset is not reclaimable.");
+  if (!PATH_TYPES.has(asset?.type) || (asset.classification !== "reclaimable" && asset.retirementState !== "executable-candidate")) throw new Error("Path asset is not reclaimable.");
   const path = resolve(asset.path || asset.lineage?.path || "");
   const allowedRoot = resolve(asset.lineage?.allowedRoot || "");
-  if (!path || !allowedRoot || !within(path, allowedRoot) || !existsSync(path)) throw new Error("Path cleanup target is outside its exact allowed root or no longer exists.");
+  if (!path || !allowedRoot || !canonicalPathContainment(path, allowedRoot)) throw new Error("Path cleanup target is outside its canonical allowed root, crosses a reparse point, or no longer exists.");
   const current = scanPathUsage(path);
   if (current.truncated || current.sizeBytes !== Number(asset.sizeBytes) || current.fingerprint !== asset.lineage?.contentFingerprint) throw new Error("Path content changed after preview.");
   if (asset.type === "worktree") {

@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -7,11 +8,36 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
-import { collectDashboard, createCleanupPreview, createUnifiedAssetTable, executeCleanup, importPathReconciliation, importReconciliation, importUnifiedReconciliation, runDeepScan, saveSchedule } from "./inventory.mjs";
+import { collectDashboard, createCleanupPreview, createUnifiedAssetTable, executeCleanup, importPathReconciliation, importReconciliation, importUnifiedReconciliation, runDeepScan, runtimeInstanceId, saveSchedule } from "./inventory.mjs";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_URI = "ui://runtime-asset-tracker/dashboard-v1.html";
 const dashboardHtml = readFileSync(join(moduleDirectory, "dashboard.html"), "utf8");
+const pluginRoot = join(moduleDirectory, "..");
+
+function readJson(path, fallback = {}) {
+  try { return JSON.parse(readFileSync(path, "utf8")); } catch { return fallback; }
+}
+
+export function runtimeIdentity() {
+  const manifest = readJson(join(pluginRoot, ".codex-plugin", "plugin.json"));
+  const packageJson = readJson(join(pluginRoot, "package.json"));
+  const provenance = readJson(join(pluginRoot, "dist", "build-provenance.json"));
+  const serverPath = fileURLToPath(import.meta.url);
+  const serverSha256 = createHash("sha256").update(readFileSync(serverPath)).digest("hex");
+  return {
+    pluginId: String(manifest.name || "runtime-asset-tracker"),
+    manifestVersion: String(manifest.version || "unknown"),
+    packageVersion: String(packageJson.version || "unknown"),
+    sourceCommit: provenance.sourceCommit || null,
+    sourceTree: provenance.sourceTree || null,
+    sourceDirty: provenance.sourceDirty ?? null,
+    sourceDigest: provenance.sourceDigest || null,
+    buildDigest: provenance.buildDigest || serverSha256,
+    serverSha256,
+    serverInstanceId: runtimeInstanceId(),
+  };
+}
 
 function toolResult(structuredContent, text) {
   return {
@@ -20,9 +46,11 @@ function toolResult(structuredContent, text) {
   };
 }
 
-export function createRuntimeAssetServer() {
+export function createRuntimeAssetServer(context = {}) {
+  const identity = runtimeIdentity();
+  const actorContext = { actorId: String(context.actorId || "mcp-stdio"), serverInstanceId: identity.serverInstanceId };
   const server = new McpServer(
-    { name: "runtime-asset-tracker", version: "0.4.0" },
+    { name: "runtime-asset-tracker", version: identity.packageVersion },
     { instructions: "Use open_runtime_dashboard for a visual inventory. Always call preview_cleanup before execute_cleanup. Never infer that an unlabeled volume is disposable." },
   );
 
@@ -66,7 +94,7 @@ export function createRuntimeAssetServer() {
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } },
   }, async (input) => {
-    const preview = createCleanupPreview(input);
+    const preview = createCleanupPreview(input, actorContext);
     return toolResult({ preview }, `Cleanup preview contains ${preview.allowlist.length} explicitly disposable assets.`);
   });
 
@@ -163,13 +191,15 @@ export function createRuntimeAssetServer() {
     inputSchema: {
       token: z.string().uuid(),
       confirmed: z.literal(true),
+      confirmationDigest: z.string().regex(/^[0-9a-f]{64}$/i),
     },
     outputSchema: { cleanup: z.record(z.string(), z.unknown()) },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     _meta: { ui: { resourceUri: DASHBOARD_URI, visibility: ["app", "model"] } },
   }, async (input) => {
-    const cleanup = executeCleanup(input);
-    return toolResult({ cleanup }, `Cleanup completed with ${cleanup.results.filter((item) => item.status === "removed").length} removed assets.`);
+    const cleanup = executeCleanup(input, actorContext);
+    const counts = Object.fromEntries(["removed", "failed", "skipped", "outcome_unknown"].map((status) => [status, cleanup.results.filter((item) => item.status === status).length]));
+    return toolResult({ cleanup }, `Cleanup status ${cleanup.status}: ${counts.removed} removed, ${counts.failed} failed, ${counts.skipped} skipped, ${counts.outcome_unknown} outcome unknown.`);
   });
 
   registerAppTool(server, "save_cleanup_schedule", {
@@ -192,29 +222,92 @@ export function createRuntimeAssetServer() {
   return server;
 }
 
-async function readBody(request) {
+async function readBody(request, maxBytes = 1024 * 1024) {
   const chunks = [];
-  for await (const chunk of request) chunks.push(chunk);
+  let bytes = 0;
+  for await (const chunk of request) {
+    bytes += chunk.length;
+    if (bytes > maxBytes) {
+      const error = new Error("Request body exceeds the 1 MiB limit.");
+      error.httpStatus = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
   if (chunks.length === 0) return {};
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-function sendJson(response, status, payload) {
-  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+function sendJson(response, status, payload, headers = {}) {
+  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers });
   response.end(JSON.stringify(payload));
+}
+
+function constantTimeEqual(left, right) {
+  const first = Buffer.from(String(left || ""));
+  const second = Buffer.from(String(right || ""));
+  return first.length === second.length && timingSafeEqual(first, second);
+}
+
+function cookieValue(request, name) {
+  return String(request.headers.cookie || "").split(";").map((item) => item.trim()).flatMap((item) => {
+    const index = item.indexOf("=");
+    return index > 0 && item.slice(0, index) === name ? [decodeURIComponent(item.slice(index + 1))] : [];
+  })[0];
+}
+
+function authenticatedActor(request, accessToken, expectedOrigin) {
+  const authorization = String(request.headers.authorization || "");
+  const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const cookie = cookieValue(request, "rat_session");
+  const token = bearer || cookie;
+  if (!constantTimeEqual(token, accessToken)) {
+    const error = new Error("Authenticated Runtime Asset Tracker session required.");
+    error.httpStatus = 401;
+    throw error;
+  }
+  const origin = String(request.headers.origin || "");
+  if (origin && origin !== expectedOrigin) {
+    const error = new Error("Cross-origin Runtime Asset Tracker request rejected.");
+    error.httpStatus = 403;
+    throw error;
+  }
+  return `http:${createHash("sha256").update(token).digest("hex").slice(0, 24)}`;
 }
 
 async function startHttp() {
   const host = process.env.RUNTIME_ASSET_DASHBOARD_HOST || "127.0.0.1";
   const port = Number(process.env.RUNTIME_ASSET_DASHBOARD_PORT || 47831);
+  if (!new Set(["127.0.0.1", "localhost"]).has(host)) throw new Error("Runtime Asset Tracker HTTP mode is loopback-only. Use the authenticated MCP/SSM adapters for remote inventory.");
+  const accessToken = process.env.RUNTIME_ASSET_HTTP_TOKEN || randomBytes(32).toString("hex");
+  const expectedOrigin = `http://${host}:${port}`;
+  const identity = runtimeIdentity();
   const httpServer = createServer(async (request, response) => {
     try {
+      const requestHost = String(request.headers.host || "");
+      if (requestHost !== `${host}:${port}` && requestHost !== `localhost:${port}` && requestHost !== `127.0.0.1:${port}`) {
+        sendJson(response, 403, { error: "invalid_host" });
+        return;
+      }
       const url = new URL(request.url || "/", `http://${host}:${port}`);
+      if (request.method === "GET" && url.pathname === "/api/version") {
+        sendJson(response, 200, { identity });
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/") {
+        const supplied = url.searchParams.get("access");
+        if (supplied && constantTimeEqual(supplied, accessToken)) {
+          response.writeHead(303, { Location: "/", "Set-Cookie": `rat_session=${encodeURIComponent(accessToken)}; HttpOnly; SameSite=Strict; Path=/`, "Cache-Control": "no-store" });
+          response.end();
+          return;
+        }
+        authenticatedActor(request, accessToken, expectedOrigin);
         response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
         response.end(dashboardHtml);
         return;
       }
+      const actorId = authenticatedActor(request, accessToken, expectedOrigin);
+      const actorContext = { actorId, serverInstanceId: identity.serverInstanceId };
       if (request.method === "GET" && url.pathname === "/api/dashboard") {
         sendJson(response, 200, { dashboard: collectDashboard({
           scope: url.searchParams.get("scope") || "project",
@@ -224,7 +317,7 @@ async function startHttp() {
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/cleanup-preview") {
-        sendJson(response, 200, { preview: createCleanupPreview(await readBody(request)) });
+        sendJson(response, 200, { preview: createCleanupPreview(await readBody(request), actorContext) });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/reconciliation-import") {
@@ -249,7 +342,7 @@ async function startHttp() {
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/cleanup-execute") {
-        sendJson(response, 200, { cleanup: executeCleanup(await readBody(request)) });
+        sendJson(response, 200, { cleanup: executeCleanup(await readBody(request), actorContext) });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/schedule") {
@@ -257,9 +350,7 @@ async function startHttp() {
         return;
       }
       if (url.pathname === "/mcp" && ["POST", "GET", "DELETE"].includes(request.method || "")) {
-        response.setHeader("Access-Control-Allow-Origin", "*");
-        response.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
-        const server = createRuntimeAssetServer();
+        const server = createRuntimeAssetServer(actorContext);
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
         response.on("close", () => { transport.close(); server.close(); });
         await server.connect(transport);
@@ -268,12 +359,12 @@ async function startHttp() {
       }
       sendJson(response, 404, { error: "not_found" });
     } catch (error) {
-      sendJson(response, 500, { error: "runtime_asset_dashboard_error", message: error.message });
+      sendJson(response, Number(error.httpStatus || 500), { error: "runtime_asset_dashboard_error", message: error.message });
     }
   });
   httpServer.listen(port, host, () => {
-    console.log(`Runtime Asset Tracker dashboard: http://${host}:${port}`);
-    console.log(`MCP endpoint: http://${host}:${port}/mcp`);
+    console.log(`Runtime Asset Tracker dashboard: http://${host}:${port}/?access=${accessToken}`);
+    console.log(`Runtime Asset Tracker identity: ${identity.manifestVersion} ${identity.sourceCommit || "dirty-or-unbuilt-source"} ${identity.sourceDigest || "unknown-source"} ${identity.serverSha256}`);
   });
 }
 
