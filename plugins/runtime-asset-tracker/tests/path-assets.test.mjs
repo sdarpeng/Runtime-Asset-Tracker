@@ -263,6 +263,9 @@ describe("worktree and host artifact lifecycle", () => {
     const integrity = safeDeleteHelperIntegrity();
     assert.equal(typeof integrity.ok, "boolean");
     assert.match(String(integrity.observedSha256 || integrity.reason), /[0-9a-f]{64}|provenance/i);
+    const source = readFileSync(new URL("../mcp/path-assets.mjs", import.meta.url), "utf8");
+    assert.match(source, /"-c", helperSource/);
+    assert.match(source, /executionSha256 !== integrity\.declaredSha256/);
   });
 
   it("rejects vague retirement reports and imports exact path attestations idempotently", () => {

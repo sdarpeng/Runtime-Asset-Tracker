@@ -460,10 +460,12 @@ function handleRelativeRemove(path, allowedRoot) {
   const targetIdentity = fileIdentity(path);
   if (rootIdentity.reparse || targetIdentity.reparse) throw new Error("Path cleanup cannot target a reparse point.");
   const integrity = safeDeleteHelperIntegrity();
-  const helper = integrity.helperPath;
   if (!integrity.ok) throw new Error("Handle-relative path cleanup helper identity, owner, or permissions do not match the frozen build provenance.");
+  const helperSource = readFileSync(integrity.helperPath, "utf8");
+  const executionSha256 = createHash("sha256").update(helperSource).digest("hex");
+  if (executionSha256 !== integrity.declaredSha256) throw new Error("Handle-relative path cleanup helper changed between identity verification and execution.");
   execFileSync("python3", [
-    helper,
+    "-c", helperSource,
     "--root", allowedRoot,
     "--path", path,
     "--root-dev", rootIdentity.dev,
