@@ -1,12 +1,12 @@
 {
   "schemaVersion": "sparkling.tool-build-provenance/v1",
-  "builtAt": "2026-08-15T06:57:52.013Z",
-  "sourceCommit": "15009e9bf285dcf7d5899f7efcdc06ca62294b40",
-  "sourceTree": "09b749f2c81fe4bcb9e99e9b6b0aa4f4a2cc1597",
+  "builtAt": "2026-08-15T06:59:51.070Z",
+  "sourceCommit": "4bff49fdf710d1f411247bafe5852df797270414",
+  "sourceTree": "ed90670831c9a71052c73b81dbf2f7a254bd6469",
   "sourceDirty": false,
-  "sourceDigest": "130f659456e149fa8cbeaf618c9d3cc04f8fde4dcbeb214a946ac8f913d7ea58",
-  "serverSha256": "1e3d9d551914f5fd393d9b9b8f7f2847dc59a4035a71f83a6c5a18a3c4b5ef64",
+  "sourceDigest": "1a172c0077f5a327b56e1527f935667535729ad44e6f4e373b2bfae3ce151e3e",
+  "serverSha256": "3d1110a07f49d1a739fc0df6f395a535939ca08d128c332e485679f96c705324",
   "dashboardSha256": "219fe28db1647e21486163f43025ac24cc1bd351017546d009b4c004e03278d9",
   "safeDeleteHelperSha256": "f06186e602db71eb84bf7bf307aeffb8b082e1da1449947fd14f75c941e98f2e",
-  "buildDigest": "d79484d1492b146ab7d2908982045fc3bbe434f101eb759212593e20607805b5"
+  "buildDigest": "84c6177d089d1fc092229aa95c95294ada7ec1abe464dd200ec8eddeb1117598"
 }
